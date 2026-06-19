@@ -1,0 +1,6 @@
+node_modules/
+.cache/
+data/raw/
+dist/
+public/sim.wasm
+public/wasm_exec.js

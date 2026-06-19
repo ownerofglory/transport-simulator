@@ -1,0 +1,245 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #f7f7f7;
+  background: #0f141a;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+canvas {
+  display: block;
+}
+
+.hud {
+  position: fixed;
+  left: 16px;
+  top: 16px;
+  width: min(380px, calc(100vw - 32px));
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(8, 12, 18, 0.68);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.34);
+  user-select: none;
+}
+
+.hud h1 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  letter-spacing: 0.01em;
+}
+
+.hud .meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.card {
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.label {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.value {
+  margin-top: 2px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.driver-stat,
+.driver-controls {
+  display: none;
+}
+
+.driver-mode .driver-stat,
+.driver-mode .driver-controls {
+  display: block;
+}
+
+.driver-controls {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.driver-controls button {
+  min-width: 112px;
+}
+
+.hint {
+  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px;
+}
+
+button,
+select {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 9px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover,
+select:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.ticket-panel {
+  position: fixed;
+  right: 16px;
+  top: 16px;
+  width: min(420px, calc(100vw - 32px));
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 8px;
+  background: rgba(8, 12, 18, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.ticket-copy {
+  margin-top: 3px;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.ticket-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.notice {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(8, 12, 18, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.minimap {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  width: 300px;
+  height: 210px;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(8, 12, 18, 0.66);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.32);
+  z-index: 2;
+}
+
+.minimap .leaflet-container {
+  font-family: inherit;
+}
+
+.vehicle-marker-wrap {
+  border: 0;
+  background: transparent;
+}
+
+.vehicle-marker {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  transform-origin: center;
+}
+
+.vehicle-marker span {
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 18px solid #ffd900;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.loading {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: radial-gradient(circle at center, #20324a, #081018 70%);
+  z-index: 10;
+}
+
+@media (max-width: 760px) {
+  .hud {
+    top: 8px;
+    left: 8px;
+    width: calc(100vw - 16px);
+    box-sizing: border-box;
+  }
+
+  .ticket-panel {
+    top: auto;
+    right: 8px;
+    bottom: 8px;
+    width: calc(100vw - 16px);
+    box-sizing: border-box;
+  }
+
+  .notice {
+    display: none;
+  }
+
+  .minimap {
+    left: 8px;
+    bottom: 112px;
+    width: 176px;
+    height: 132px;
+  }
+}
+
+.loading.hidden {
+  display: none;
+}

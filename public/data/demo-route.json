@@ -1,0 +1,7 @@
+{
+  "note": "Placeholder route for the first vertical slice. Replace with generated geometry from VVS GTFS shapes and OSM/CityGML tiles.",
+  "line": "U-demo",
+  "destination": "Charlottenplatz",
+  "routeLengthM": 2200,
+  "stations": ["Killesberg", "Pragfriedhof", "Hauptbahnhof", "Charlottenplatz"]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "stuttgart-stadtbahn-simulator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "npm run wasm:build && tsc && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "wasm:build": "bash scripts/build-wasm.sh"
+  },
+  "dependencies": {
+    "@mapbox/vector-tile": "^3.0.0",
+    "@types/leaflet": "^1.9.21",
+    "@types/three": "0.184.1",
+    "leaflet": "^1.9.4",
+    "pbf": "^5.1.0",
+    "three": "0.184.0"
+  },
+  "devDependencies": {
+    "@types/pngjs": "^6.0.5",
+    "pngjs": "^7.0.0",
+    "typescript": "6.0.3",
+    "vite": "8.0.16"
+  }
+}
