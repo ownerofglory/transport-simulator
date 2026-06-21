@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { makeLabelTexture } from './labels';
+import { createStuttgartLandmarks, type LandmarkZone } from './landmarks';
 import { OsmSceneStreamer } from './osm-scene';
 import type { DemoRoute } from './route';
 import { TerrainSampler } from './terrain';
@@ -38,6 +39,8 @@ export class StadtbahnWorld {
   private ground: THREE.Mesh | null = null;
   private readonly routeGeo: GeoPoint[];
   private readonly routeGeoDistancesM: number[];
+  private readonly landmarkGroup: THREE.Group;
+  private readonly landmarkExclusions: LandmarkZone[];
   private osmScene: OsmSceneStreamer | null = null;
   private terrain: TerrainSampler | null = null;
   private readonly onResizeBound = () => this.onResize();
@@ -66,6 +69,14 @@ export class StadtbahnWorld {
     this.scene.background = new THREE.Color(0xaac8df);
     this.scene.fog = new THREE.Fog(0xaac8df, 900, 2800);
     if (route.elevationDatumM !== undefined) this.terrain = new TerrainSampler(route.elevationDatumM);
+    const landmarkLayer = createStuttgartLandmarks(
+      this.routeGeo,
+      (lat, lon) => this.projectGeo(lat, lon),
+      (lat, lon) => this.terrain?.sample(lat, lon) ?? Promise.resolve(0)
+    );
+    this.landmarkGroup = landmarkLayer.group;
+    this.landmarkExclusions = landmarkLayer.zones;
+    this.scene.add(this.landmarkGroup);
 
     this.camera.position.set(0, 5, -12);
     this.setupLighting();
@@ -80,7 +91,8 @@ export class StadtbahnWorld {
       this.osmScene = new OsmSceneStreamer(
         this.scene,
         (lat, lon) => this.projectGeo(lat, lon),
-        (lat, lon) => this.terrain?.sample(lat, lon) ?? Promise.resolve(0)
+        (lat, lon) => this.terrain?.sample(lat, lon) ?? Promise.resolve(0),
+        this.landmarkExclusions
       );
       this.osmScene.update(this.geoPointAt(0));
     } else {
@@ -148,6 +160,7 @@ export class StadtbahnWorld {
     this.osmScene?.update(this.geoPointAt(t));
     if (this.ground) this.ground.visible = !underground;
     if (this.osmScene) this.osmScene.group.visible = !underground;
+    this.landmarkGroup.visible = !underground;
     this.updateDoors(doorsOpen, deltaSeconds);
     this.updateInteriorDisplay(nextStation, doorsOpen);
     this.updateArticulatedVehicle(this.train, this.trainCars, distanceM, 1, ACTIVE_TRACK_OFFSET_M);

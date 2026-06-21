@@ -2,6 +2,7 @@ import { VectorTile } from '@mapbox/vector-tile';
 import { PbfReader } from 'pbf';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import type { LandmarkZone } from './landmarks';
 
 export type GeoPoint = { lat: number; lon: number };
 
@@ -38,7 +39,8 @@ export class OsmSceneStreamer {
   constructor(
     scene: THREE.Scene,
     private readonly projectGeo: (lat: number, lon: number) => THREE.Vector3,
-    private readonly surfaceHeight: (lat: number, lon: number) => Promise<number>
+    private readonly surfaceHeight: (lat: number, lon: number) => Promise<number>,
+    private readonly buildingExclusions: LandmarkZone[] = []
   ) {
     this.group.name = 'OpenStreetMap streamed scenery';
     scene.add(this.group);
@@ -500,9 +502,10 @@ export class OsmSceneStreamer {
       const minHeight = Math.min(numberProperty(feature.properties.render_min_height, 0), height - 0.5);
 
       for (const polygon of polygons) {
+        const anchor = polygon[0]?.[0];
+        if (anchor && this.buildingIsExcluded(anchor[1], anchor[0])) continue;
         const shape = this.polygonShape(polygon);
         if (!shape) continue;
-        const anchor = polygon[0]?.[0];
         const baseHeight = anchor ? await this.surfaceHeight(anchor[1], anchor[0]) : 0;
         const building = new THREE.ExtrudeGeometry(shape, {
           depth: Math.max(0.5, height - minHeight),
@@ -912,6 +915,14 @@ export class OsmSceneStreamer {
       }
     }
     return new THREE.Color(0xc6c1b7);
+  }
+
+  private buildingIsExcluded(lat: number, lon: number): boolean {
+    const lonScale = Math.cos((lat * Math.PI) / 180) * 111_320;
+    return this.buildingExclusions.some((zone) => Math.hypot(
+      (lat - zone.lat) * 111_320,
+      (lon - zone.lon) * lonScale
+    ) <= zone.radiusM);
   }
 
   private disposeObject(object: THREE.Object3D): void {

@@ -25,6 +25,7 @@ No Rust is used.
 - Streamed terrain-following OSM roads, bridges, railway corridors, platforms, footways, cycleways and steps
 - Rich OSM land cover and land use including vineyards, orchards, allotments, wetlands, institutional grounds and sports areas
 - Instanced trees and shrubs plus streamed transit signs, parking signs, bicycle racks, bins, bollards, fountains and local POI markers
+- Route-proximity landmark silhouettes for Neues Schloss, Altes Schloss, Stiftskirche, Johanneskirche, Bonatzbau, Weißenhofsiedlung, Fernsehturm and Grabkapelle
 - Stuttgart terrain relief from Terrarium DEM tiles, applied to ground, track, buildings and surface objects
 - OSM-classified Stadtbahn tunnel sections with eased underground profiles, portals, lining and tunnel lighting
 - Double-track Stadtbahn corridor: one track per direction, with the active vehicle offset onto its running track
