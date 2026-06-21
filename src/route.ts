@@ -137,8 +137,23 @@ export async function loadRoutePackages(): Promise<{ routes: DemoRoute[]; attrib
 }
 
 export function createRouteCurve(route: DemoRoute): THREE.CatmullRomCurve3 {
-  const points = route.controlPoints.map(([x, y, z]) => new THREE.Vector3(x, y, z));
-  return new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.36);
+  let points = route.controlPoints.map(([x, y, z]) => new THREE.Vector3(x, y, z));
+  // GTFS shapes contain survey/GPS jitter which becomes visible as sharp rail kinks.
+  // A short weighted filter preserves the alignment while giving the renderer a
+  // centerline suitable for long articulated vehicles.
+  for (let pass = 0; pass < 2; pass++) {
+    points = points.map((point, index, source) => {
+      if (index === 0 || index === source.length - 1) return point.clone();
+      return source[index - 1].clone()
+        .multiplyScalar(0.2)
+        .add(point.clone().multiplyScalar(0.6))
+        .add(source[index + 1].clone().multiplyScalar(0.2));
+    });
+  }
+  const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
+  curve.arcLengthDivisions = Math.max(1200, points.length * 12);
+  curve.updateArcLengths();
+  return curve;
 }
 
 export function distanceToT(distanceM: number, routeLengthM: number): number {

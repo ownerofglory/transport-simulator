@@ -13,19 +13,28 @@ No Rust is used.
 
 ## What is included
 
-- 18 generated Stuttgart Stadtbahn route packages from the VVS GTFS feed
+- 36 generated directional Stuttgart Stadtbahn route packages from the VVS GTFS feed, covering U1-U9, U11-U16 and U19
 - Passenger ride mode with automatic driving
 - Driver tariff training mode with manual throttle/brake, station stop scoring and timetable delta
 - Local ride entitlement mock: three free rides, EUR 0.20 ride credits and EUR 8 membership toggle
 - Leaflet minimap showing route geometry, vehicle position and direction
-- High-detail OpenStreetMap raster tiles projected into the Three.js world as real Stuttgart ground texture
-- Streamed OpenFreeMap/OpenMapTiles vector scenery with real OSM building footprints, heights, facade windows and generated roof forms
-- Instanced trees from real park/landcover polygons and street lights placed along real road geometry
+- Live SSB-style stop schematic with auto-scrolling vehicle position and pulsing approaching-station marker
+- Clean untextured terrain relief without streamed photographic/raster map tiles
+- Streamed OpenFreeMap/OpenMapTiles buildings using source footprints, heights and colours without generated façade or roof decoration
+- Streamed OSM lakes, river surfaces, canals, streams and drainage waterways
+- Streamed terrain-following OSM roads, bridges, railway corridors, platforms, footways, cycleways and steps
+- Rich OSM land cover and land use including vineyards, orchards, allotments, wetlands, institutional grounds and sports areas
+- Instanced trees and shrubs plus streamed transit signs, parking signs, bicycle racks, bins, bollards, fountains and local POI markers
 - Stuttgart terrain relief from Terrarium DEM tiles, applied to ground, track, buildings and surface objects
 - OSM-classified Stadtbahn tunnel sections with eased underground profiles, portals, lining and tunnel lighting
 - Double-track Stadtbahn corridor: one track per direction, with the active vehicle offset onto its running track
-- Dimensionally matched Stadler Tango / SSB DT8-inspired two-car vehicle with chamfered bodies, tapered cabs, HVAC banks, pantograph, detailed bogies, four doors per side, seating, destination displays and ad-panel placeholders
-- Rails, sleepers, platforms and station signs
+- Dimensionally matched Stadler Tango / SSB DT8-inspired articulated vehicle whose cars independently follow the rail centerline
+- 80 m coupled double formations on U1, U6, U7, U11, U12 and U19
+- Automatic terminal turnaround into the matching opposite-direction service
+- Rails, sleepers and curve-following platforms with tactile safety edges
+- Route-aware SSB-inspired stations: glass-and-blue-steel surface canopies plus enclosed underground halls with columns, lighting and wayfinding
+- Station furniture including benches, ticket machines, timetable cases, bins and repeated platform name signs
+- Shared-corridor overlays for adjacent Stadtbahn lines and simulated opposing services
 - Elevated chase camera as the default, plus passenger and cab views
 - Selectable GTFS start station for every route
 - Spring, summer, autumn and winter visual modes
@@ -69,6 +78,16 @@ npm run build
 npm run preview
 ```
 
+## Deploy to Vercel
+
+The repository includes the generated Go WebAssembly runtime in `public/`, so Vercel only needs Node.js for its build:
+
+```bash
+npm run build:vercel
+```
+
+Import the repository into Vercel or run `vercel`. The checked-in `vercel.json` selects the Vite preset, runs the cloud-safe build command, publishes `dist/`, and serves `sim.wasm` with the WebAssembly MIME type. After changing the Go simulator, run `npm run wasm:build` and commit the refreshed `public/sim.wasm` and `public/wasm_exec.js` artifacts before deploying.
+
 ## Refresh VVS GTFS route packages
 
 The app reads compact generated route packages from `public/data/vvs-stadtbahn-routes.json`.
@@ -76,7 +95,7 @@ The app reads compact generated route packages from `public/data/vvs-stadtbahn-r
 ```bash
 mkdir -p data/raw
 curl -L https://download.vvs.de/gtfs_realtime.zip -o data/raw/vvs-gtfs.zip
-node tools/import-vvs-gtfs.mjs data/raw/vvs-gtfs.zip public/data/vvs-stadtbahn-routes.json 18
+node tools/import-vvs-gtfs.mjs data/raw/vvs-gtfs.zip public/data/vvs-stadtbahn-routes.json
 node tools/enrich-route-terrain.mjs
 npm run build
 ```

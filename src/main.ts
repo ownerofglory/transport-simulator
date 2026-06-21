@@ -1,6 +1,7 @@
 import './style.css';
 import { createRouteCurve, demoRoute, loadRoutePackages, type DemoRoute } from './route';
 import { VehicleMiniMap } from './minimap';
+import { SsbRouteDiagram } from './route-diagram';
 import { StadtbahnWorld } from './world';
 import {
   initSimulator,
@@ -17,6 +18,7 @@ type Mode = 'ride' | 'driver';
 
 const FREE_RIDES = 3;
 const ENTITLEMENT_KEY = 'ssim.entitlement.v3';
+const TERMINAL_TURNAROUND_MS = 4000;
 
 type Entitlement = {
   usedFreeRides: number;
@@ -75,6 +77,10 @@ hud.innerHTML = `
 `;
 document.body.appendChild(hud);
 
+const rightRail = document.createElement('div');
+rightRail.className = 'right-rail';
+document.body.appendChild(rightRail);
+
 const ticketPanel = document.createElement('div');
 ticketPanel.className = 'ticket-panel';
 ticketPanel.innerHTML = `
@@ -87,7 +93,12 @@ ticketPanel.innerHTML = `
     <button data-action="membership">EUR 8 month</button>
   </div>
 `;
-document.body.appendChild(ticketPanel);
+rightRail.appendChild(ticketPanel);
+
+const routeDiagramEl = document.createElement('section');
+routeDiagramEl.className = 'route-diagram';
+rightRail.appendChild(routeDiagramEl);
+const routeDiagram = new SsbRouteDiagram(routeDiagramEl);
 
 const notice = document.createElement('div');
 notice.className = 'notice';
@@ -112,6 +123,7 @@ let throttleHeld = false;
 let brakeHeld = false;
 let entitlement = loadEntitlement();
 let rideAccessConsumedForSession = false;
+let terminalReachedAt: number | null = null;
 
 function loadEntitlement(): Entitlement {
   const fallback: Entitlement = { usedFreeRides: 0, rideCredits: 0, member: false };
@@ -183,10 +195,42 @@ function routeConfig(route: DemoRoute) {
   };
 }
 
+function findOppositeRoute(route: DemoRoute): DemoRoute | undefined {
+  const origin = route.stations[0]?.name;
+  const terminal = route.stations.at(-1)?.name;
+  const candidates = availableRoutes.filter((candidate) => candidate.line === route.line && candidate.id !== route.id);
+  const bestMatch = candidates
+    .map((candidate) => {
+      const candidateOrigin = candidate.stations[0]?.name;
+      const candidateTerminal = candidate.stations.at(-1)?.name;
+      let score = 0;
+      if (candidateOrigin === terminal) score += 8;
+      if (candidateTerminal === origin) score += 8;
+      if (candidate.destination === origin) score += 4;
+      score -= Math.abs(candidate.stations.length - route.stations.length) * 0.05;
+      return { candidate, score };
+    })
+    .sort((a, b) => b.score - a.score)[0];
+  return bestMatch && bestMatch.score >= 16 ? bestMatch.candidate : undefined;
+}
+
+function startOppositeRide(): void {
+  const opposite = findOppositeRoute(selectedRoute);
+  if (!opposite) {
+    terminalReachedAt = Number.POSITIVE_INFINITY;
+    return;
+  }
+  selectedRoute = opposite;
+  selectedStartStation = 0;
+  updateRouteOptions();
+  updateStationOptions();
+  startSelectedRide();
+}
+
 function rebuildWorld(route: DemoRoute): void {
   world?.dispose();
   appEl.replaceChildren();
-  world = new StadtbahnWorld(createRouteCurve(route), route);
+  world = new StadtbahnWorld(createRouteCurve(route), route, availableRoutes);
   world.mount(appEl);
   world.setSeason(selectedSeason);
 
@@ -194,6 +238,7 @@ function rebuildWorld(route: DemoRoute): void {
     miniMap = new VehicleMiniMap(miniMapEl);
   }
   miniMap.setRoute(route);
+  routeDiagram.setRoute(route);
   window.setTimeout(() => miniMap?.invalidateSize(), 0);
 }
 
@@ -206,10 +251,11 @@ function updateHud(s: SimulatorState): void {
   hud.querySelector('[data-field="schedule"]')!.textContent =
     s.mode === 'driver' ? `${s.timetableDeltaS >= 0 ? '+' : ''}${s.timetableDeltaS.toFixed(0)}s` : '-';
   hud.classList.toggle('driver-mode', s.mode === 'driver');
+  routeDiagram.update(s);
 }
 
 function updateNotice(): void {
-  notice.textContent = `${selectedRoute.description} Source: ${selectedRoute.source ?? 'demo route'}. ${gtfsAttribution} Ground and 3D scenery: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. Relief: Mapzen Terrain Tiles on AWS Open Data.`;
+  notice.textContent = `${selectedRoute.description} Source: ${selectedRoute.source ?? 'demo route'}. ${gtfsAttribution} Vector 3D scenery: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. Untextured relief: Mapzen Terrain Tiles on AWS Open Data.`;
 }
 
 function setDriveInput(): void {
@@ -219,6 +265,7 @@ function setDriveInput(): void {
 }
 
 function startSelectedRide(): void {
+  terminalReachedAt = null;
   rebuildWorld(selectedRoute);
   state = initSimulator(routeConfig(selectedRoute));
   updateHud(state);
@@ -228,7 +275,7 @@ function startSelectedRide(): void {
   if (!canStartRide()) {
     paused = true;
     state = setSimulatorPaused(true);
-    world?.updateTrain(state.distanceM);
+    world?.updateTrain(state.distanceM, state.doorsOpen, 1 / 60, state.nextStation);
     miniMap?.update(state.distanceM);
     world?.render();
     updateHud(state);
@@ -252,7 +299,7 @@ hud.querySelector<HTMLButtonElement>('[data-action="pause"]')?.addEventListener(
 hud.querySelector<HTMLButtonElement>('[data-action="camera"]')?.addEventListener('click', () => {
   world?.cycleCamera();
   if (state && world) {
-    world.updateTrain(state.distanceM);
+    world.updateTrain(state.distanceM, state.doorsOpen, 1 / 60, state.nextStation);
     world.render();
   }
 });
@@ -346,10 +393,19 @@ function frame(now: number): void {
     if (!paused) {
       state = stepSimulator(dt);
     }
-    world.updateTrain(state.distanceM);
+    world.updateTrain(state.distanceM, state.doorsOpen, dt, state.nextStation);
     miniMap?.update(state.distanceM);
     updateHud(state);
     world.render();
+
+    if (state.tripComplete) {
+      terminalReachedAt ??= now;
+      if (now - terminalReachedAt >= TERMINAL_TURNAROUND_MS) {
+        startOppositeRide();
+      }
+    } else {
+      terminalReachedAt = null;
+    }
   }
   requestAnimationFrame(frame);
 }

@@ -4,7 +4,8 @@ import { createInterface } from 'node:readline';
 
 const zipPath = process.argv[2] ?? 'data/raw/vvs-gtfs.zip';
 const outPath = process.argv[3] ?? 'public/data/vvs-stadtbahn-routes.json';
-const maxRoutes = Number(process.argv[4] ?? '18');
+const requestedLimit = process.argv[4] ? Number(process.argv[4]) : Number.POSITIVE_INFINITY;
+const maxRoutes = Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : Number.POSITIVE_INFINITY;
 
 const wantedRouteType = '402';
 const earthMPerDegLat = 111_320;
@@ -162,9 +163,9 @@ for (const trip of tripCandidates.values()) {
   if (!current || trip.stopCount > current.stopCount) bestTrips.set(key, trip);
 }
 
-const selectedTrips = Array.from(bestTrips.values())
-  .sort((a, b) => a.line.localeCompare(b.line, 'de', { numeric: true }) || a.directionId.localeCompare(b.directionId))
-  .slice(0, maxRoutes);
+const sortedTrips = Array.from(bestTrips.values())
+  .sort((a, b) => a.line.localeCompare(b.line, 'de', { numeric: true }) || a.directionId.localeCompare(b.directionId));
+const selectedTrips = Number.isFinite(maxRoutes) ? sortedTrips.slice(0, maxRoutes) : sortedTrips;
 
 const selectedTripIds = new Set(selectedTrips.map((t) => t.tripId));
 const selectedShapeIds = new Set(selectedTrips.map((t) => t.shapeId));

@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "npm run wasm:build && tsc && vite build",
+    "build:client": "tsc && vite build",
+    "build:vercel": "test -s public/sim.wasm && test -s public/wasm_exec.js && npm run build:client",
     "preview": "vite preview --host 0.0.0.0",
     "wasm:build": "bash scripts/build-wasm.sh"
   },
