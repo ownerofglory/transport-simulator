@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import type { SimulatorConfig } from './wasm';
+import type { SimulatorConfig } from './simulator/simulator-types';
 import type { TransportMode } from './domain/transport';
+import { routeTransportMode } from './domain/transport';
 
 export type DemoRoute = SimulatorConfig & {
   id: string;
@@ -29,6 +30,19 @@ export type GtfsRouteFeed = {
   license: string;
   attribution: string;
   routes: DemoRoute[];
+};
+
+export type RouteFeedManifest = {
+  generatedAt: string;
+  sourceUrl: string;
+  license: string;
+  attribution: string;
+  modes: Array<{
+    mode: TransportMode;
+    file: string;
+    routeCount: number;
+    lines: string[];
+  }>;
 };
 
 export const routePackages: DemoRoute[] = [
@@ -121,29 +135,90 @@ export const routePackages: DemoRoute[] = [
 
 export const demoRoute = routePackages[0];
 
-export async function loadRoutePackages(): Promise<{ routes: DemoRoute[]; attribution: string }> {
+const fallbackManifest: RouteFeedManifest = {
+  generatedAt: new Date(0).toISOString(),
+  sourceUrl: 'demo',
+  license: 'internal',
+  attribution: 'Demo route fallback. Real VVS GTFS route packages could not be loaded.',
+  modes: [
+    {
+      mode: 'stadtbahn',
+      file: '/data/demo-route.json',
+      routeCount: routePackages.length,
+      lines: [...new Set(routePackages.map((route) => route.line))]
+    }
+  ]
+};
+
+function routeSortKey(route: DemoRoute): [number, string, string, string] {
+  const line = route.line.trim();
+  const plainNumeric = /^\d{1,2}[A-Z]?$/i.test(line);
+  const stuttgartBusPriority = routeMode(route) === 'bus'
+    ? plainNumeric
+      ? 0
+      : /^\d/.test(line)
+        ? 1
+        : 2
+    : 0;
+  return [stuttgartBusPriority, line, route.destination, route.id];
+}
+
+function sortRoutes(routes: DemoRoute[]): DemoRoute[] {
+  return [...routes].sort((a, b) => {
+    const [aPriority, aLine, aDestination, aId] = routeSortKey(a);
+    const [bPriority, bLine, bDestination, bId] = routeSortKey(b);
+    return aPriority - bPriority ||
+      aLine.localeCompare(bLine, 'de', { numeric: true }) ||
+      aDestination.localeCompare(bDestination, 'de') ||
+      aId.localeCompare(bId, 'de');
+  });
+}
+
+export async function loadRouteManifest(): Promise<RouteFeedManifest> {
   try {
-    const response = await fetch('/data/vvs-stadtbahn-routes.json');
-    if (!response.ok) throw new Error(`GTFS route package request failed: ${response.status}`);
+    const response = await fetch('/data/route-manifest.json');
+    if (!response.ok) throw new Error(`Route manifest request failed: ${response.status}`);
+    const manifest = (await response.json()) as RouteFeedManifest;
+    if (!Array.isArray(manifest.modes) || manifest.modes.length === 0) {
+      throw new Error('Route manifest did not include any transport modes.');
+    }
+    return manifest;
+  } catch (error) {
+    console.warn('Falling back to demo route manifest.', error);
+    return fallbackManifest;
+  }
+}
+
+export async function loadRoutesForMode(
+  mode: TransportMode,
+  manifest: RouteFeedManifest
+): Promise<{ routes: DemoRoute[]; attribution: string }> {
+  const descriptor = manifest.modes.find((entry) => entry.mode === mode);
+  if (!descriptor) {
+    if (mode === 'stadtbahn') {
+      return { routes: sortRoutes(routePackages), attribution: fallbackManifest.attribution };
+    }
+    return { routes: [], attribution: manifest.attribution };
+  }
+
+  try {
+    const response = await fetch(descriptor.file);
+    if (!response.ok) throw new Error(`Route feed request failed: ${response.status}`);
     const feed = (await response.json()) as GtfsRouteFeed;
     if (!Array.isArray(feed.routes) || feed.routes.length === 0) {
-      throw new Error('GTFS route package did not include routes.');
+      throw new Error(`Route feed ${descriptor.file} did not include routes.`);
     }
-    return { routes: feed.routes, attribution: feed.attribution };
+    return { routes: sortRoutes(feed.routes), attribution: feed.attribution };
   } catch (error) {
-    console.warn('Falling back to demo route packages.', error);
-    return {
-      routes: routePackages,
-      attribution: 'Demo route fallback. Real VVS GTFS route package could not be loaded.'
-    };
+    console.warn(`Falling back for ${mode} route feed.`, error);
+    return mode === 'stadtbahn'
+      ? { routes: sortRoutes(routePackages), attribution: fallbackManifest.attribution }
+      : { routes: [], attribution: manifest.attribution };
   }
 }
 
 export function createRouteCurve(route: DemoRoute): THREE.CatmullRomCurve3 {
   let points = route.controlPoints.map(([x, y, z]) => new THREE.Vector3(x, y, z));
-  // GTFS shapes contain survey/GPS jitter which becomes visible as sharp rail kinks.
-  // A short weighted filter preserves the alignment while giving the renderer a
-  // centerline suitable for long articulated vehicles.
   for (let pass = 0; pass < 2; pass++) {
     points = points.map((point, index, source) => {
       if (index === 0 || index === source.length - 1) return point.clone();
@@ -161,4 +236,8 @@ export function createRouteCurve(route: DemoRoute): THREE.CatmullRomCurve3 {
 
 export function distanceToT(distanceM: number, routeLengthM: number): number {
   return THREE.MathUtils.clamp(distanceM / routeLengthM, 0, 1);
+}
+
+export function routeMode(route: DemoRoute): TransportMode {
+  return routeTransportMode(route.transportMode);
 }

@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { VectorTile } from '@mapbox/vector-tile';
 import { PNG } from 'pngjs';
 import { PbfReader } from 'pbf';
@@ -11,8 +12,12 @@ const vectorMetadataUrl = 'https://tiles.openfreemap.org/planet';
 const earthMPerDegLat = 111_320;
 const terrainTiles = new Map();
 const transitTiles = new Map();
+const generatedMirrorPath = join('data/generated', basename(inputPath));
 
 const feed = JSON.parse(readFileSync(inputPath, 'utf8'));
+if (!Array.isArray(feed.routes)) {
+  throw new Error(`Route feed ${inputPath} does not contain a routes array.`);
+}
 const vectorMetadata = await fetch(vectorMetadataUrl).then((response) => {
   if (!response.ok) throw new Error(`OpenFreeMap metadata request failed: ${response.status}`);
   return response.json();
@@ -69,7 +74,7 @@ feed.terrain = {
   generatedAt: new Date().toISOString()
 };
 writeFileSync(inputPath, `${JSON.stringify(feed)}\n`);
-writeFileSync('data/generated/vvs-stadtbahn-routes.json', `${JSON.stringify(feed, null, 2)}\n`);
+writeFileSync(generatedMirrorPath, `${JSON.stringify(feed, null, 2)}\n`);
 
 async function sampleTerrain(point) {
   const tilePosition = geoToTileFloat(point, terrainZoom);

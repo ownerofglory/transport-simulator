@@ -5,8 +5,9 @@ import { OsmSceneStreamer } from './osm-scene';
 import type { DemoRoute } from './route';
 import { TerrainSampler } from './terrain';
 import { routeTransportMode, type TransportMode } from './domain/transport';
-
-type Season = 'spring' | 'summer' | 'autumn' | 'winter';
+import type { Season } from './app/types';
+import { LightingController } from './world/LightingController';
+import { CameraController } from './world/CameraController';
 type GeoPoint = { lat: number; lon: number };
 
 const EARTH_M_PER_DEG_LAT = 111_320;
@@ -22,7 +23,6 @@ export class TransitWorld {
   readonly renderer = new THREE.WebGLRenderer({ antialias: true });
   readonly train = new THREE.Group();
   readonly curve: THREE.CatmullRomCurve3;
-  private cameraMode: 'passenger' | 'cab' | 'chase' = 'chase';
   private readonly stationMarkers: THREE.Object3D[] = [];
   private readonly seasonalObjects = new THREE.Group();
   private readonly trainCars: THREE.Group[] = [];
@@ -48,8 +48,9 @@ export class TransitWorld {
   private readonly hemi = new THREE.HemisphereLight();
   private readonly sun = new THREE.DirectionalLight();
   private readonly visibilityFill = new THREE.AmbientLight();
+  private readonly lighting = new LightingController(this.scene, this.renderer, this.hemi, this.sun, this.visibilityFill);
+  private readonly cameraController = new CameraController(this.camera);
   private currentSeason: Season = 'summer';
-  private timeOfDayHour = 12;
   private readonly onResizeBound = () => this.onResize();
 
   constructor(
@@ -87,7 +88,7 @@ export class TransitWorld {
     this.scene.add(this.landmarkGroup);
 
     this.camera.position.set(0, 5, -12);
-    this.setupLighting();
+    this.lighting.initialize();
     this.buildGround();
     this.buildAdjacentLines();
     this.buildTrack();
@@ -138,24 +139,24 @@ export class TransitWorld {
         this.addSnow();
         break;
     }
-    this.applyTimeOfDay();
+    this.lighting.setSeason(this.currentSeason);
   }
 
   setTimeOfDay(hour: number): void {
-    this.timeOfDayHour = ((hour % 24) + 24) % 24;
-    this.applyTimeOfDay();
+    this.lighting.setTimeOfDay(hour);
   }
 
   cycleCamera(): string {
-    this.cameraMode = this.cameraMode === 'chase' ? 'passenger' : this.cameraMode === 'passenger' ? 'cab' : 'chase';
+    this.cameraController.cycle();
     this.updateVehicleGlass();
-    return this.cameraMode;
+    return this.cameraController.currentMode();
   }
 
   private updateVehicleGlass(): void {
     if (!this.vehicleGlassMaterial) return;
-    const interiorView = this.cameraMode === 'passenger' || this.cameraMode === 'cab';
-    const cabView = this.cameraMode === 'cab';
+    const mode = this.cameraController.currentMode();
+    const interiorView = mode === 'passenger' || mode === 'cab';
+    const cabView = mode === 'cab';
     this.vehicleGlassMaterial.opacity = interiorView ? 0.1 : 0.58;
     this.vehicleGlassMaterial.depthWrite = !interiorView;
     this.vehicleGlassMaterial.color.setHex(interiorView ? 0xd9f2f8 : 0x91c7dd);
@@ -186,7 +187,15 @@ export class TransitWorld {
         : this.wrapDistance(this.route.routeLengthM - distanceM + traffic.phaseM);
       this.updateArticulatedVehicle(traffic.root, traffic.cars, opposingDistance, -1, this.oppositeLaneOffsetM);
     }
-    this.updateCamera(position, tangent, t);
+    this.cameraController.update({
+      position,
+      tangent,
+      underground,
+      transportMode: this.transportMode,
+      trainHalfLengthM: this.trainHalfLengthM,
+      train: this.train,
+      trainCars: this.trainCars
+    });
   }
 
   private updateDoors(open: boolean, deltaSeconds: number): void {
@@ -267,59 +276,6 @@ export class TransitWorld {
     this.terrain = null;
     this.renderer.domElement.remove();
     this.renderer.dispose();
-  }
-
-  private setupLighting(): void {
-    this.hemi.color.setHex(0xffffff);
-    this.hemi.groundColor.setHex(0x607080);
-    this.hemi.intensity = 1.3;
-    this.scene.add(this.hemi);
-
-    // A restrained ambient floor keeps streamed geometry navigable at night.
-    // It represents bounced city light rather than flattening the daylight scene.
-    this.visibilityFill.color.setHex(0x8da8c9);
-    this.visibilityFill.intensity = 0.12;
-    this.scene.add(this.visibilityFill);
-
-    this.sun.color.setHex(0xffffff);
-    this.sun.intensity = 2.2;
-    this.sun.position.set(-220, 380, -120);
-    this.sun.castShadow = true;
-    this.sun.shadow.camera.left = -400;
-    this.sun.shadow.camera.right = 400;
-    this.sun.shadow.camera.top = 400;
-    this.sun.shadow.camera.bottom = -400;
-    this.scene.add(this.sun);
-    this.applyTimeOfDay();
-  }
-
-  private applyTimeOfDay(): void {
-    const hour = this.timeOfDayHour;
-    const daylight = THREE.MathUtils.smoothstep(Math.sin(((hour - 6) / 12) * Math.PI), 0, 1);
-    const dawnDusk = Math.max(0, 1 - Math.abs(hour - 6) / 2, 1 - Math.abs(hour - 18) / 2);
-    const angle = ((hour - 6) / 12) * Math.PI;
-    this.sun.position.set(Math.cos(angle) * 420, Math.max(18, Math.sin(angle) * 420), -180);
-    this.sun.intensity = 0.38 + daylight * 1.95 + dawnDusk * 0.34;
-    this.sun.color.set(dawnDusk > 0.2 ? 0xffbd7a : daylight > 0.2 ? 0xfff7e8 : 0x9bb9e6);
-    this.hemi.intensity = 0.72 + daylight * 0.58 + dawnDusk * 0.12;
-    this.hemi.color.set(daylight > 0.15 ? 0xddecff : 0x7898c4);
-    this.hemi.groundColor.set(daylight > 0.15 ? 0x586a70 : 0x29394b);
-    this.visibilityFill.intensity = 0.42 * (1 - daylight) + 0.08;
-    this.visibilityFill.color.set(dawnDusk > 0.2 ? 0xc79b7d : 0x89a9d2);
-
-    const seasonSky: Record<Season, THREE.Color> = {
-      spring: new THREE.Color(0xb9d6ed),
-      summer: new THREE.Color(0xa7d3ff),
-      autumn: new THREE.Color(0xcab38f),
-      winter: new THREE.Color(0xd8e5ee)
-    };
-    const nightSky = new THREE.Color(0x172b46);
-    const sky = nightSky.clone().lerp(seasonSky[this.currentSeason], daylight);
-    if (dawnDusk > 0.2) sky.lerp(new THREE.Color(0xd98961), dawnDusk * 0.3);
-    this.scene.background = sky;
-    const fogFar = THREE.MathUtils.lerp(2300, this.currentSeason === 'summer' ? 3400 : 2700, daylight);
-    this.scene.fog = new THREE.Fog(sky, fogFar * 0.4, fogFar);
-    this.renderer.toneMappingExposure = 1.05 + dawnDusk * 0.1 + (1 - daylight) * 0.12;
   }
 
   private get transportMode(): TransportMode {
@@ -1310,10 +1266,12 @@ export class TransitWorld {
     const body = new THREE.Mesh(new THREE.BoxGeometry(2.65, 3.1, 18.6), yellow);
     body.position.y = 1.88;
     car.add(body);
+    this.vehiclePassengerShells.push(body);
     for (const side of [-1, 1]) {
       const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.08, 15.8), dark);
       band.position.set(side * 1.35, 2.38, 0);
       car.add(band);
+      this.vehicleWindowBands.push(band);
       for (const z of [-6.8, -4.7, -2.4, 0, 2.4, 4.7, 6.8]) {
         const window = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.88, 1.55), glass);
         window.position.set(side * 1.37, 2.4, z);
@@ -1338,6 +1296,7 @@ export class TransitWorld {
     this.train.add(car);
     this.addPantograph(new THREE.Vector3(0, 3.55, 0), dark);
     this.scene.add(this.train);
+    this.updateVehicleGlass();
   }
 
   private buildSeilbahnCar(): void {
@@ -1520,7 +1479,15 @@ export class TransitWorld {
       .add(this.normalAt(t).multiplyScalar(trackOffsetM))
       .add(new THREE.Vector3(0, 0.2, 0));
     const tangent = routeTangent.multiplyScalar(direction);
-    const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
+    // Build a level track frame instead of using the shortest rotation from
+    // forward to the tangent. The latter can introduce visible roll whenever
+    // a steep route, such as the Zacke, changes both heading and elevation.
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const right = worldUp.clone().cross(tangent).normalize();
+    const up = tangent.clone().cross(right).normalize();
+    const quaternion = new THREE.Quaternion().setFromRotationMatrix(
+      new THREE.Matrix4().makeBasis(right, up, tangent)
+    );
     return { position, quaternion };
   }
 
@@ -2169,46 +2136,6 @@ export class TransitWorld {
     if (!origin) return new THREE.Vector3(0, 0, 0);
     const lonScale = Math.cos((origin.lat * Math.PI) / 180) * EARTH_M_PER_DEG_LAT;
     return new THREE.Vector3(-(lon - origin.lon) * lonScale, 0, (lat - origin.lat) * EARTH_M_PER_DEG_LAT);
-  }
-
-  private updateCamera(position: THREE.Vector3, tangent: THREE.Vector3, routeT: number): void {
-    const normal = new THREE.Vector3(tangent.z, 0, -tangent.x).normalize();
-    const underground = this.stationIsUnderground(routeT);
-    let camPos: THREE.Vector3;
-    let lookAt: THREE.Vector3;
-    let cameraUp = new THREE.Vector3(0, 1, 0);
-
-    if (this.cameraMode === 'passenger') {
-      const anchoredInterior = this.transportMode === 'bus' || this.transportMode === 's-bahn';
-      if (anchoredInterior) {
-        this.train.updateMatrixWorld(true);
-        const passengerCar = this.transportMode === 's-bahn' ? this.trainCars[2] : this.trainCars[0];
-        const localZ = this.transportMode === 's-bahn' ? -2 : -4.4;
-        camPos = passengerCar.localToWorld(new THREE.Vector3(0.16, 2.3, localZ));
-        lookAt = passengerCar.localToWorld(new THREE.Vector3(0, 2.25, 70));
-        cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(passengerCar.getWorldQuaternion(new THREE.Quaternion())).normalize();
-      } else {
-        const passengerOffsetM = this.transportMode === 'stadtbahn' ? 4.2 : 0;
-        camPos = position.clone()
-          .add(tangent.clone().multiplyScalar(passengerOffsetM))
-          .add(normal.clone().multiplyScalar(0.08))
-          .add(new THREE.Vector3(0, 2.3, 0));
-        lookAt = position.clone().add(tangent.clone().multiplyScalar(85)).add(normal.clone().multiplyScalar(1.5)).add(new THREE.Vector3(0, 2.25, 0));
-      }
-    } else if (this.cameraMode === 'cab') {
-      camPos = position.clone().add(tangent.clone().multiplyScalar(this.trainHalfLengthM - 1.75)).add(new THREE.Vector3(0, 2.65, 0));
-      lookAt = position.clone().add(tangent.clone().multiplyScalar(120)).add(new THREE.Vector3(0, 2.2, 0));
-    } else if (underground) {
-      camPos = position.clone().add(tangent.clone().multiplyScalar(-(this.trainHalfLengthM + 22))).add(new THREE.Vector3(0, 4.6, 0));
-      lookAt = position.clone().add(tangent.clone().multiplyScalar(12)).add(new THREE.Vector3(0, 1.8, 0));
-    } else {
-      camPos = position.clone().add(tangent.clone().multiplyScalar(-(this.trainHalfLengthM + 14))).add(new THREE.Vector3(0, 16, 0));
-      lookAt = position.clone().add(new THREE.Vector3(0, 2, 0));
-    }
-
-    this.camera.position.lerp(camPos, this.cameraMode === 'chase' ? 0.12 : 0.32);
-    this.camera.up.lerp(cameraUp, 0.32).normalize();
-    this.camera.lookAt(lookAt);
   }
 
   private onResize(): void {

@@ -1,4 +1,5 @@
-import { createReadStream, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
@@ -9,8 +10,8 @@ const maxRoutes = Number.isFinite(requestedLimit) && requestedLimit > 0 ? reques
 
 const routeSelections = [
   { routeType: '402', line: /^U\d+$/, transportMode: 'stadtbahn', agency: 'SSB', speedLimitMps: 18 },
-  { routeType: '3', line: /^(40|42|43|44)$/, transportMode: 'bus', agency: 'SSB', speedLimitMps: 13.9 },
-  { routeType: '109', line: /^S1$/, transportMode: 's-bahn', agency: 'DB Regio', speedLimitMps: 38.9 },
+  { routeType: '3', line: /.+/, transportMode: 'bus', agency: 'VVS Bus', speedLimitMps: 13.9 },
+  { routeType: '109', line: /^S(?:[1-6]|60|62)$/, transportMode: 's-bahn', agency: 'DB Regio', speedLimitMps: 38.9 },
   { routeType: '1400', line: /^10$/, transportMode: 'zacke', agency: 'SSB', speedLimitMps: 8.3 },
   { routeType: '1400', line: /^20$/, transportMode: 'seilbahn', agency: 'SSB', speedLimitMps: 2.4 }
 ];
@@ -237,7 +238,10 @@ for (const trip of selectedTrips) {
     .filter(Boolean)
     .filter((station, index, arr) => index === 0 || station.name !== arr[index - 1].name);
 
-  const sampledShape = decimate(shape, 220);
+  const sampledShape = decimate(
+    shape,
+    trip.transportMode === 'bus' ? 120 : trip.transportMode === 's-bahn' ? 260 : 220
+  );
   const controlPoints = projectToLocal(sampledShape);
   const geoPoints = sampledShape.map((p) => [p.lat, p.lon]);
   const routeLengthM = cumulative[cumulative.length - 1];
@@ -271,7 +275,42 @@ const output = {
   routes: packages
 };
 
-mkdirSync(outPath.split('/').slice(0, -1).join('/'), { recursive: true });
+const outDir = dirname(outPath);
+mkdirSync(outDir, { recursive: true });
+mkdirSync('data/generated', { recursive: true });
 writeFileSync(outPath, `${JSON.stringify(output)}\n`);
 writeFileSync('data/generated/vvs-stadtbahn-routes.json', `${JSON.stringify(output, null, 2)}\n`);
-console.log(`Wrote ${packages.length} route packages to ${outPath}`);
+
+const modes = ['stadtbahn', 'bus', 's-bahn', 'zacke', 'seilbahn'];
+const manifest = {
+  generatedAt: output.generatedAt,
+  sourceUrl: output.sourceUrl,
+  license: output.license,
+  attribution: output.attribution,
+  modes: []
+};
+
+for (const mode of modes) {
+  const modeRoutes = packages.filter((route) => route.transportMode === mode);
+  if (modeRoutes.length === 0) continue;
+  const modeFeed = {
+    generatedAt: output.generatedAt,
+    sourceUrl: output.sourceUrl,
+    license: output.license,
+    attribution: output.attribution,
+    routes: modeRoutes
+  };
+  const fileName = `routes-${mode}.json`;
+  writeFileSync(join(outDir, fileName), `${JSON.stringify(modeFeed)}\n`);
+  writeFileSync(join('data/generated', fileName), `${JSON.stringify(modeFeed, null, 2)}\n`);
+  manifest.modes.push({
+    mode,
+    file: `/data/${fileName}`,
+    routeCount: modeRoutes.length,
+    lines: [...new Set(modeRoutes.map((route) => route.line))].sort((a, b) => a.localeCompare(b, 'de', { numeric: true }))
+  });
+}
+
+writeFileSync(join(outDir, 'route-manifest.json'), `${JSON.stringify(manifest)}\n`);
+writeFileSync(join('data/generated', 'route-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+console.log(`Wrote ${packages.length} route packages to ${outPath} and ${manifest.modes.length} mode feeds.`);

@@ -1,37 +1,7 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { DemoRoute } from './route';
-
-type GeoPoint = { lat: number; lon: number };
-
-const metersPerDegLat = 111_320;
-
-function pointDistance(a: GeoPoint, b: GeoPoint): number {
-  const lat = ((a.lat + b.lat) / 2) * (Math.PI / 180);
-  const dx = (b.lon - a.lon) * Math.cos(lat) * metersPerDegLat;
-  const dy = (b.lat - a.lat) * metersPerDegLat;
-  return Math.hypot(dx, dy);
-}
-
-function bearing(a: GeoPoint, b: GeoPoint): number {
-  const lat1 = a.lat * (Math.PI / 180);
-  const lat2 = b.lat * (Math.PI / 180);
-  const dLon = (b.lon - a.lon) * (Math.PI / 180);
-  const y = Math.sin(dLon) * Math.cos(lat2);
-  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
-}
-
-function interpolate(a: GeoPoint, b: GeoPoint, t: number): GeoPoint {
-  return {
-    lat: a.lat + (b.lat - a.lat) * t,
-    lon: a.lon + (b.lon - a.lon) * t
-  };
-}
-
-function geoPoints(route: DemoRoute): GeoPoint[] {
-  return (route.geoPoints ?? []).map(([lat, lon]) => ({ lat, lon }));
-}
+import { bearing, geoPoints, interpolate, pointDistance, type GeoPoint } from './minimap/route-position';
 
 export class VehicleMiniMap {
   private map: L.Map;
