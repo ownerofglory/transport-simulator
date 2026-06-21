@@ -31,6 +31,24 @@ canvas {
   backdrop-filter: blur(18px);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.34);
   user-select: none;
+  z-index: 4;
+  transition: width 180ms ease, background 180ms ease;
+}
+
+.hud-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.menu-toggle {
+  display: none;
+  width: 38px;
+  min-width: 38px;
+  padding: 7px;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .hud h1 {
@@ -51,6 +69,35 @@ canvas {
   grid-template-columns: 1fr;
   gap: 8px;
   margin-top: 12px;
+}
+
+.transport-tabs {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.transport-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.transport-tabs button {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.transport-tabs button.active {
+  border-color: rgba(255, 223, 0, 0.7);
+  color: #151a1d;
+  background: #ffdf00;
+}
+
+.transport-tabs button:disabled {
+  cursor: default;
+  opacity: 0.38;
 }
 
 .card {
@@ -129,17 +176,6 @@ select:hover {
   display: grid;
   gap: 10px;
   z-index: 3;
-}
-
-.ticket-panel {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-  padding: 14px;
-  border-radius: 8px;
-  background: rgba(8, 12, 18, 0.66);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.86);
 }
 
 .route-diagram {
@@ -239,18 +275,6 @@ select:hover {
   }
 }
 
-.ticket-copy {
-  margin-top: 3px;
-  font-size: 14px;
-  line-height: 1.35;
-}
-
-.ticket-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .notice {
   position: fixed;
   right: 16px;
@@ -321,6 +345,30 @@ select:hover {
     left: 8px;
     width: calc(100vw - 16px);
     box-sizing: border-box;
+    padding: 12px;
+    background: rgba(8, 12, 18, 0.54);
+    backdrop-filter: blur(12px) saturate(1.15);
+  }
+
+  .menu-toggle {
+    display: grid;
+    place-items: center;
+  }
+
+  .hud.collapsed {
+    width: auto;
+    max-width: calc(100vw - 16px);
+    background: rgba(8, 12, 18, 0.42);
+  }
+
+  .hud.collapsed .hud-content,
+  .hud.collapsed .hud-header .label {
+    display: none;
+  }
+
+  .hud.collapsed h1 {
+    margin: 7px 0 5px;
+    white-space: nowrap;
   }
 
   .right-rail {

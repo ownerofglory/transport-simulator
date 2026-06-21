@@ -4,6 +4,7 @@ import { createStuttgartLandmarks, type LandmarkZone } from './landmarks';
 import { OsmSceneStreamer } from './osm-scene';
 import type { DemoRoute } from './route';
 import { TerrainSampler } from './terrain';
+import { routeTransportMode, type TransportMode } from './domain/transport';
 
 type Season = 'spring' | 'summer' | 'autumn' | 'winter';
 type GeoPoint = { lat: number; lon: number };
@@ -15,7 +16,7 @@ const ACTIVE_TRACK_OFFSET_M = -TRACK_CENTER_SPACING_M / 2;
 const OPPOSITE_TRACK_OFFSET_M = TRACK_CENTER_SPACING_M / 2;
 const DOUBLE_FORMATION_LINES = new Set(['U1', 'U6', 'U7', 'U11', 'U12', 'U19']);
 
-export class StadtbahnWorld {
+export class TransitWorld {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 5000);
   readonly renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -28,6 +29,7 @@ export class StadtbahnWorld {
   private readonly opposingTrains: { root: THREE.Group; cars: THREE.Group[]; phaseM: number }[] = [];
   private readonly vehicleWindowBands: THREE.Mesh[] = [];
   private readonly vehicleCabShells: THREE.Mesh[] = [];
+  private readonly vehiclePassengerShells: THREE.Mesh[] = [];
   private readonly vehicleCabDisplays: THREE.Mesh[] = [];
   private readonly vehicleDoorLeaves: { group: THREE.Group; closedZ: number; direction: -1 | 1 }[] = [];
   private vehicleGlassMaterial: THREE.MeshStandardMaterial | null = null;
@@ -43,6 +45,11 @@ export class StadtbahnWorld {
   private readonly landmarkExclusions: LandmarkZone[];
   private osmScene: OsmSceneStreamer | null = null;
   private terrain: TerrainSampler | null = null;
+  private readonly hemi = new THREE.HemisphereLight();
+  private readonly sun = new THREE.DirectionalLight();
+  private readonly visibilityFill = new THREE.AmbientLight();
+  private currentSeason: Season = 'summer';
+  private timeOfDayHour = 12;
   private readonly onResizeBound = () => this.onResize();
 
   constructor(
@@ -64,6 +71,7 @@ export class StadtbahnWorld {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.setAnimationLoop(null);
 
     this.scene.background = new THREE.Color(0xaac8df);
@@ -91,7 +99,7 @@ export class StadtbahnWorld {
       this.osmScene = new OsmSceneStreamer(
         this.scene,
         (lat, lon) => this.projectGeo(lat, lon),
-        (lat, lon) => this.terrain?.sample(lat, lon) ?? Promise.resolve(0),
+        (lat, lon) => this.scenerySurfaceHeight(lat, lon),
         this.landmarkExclusions
       );
       this.osmScene.update(this.geoPointAt(0));
@@ -108,6 +116,7 @@ export class StadtbahnWorld {
   }
 
   setSeason(season: Season): void {
+    this.currentSeason = season;
     this.seasonalObjects.clear();
     switch (season) {
       case 'spring':
@@ -129,6 +138,12 @@ export class StadtbahnWorld {
         this.addSnow();
         break;
     }
+    this.applyTimeOfDay();
+  }
+
+  setTimeOfDay(hour: number): void {
+    this.timeOfDayHour = ((hour % 24) + 24) % 24;
+    this.applyTimeOfDay();
   }
 
   cycleCamera(): string {
@@ -147,6 +162,7 @@ export class StadtbahnWorld {
     this.vehicleGlassMaterial.needsUpdate = true;
     for (const band of this.vehicleWindowBands) band.visible = !interiorView;
     for (const shell of this.vehicleCabShells) shell.visible = !cabView;
+    for (const shell of this.vehiclePassengerShells) shell.visible = !interiorView;
     for (const display of this.vehicleCabDisplays) display.visible = !cabView;
   }
 
@@ -155,7 +171,7 @@ export class StadtbahnWorld {
     const underground = this.stationIsUnderground(t);
     const tangent = this.curve.getTangentAt(t).normalize();
     const normal = this.normalAt(t);
-    const position = this.curve.getPointAt(t).add(normal.clone().multiplyScalar(ACTIVE_TRACK_OFFSET_M));
+    const position = this.curve.getPointAt(t).add(normal.clone().multiplyScalar(this.activeLaneOffsetM));
 
     this.osmScene?.update(this.geoPointAt(t));
     if (this.ground) this.ground.visible = !underground;
@@ -163,10 +179,12 @@ export class StadtbahnWorld {
     this.landmarkGroup.visible = !underground;
     this.updateDoors(doorsOpen, deltaSeconds);
     this.updateInteriorDisplay(nextStation, doorsOpen);
-    this.updateArticulatedVehicle(this.train, this.trainCars, distanceM, 1, ACTIVE_TRACK_OFFSET_M);
+    this.updateArticulatedVehicle(this.train, this.trainCars, distanceM, 1, this.activeLaneOffsetM);
     for (const traffic of this.opposingTrains) {
-      const opposingDistance = this.wrapDistance(this.route.routeLengthM - distanceM + traffic.phaseM);
-      this.updateArticulatedVehicle(traffic.root, traffic.cars, opposingDistance, -1, OPPOSITE_TRACK_OFFSET_M);
+      const opposingDistance = this.transportMode === 'seilbahn'
+        ? this.route.routeLengthM - distanceM
+        : this.wrapDistance(this.route.routeLengthM - distanceM + traffic.phaseM);
+      this.updateArticulatedVehicle(traffic.root, traffic.cars, opposingDistance, -1, this.oppositeLaneOffsetM);
     }
     this.updateCamera(position, tangent, t);
   }
@@ -209,7 +227,8 @@ export class StadtbahnWorld {
     if (!context) return;
     context.fillStyle = '#071015';
     context.fillRect(0, 0, 1024, 256);
-    context.fillStyle = '#ffd800';
+    const accent = this.transportMode === 's-bahn' ? '#e0202b' : '#ffd800';
+    context.fillStyle = accent;
     context.fillRect(0, 0, 1024, 14);
     context.fillRect(24, 40, 126, 126);
     context.fillStyle = '#11151a';
@@ -231,7 +250,7 @@ export class StadtbahnWorld {
     context.fillStyle = '#f5f7f6';
     context.fillText(station, 184, 126);
 
-    context.fillStyle = '#ffd800';
+    context.fillStyle = accent;
     context.font = '500 25px Inter, Arial, sans-serif';
     context.fillText(`Richtung ${this.route.destination}`, 184, 202);
     this.interiorDisplayTexture.needsUpdate = true;
@@ -251,17 +270,76 @@ export class StadtbahnWorld {
   }
 
   private setupLighting(): void {
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x607080, 1.3);
-    this.scene.add(hemi);
+    this.hemi.color.setHex(0xffffff);
+    this.hemi.groundColor.setHex(0x607080);
+    this.hemi.intensity = 1.3;
+    this.scene.add(this.hemi);
 
-    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-    sun.position.set(-220, 380, -120);
-    sun.castShadow = true;
-    sun.shadow.camera.left = -400;
-    sun.shadow.camera.right = 400;
-    sun.shadow.camera.top = 400;
-    sun.shadow.camera.bottom = -400;
-    this.scene.add(sun);
+    // A restrained ambient floor keeps streamed geometry navigable at night.
+    // It represents bounced city light rather than flattening the daylight scene.
+    this.visibilityFill.color.setHex(0x8da8c9);
+    this.visibilityFill.intensity = 0.12;
+    this.scene.add(this.visibilityFill);
+
+    this.sun.color.setHex(0xffffff);
+    this.sun.intensity = 2.2;
+    this.sun.position.set(-220, 380, -120);
+    this.sun.castShadow = true;
+    this.sun.shadow.camera.left = -400;
+    this.sun.shadow.camera.right = 400;
+    this.sun.shadow.camera.top = 400;
+    this.sun.shadow.camera.bottom = -400;
+    this.scene.add(this.sun);
+    this.applyTimeOfDay();
+  }
+
+  private applyTimeOfDay(): void {
+    const hour = this.timeOfDayHour;
+    const daylight = THREE.MathUtils.smoothstep(Math.sin(((hour - 6) / 12) * Math.PI), 0, 1);
+    const dawnDusk = Math.max(0, 1 - Math.abs(hour - 6) / 2, 1 - Math.abs(hour - 18) / 2);
+    const angle = ((hour - 6) / 12) * Math.PI;
+    this.sun.position.set(Math.cos(angle) * 420, Math.max(18, Math.sin(angle) * 420), -180);
+    this.sun.intensity = 0.38 + daylight * 1.95 + dawnDusk * 0.34;
+    this.sun.color.set(dawnDusk > 0.2 ? 0xffbd7a : daylight > 0.2 ? 0xfff7e8 : 0x9bb9e6);
+    this.hemi.intensity = 0.72 + daylight * 0.58 + dawnDusk * 0.12;
+    this.hemi.color.set(daylight > 0.15 ? 0xddecff : 0x7898c4);
+    this.hemi.groundColor.set(daylight > 0.15 ? 0x586a70 : 0x29394b);
+    this.visibilityFill.intensity = 0.42 * (1 - daylight) + 0.08;
+    this.visibilityFill.color.set(dawnDusk > 0.2 ? 0xc79b7d : 0x89a9d2);
+
+    const seasonSky: Record<Season, THREE.Color> = {
+      spring: new THREE.Color(0xb9d6ed),
+      summer: new THREE.Color(0xa7d3ff),
+      autumn: new THREE.Color(0xcab38f),
+      winter: new THREE.Color(0xd8e5ee)
+    };
+    const nightSky = new THREE.Color(0x172b46);
+    const sky = nightSky.clone().lerp(seasonSky[this.currentSeason], daylight);
+    if (dawnDusk > 0.2) sky.lerp(new THREE.Color(0xd98961), dawnDusk * 0.3);
+    this.scene.background = sky;
+    const fogFar = THREE.MathUtils.lerp(2300, this.currentSeason === 'summer' ? 3400 : 2700, daylight);
+    this.scene.fog = new THREE.Fog(sky, fogFar * 0.4, fogFar);
+    this.renderer.toneMappingExposure = 1.05 + dawnDusk * 0.1 + (1 - daylight) * 0.12;
+  }
+
+  private get transportMode(): TransportMode {
+    return routeTransportMode(this.route.transportMode);
+  }
+
+  private get activeLaneOffsetM(): number {
+    if (this.transportMode === 'bus') return -1.65;
+    if (this.transportMode === 'zacke' || this.transportMode === 'seilbahn') return 0;
+    return this.transportMode === 's-bahn' ? -2.35 : ACTIVE_TRACK_OFFSET_M;
+  }
+
+  private get oppositeLaneOffsetM(): number {
+    if (this.transportMode === 'bus') return 1.65;
+    if (this.transportMode === 'zacke' || this.transportMode === 'seilbahn') return 0;
+    return this.transportMode === 's-bahn' ? 2.35 : OPPOSITE_TRACK_OFFSET_M;
+  }
+
+  private get railGaugeM(): number {
+    return this.transportMode === 's-bahn' ? 1.435 : TRACK_GAUGE_M;
   }
 
   private buildGround(): void {
@@ -393,57 +471,177 @@ export class StadtbahnWorld {
   private nearestSelectedGeoPoint(lat: number, lon: number, points: GeoPoint[]): { distanceM: number; t: number } {
     const lonScale = Math.cos((lat * Math.PI) / 180) * EARTH_M_PER_DEG_LAT;
     let bestDistance = Number.POSITIVE_INFINITY;
-    let bestIndex = 0;
-    for (let index = 0; index < points.length; index++) {
-      const distance = Math.hypot((points[index].lat - lat) * EARTH_M_PER_DEG_LAT, (points[index].lon - lon) * lonScale);
+    let bestRouteDistanceM = 0;
+    for (let index = 1; index < points.length; index++) {
+      const a = points[index - 1];
+      const b = points[index];
+      const ax = (a.lon - lon) * lonScale;
+      const az = (a.lat - lat) * EARTH_M_PER_DEG_LAT;
+      const bx = (b.lon - lon) * lonScale;
+      const bz = (b.lat - lat) * EARTH_M_PER_DEG_LAT;
+      const vx = bx - ax;
+      const vz = bz - az;
+      const fraction = THREE.MathUtils.clamp(-(ax * vx + az * vz) / (vx * vx + vz * vz || 1), 0, 1);
+      const distance = Math.hypot(ax + vx * fraction, az + vz * fraction);
       if (distance < bestDistance) {
         bestDistance = distance;
-        bestIndex = index;
+        bestRouteDistanceM = THREE.MathUtils.lerp(
+          this.routeGeoDistancesM[index - 1] ?? 0,
+          this.routeGeoDistancesM[index] ?? 0,
+          fraction
+        );
       }
     }
     const totalDistanceM = this.routeGeoDistancesM.at(-1) ?? 0;
     return {
       distanceM: bestDistance,
-      t: totalDistanceM > 0 ? (this.routeGeoDistancesM[bestIndex] ?? 0) / totalDistanceM : 0
+      t: totalDistanceM > 0 ? bestRouteDistanceM / totalDistanceM : 0
     };
   }
 
   private buildTrack(): void {
+    if (this.transportMode === 'bus') {
+      this.buildBusRouteStreet();
+      return;
+    }
+    if (this.transportMode === 'zacke' || this.transportMode === 'seilbahn') {
+      this.buildMountainRailwayTrack();
+      return;
+    }
     const railMaterial = new THREE.MeshStandardMaterial({ color: 0x7f858a, metalness: 0.7, roughness: 0.28 });
     const sleeperMaterial = new THREE.MeshStandardMaterial({ color: 0x453429, roughness: 0.85 });
     const ballastMaterial = new THREE.MeshStandardMaterial({ color: 0x6d6a63, roughness: 0.95 });
+    const trackSegments = THREE.MathUtils.clamp(Math.ceil(this.route.routeLengthM / 10), 480, 5000);
 
-    for (const trackOffset of [ACTIVE_TRACK_OFFSET_M, OPPOSITE_TRACK_OFFSET_M]) {
-      const ballast = new THREE.Mesh(this.makeTrackStrip(trackOffset, 4.5, 260), ballastMaterial);
+    for (const trackOffset of [this.activeLaneOffsetM, this.oppositeLaneOffsetM]) {
+      const ballast = new THREE.Mesh(this.makeTrackStrip(trackOffset, 4.5, trackSegments), ballastMaterial);
       ballast.receiveShadow = true;
       this.scene.add(ballast);
 
-      for (const railOffset of [-TRACK_GAUGE_M / 2, TRACK_GAUGE_M / 2]) {
-        const points = this.offsetCurvePoints(trackOffset + railOffset, 260, 0.22);
-        const railCurve = new THREE.CatmullRomCurve3(points);
-        const rail = new THREE.Mesh(new THREE.TubeGeometry(railCurve, 260, 0.08, 8), railMaterial);
+      for (const railOffset of [-this.railGaugeM / 2, this.railGaugeM / 2]) {
+        const points = this.offsetCurvePoints(trackOffset + railOffset, trackSegments, 0.22);
+        const railCurve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
+        const rail = new THREE.Mesh(new THREE.TubeGeometry(railCurve, trackSegments, 0.08, 8), railMaterial);
         rail.castShadow = true;
         this.scene.add(rail);
       }
     }
 
-    const sleeperGeo = new THREE.BoxGeometry(3.2, 0.15, 0.55);
-    for (const trackOffset of [ACTIVE_TRACK_OFFSET_M, OPPOSITE_TRACK_OFFSET_M]) {
-      for (let i = 0; i < 120; i++) {
-        const t = i / 119;
+    const sleeperGeo = new THREE.BoxGeometry(this.transportMode === 's-bahn' ? 2.65 : 3.2, 0.15, 0.55);
+    const sleeperCount = THREE.MathUtils.clamp(Math.ceil(this.route.routeLengthM / 8), 240, 4000);
+    for (const trackOffset of [this.activeLaneOffsetM, this.oppositeLaneOffsetM]) {
+      const sleepers = new THREE.InstancedMesh(sleeperGeo, sleeperMaterial, sleeperCount);
+      const matrix = new THREE.Matrix4();
+      const rotation = new THREE.Quaternion();
+      for (let i = 0; i < sleeperCount; i++) {
+        const t = i / Math.max(1, sleeperCount - 1);
         const p = this.curve.getPointAt(t).add(this.normalAt(t).multiplyScalar(trackOffset));
         const tangent = this.curve.getTangentAt(t).normalize();
         const yaw = Math.atan2(tangent.x, tangent.z);
-        const sleeper = new THREE.Mesh(sleeperGeo, sleeperMaterial);
-        sleeper.position.copy(p).add(new THREE.Vector3(0, 0.08, 0));
-        sleeper.rotation.y = yaw + Math.PI / 2;
-        sleeper.receiveShadow = true;
-        this.scene.add(sleeper);
+        rotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw + Math.PI / 2);
+        matrix.compose(p.add(new THREE.Vector3(0, 0.08, 0)), rotation, new THREE.Vector3(1, 1, 1));
+        sleepers.setMatrixAt(i, matrix);
       }
+      sleepers.instanceMatrix.needsUpdate = true;
+      sleepers.receiveShadow = true;
+      sleepers.name = 'Curve-aligned sleepers';
+      this.scene.add(sleepers);
     }
   }
 
+  private buildMountainRailwayTrack(): void {
+    const rail = new THREE.MeshStandardMaterial({ color: 0x858b8e, metalness: 0.72, roughness: 0.3 });
+    const sleeper = new THREE.MeshStandardMaterial({ color: 0x493a2d, roughness: 0.9 });
+    const rack = new THREE.MeshStandardMaterial({ color: 0x555b5e, metalness: 0.65, roughness: 0.4 });
+    const ballast = new THREE.Mesh(this.makeTrackStrip(0, 3.1, 220), new THREE.MeshStandardMaterial({ color: 0x66645f, roughness: 1 }));
+    this.scene.add(ballast);
+    for (const offset of [-0.5, 0.5]) {
+      const line = new THREE.CatmullRomCurve3(this.offsetCurvePoints(offset, 240, 0.22));
+      this.scene.add(new THREE.Mesh(new THREE.TubeGeometry(line, 240, 0.07, 7), rail));
+    }
+    const count = Math.max(80, Math.min(520, Math.floor(this.route.routeLengthM / (this.transportMode === 'zacke' ? 1.4 : 2.5))));
+    const bars = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(this.transportMode === 'zacke' ? 1.05 : 2.15, 0.12, 0.22),
+      this.transportMode === 'zacke' ? rack : sleeper,
+      count
+    );
+    const matrix = new THREE.Matrix4();
+    const rotation = new THREE.Quaternion();
+    for (let index = 0; index < count; index++) {
+      const t = index / Math.max(1, count - 1);
+      const point = this.curve.getPointAt(t).add(new THREE.Vector3(0, 0.13, 0));
+      const tangent = this.curve.getTangentAt(t).normalize();
+      rotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(tangent.x, tangent.z) + Math.PI / 2);
+      matrix.compose(point, rotation, new THREE.Vector3(1, 1, 1));
+      bars.setMatrixAt(index, matrix);
+    }
+    bars.name = this.transportMode === 'zacke' ? 'Zacke center rack' : 'Seilbahn sleepers';
+    bars.instanceMatrix.needsUpdate = true;
+    this.scene.add(bars);
+    if (this.transportMode === 'seilbahn') {
+      const cableCurve = new THREE.CatmullRomCurve3(this.offsetCurvePoints(0, 240, 0.34));
+      const cable = new THREE.Mesh(new THREE.TubeGeometry(cableCurve, 240, 0.035, 5), rack);
+      cable.name = 'Funicular haul cable';
+      this.scene.add(cable);
+    }
+  }
+
+  private buildBusRouteStreet(): void {
+    const asphaltMaterial = new THREE.MeshStandardMaterial({
+      color: 0x50575c,
+      roughness: 0.94,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2
+    });
+    const sidewalkMaterial = new THREE.MeshStandardMaterial({
+      color: 0x989995,
+      roughness: 0.98,
+      polygonOffset: true,
+      polygonOffsetFactor: -1
+    });
+    const markingMaterial = new THREE.MeshStandardMaterial({
+      color: 0xeee5c6,
+      roughness: 0.75,
+      emissive: 0x342f20,
+      emissiveIntensity: 0.18
+    });
+
+    const street = new THREE.Mesh(this.makeRouteStrip(0, 9.2, 0, 1, 420, 0.2), asphaltMaterial);
+    street.name = `GTFS bus street corridor ${this.route.line}`;
+    street.receiveShadow = true;
+    street.renderOrder = 2;
+    this.scene.add(street);
+
+    for (const side of [-1, 1]) {
+      const sidewalk = new THREE.Mesh(this.makeRouteStrip(side * 5.45, 2.2, 0, 1, 360, 0.24), sidewalkMaterial);
+      sidewalk.name = `Bus corridor sidewalk ${side}`;
+      sidewalk.receiveShadow = true;
+      sidewalk.renderOrder = 1;
+      this.scene.add(sidewalk);
+    }
+
+    const dashSpacingM = 16;
+    const dashCount = THREE.MathUtils.clamp(Math.floor(this.route.routeLengthM / dashSpacingM), 24, 620);
+    const markings = new THREE.InstancedMesh(new THREE.BoxGeometry(0.13, 0.025, 4.2), markingMaterial, dashCount);
+    const matrix = new THREE.Matrix4();
+    const rotation = new THREE.Quaternion();
+    for (let index = 0; index < dashCount; index++) {
+      const t = (index + 0.5) / dashCount;
+      const position = this.curve.getPointAt(t).add(new THREE.Vector3(0, 0.28, 0));
+      const tangent = this.curve.getTangentAt(t).normalize();
+      rotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(tangent.x, tangent.z));
+      matrix.compose(position, rotation, new THREE.Vector3(1, 1, 1));
+      markings.setMatrixAt(index, matrix);
+    }
+    markings.name = 'GTFS bus corridor center markings';
+    markings.instanceMatrix.needsUpdate = true;
+    markings.renderOrder = 3;
+    this.scene.add(markings);
+  }
+
   private buildTunnels(): void {
+    if (this.transportMode === 'bus') return;
     const mask = this.route.tunnelMask;
     if (!mask || !mask.some(Boolean)) return;
     const liningMaterial = new THREE.MeshStandardMaterial({
@@ -479,6 +677,18 @@ export class StadtbahnWorld {
   }
 
   private buildStations(): void {
+    if (this.transportMode === 'bus') {
+      this.buildBusStops();
+      return;
+    }
+    if (this.transportMode === 's-bahn') {
+      this.buildSbahnStations();
+      return;
+    }
+    if (this.transportMode === 'zacke' || this.transportMode === 'seilbahn') {
+      this.buildMountainRailwayStops();
+      return;
+    }
     const platformMat = new THREE.MeshStandardMaterial({ color: 0xb9b7b0, roughness: 0.9 });
     const platformEdgeMat = new THREE.MeshStandardMaterial({ color: 0x696b6c, roughness: 0.82 });
     const tactileMat = new THREE.MeshStandardMaterial({ color: 0xeee7cf, roughness: 0.92 });
@@ -647,7 +857,122 @@ export class StadtbahnWorld {
     }
   }
 
+  private buildSbahnStations(): void {
+    const platformMaterial = new THREE.MeshStandardMaterial({ color: 0xb6b3aa, roughness: 0.96 });
+    const edgeMaterial = new THREE.MeshStandardMaterial({ color: 0x777a7b, roughness: 0.9 });
+    const tactileMaterial = new THREE.MeshStandardMaterial({ color: 0xe9e4d3, roughness: 0.94 });
+    const dbBlue = new THREE.MeshStandardMaterial({ color: 0x173f73, roughness: 0.5 });
+    const steel = new THREE.MeshStandardMaterial({ color: 0x747b7f, roughness: 0.45, metalness: 0.55 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0xaacbd4, transparent: true, opacity: 0.34, roughness: 0.1, side: THREE.DoubleSide });
+    const displayMaterial = new THREE.MeshBasicMaterial({ color: 0x101417 });
+    const undergroundMaterial = new THREE.MeshStandardMaterial({ color: 0xc8c8c3, roughness: 0.9 });
+
+    for (const station of this.route.stations) {
+      const t = THREE.MathUtils.clamp(station.distanceM / this.route.routeLengthM, 0, 1);
+      const halfLengthM = 78;
+      const startT = THREE.MathUtils.clamp((station.distanceM - halfLengthM) / this.route.routeLengthM, 0, 1);
+      const endT = THREE.MathUtils.clamp((station.distanceM + halfLengthM) / this.route.routeLengthM, 0, 1);
+      const center = this.curve.getPointAt(t);
+      const tangent = this.curve.getTangentAt(t).normalize();
+      const yaw = Math.atan2(tangent.x, tangent.z);
+      const underground = this.stationIsUnderground(t);
+      const stationGroup = new THREE.Group();
+      stationGroup.name = `DB S-Bahn station ${station.name}`;
+      stationGroup.position.copy(center);
+      stationGroup.rotation.y = yaw;
+      this.scene.add(stationGroup);
+
+      for (const side of [-1, 1]) {
+        const platform = new THREE.Mesh(this.makeRouteStrip(side * 6.25, 5.7, startT, endT, 72, 0.28), platformMaterial);
+        platform.receiveShadow = true;
+        platform.name = `S-Bahn 96cm platform ${station.name}`;
+        this.scene.add(platform);
+        const edge = new THREE.Mesh(this.makeRouteStrip(side * 3.55, 0.35, startT, endT, 76, 0.31), edgeMaterial);
+        this.scene.add(edge);
+        const tactile = new THREE.Mesh(this.makeRouteStrip(side * 3.95, 0.55, startT, endT, 76, 0.335), tactileMaterial);
+        this.scene.add(tactile);
+
+        for (const z of [-48, 0, 48]) {
+          const sign = new THREE.Mesh(
+            new THREE.PlaneGeometry(5.8, 0.88),
+            new THREE.MeshBasicMaterial({ map: makeLabelTexture(station.name, { width: 768, height: 128, bg: '#164279', fg: '#fff' }), side: THREE.DoubleSide })
+          );
+          sign.position.set(side * 7.55, 2.65, z);
+          sign.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
+          stationGroup.add(sign);
+          this.stationMarkers.push(sign);
+        }
+
+        const canopy = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.2, 28), steel);
+        canopy.position.set(side * 6.55, 4.15, 5);
+        stationGroup.add(canopy);
+        const glassBack = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.45, 18), glass);
+        glassBack.position.set(side * 8.3, 2.35, 5);
+        stationGroup.add(glassBack);
+        for (const z of [-7, 5, 17]) {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.4, 0.14), steel);
+          post.position.set(side * 6.55, 2.25, z);
+          stationGroup.add(post);
+        }
+
+        const dfi = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.82, 3.6), displayMaterial);
+        dfi.position.set(side * 6.5, 3.45, -15);
+        stationGroup.add(dfi);
+        const clock = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 0.08, 24), new THREE.MeshBasicMaterial({ color: 0xf7f7f2 }));
+        clock.rotation.z = Math.PI / 2;
+        clock.position.set(side * 6.5, 3.45, 22);
+        stationGroup.add(clock);
+        const sBadge = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeLabelTexture('S', { width: 256, height: 256, bg: '#07864b', fg: '#fff' }) }));
+        sBadge.position.set(side * 7.1, 4.7, -24);
+        sBadge.scale.set(2.2, 2.2, 1);
+        stationGroup.add(sBadge);
+      }
+
+      if (underground) {
+        const ceiling = new THREE.Mesh(new THREE.BoxGeometry(24, 0.42, 155), undergroundMaterial);
+        ceiling.position.y = 5.7;
+        stationGroup.add(ceiling);
+        for (const side of [-1, 1]) {
+          const wall = new THREE.Mesh(new THREE.BoxGeometry(0.38, 5.2, 155), undergroundMaterial);
+          wall.position.set(side * 11.7, 2.75, 0);
+          stationGroup.add(wall);
+        }
+      }
+    }
+  }
+
+  private buildMountainRailwayStops(): void {
+    const platformMaterial = new THREE.MeshStandardMaterial({ color: 0xb4b0a5, roughness: 0.95 });
+    const postMaterial = new THREE.MeshStandardMaterial({ color: 0x174a73, roughness: 0.55 });
+    const wood = new THREE.MeshStandardMaterial({ color: 0x70472c, roughness: 0.82 });
+    for (const station of this.route.stations) {
+      const t = THREE.MathUtils.clamp(station.distanceM / this.route.routeLengthM, 0, 1);
+      const group = new THREE.Group();
+      group.position.copy(this.curve.getPointAt(t));
+      group.rotation.y = Math.atan2(this.curve.getTangentAt(t).x, this.curve.getTangentAt(t).z);
+      const length = this.transportMode === 'seilbahn' ? 14 : 28;
+      const platform = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.22, length), platformMaterial);
+      platform.position.set(2.15, 0.08, 0);
+      group.add(platform);
+      const shelter = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.18, 5.5), this.transportMode === 'seilbahn' ? wood : postMaterial);
+      shelter.position.set(2.2, 3.05, 0);
+      group.add(shelter);
+      for (const z of [-2.4, 2.4]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.8, 0.12), postMaterial);
+        post.position.set(2.2, 1.55, z);
+        group.add(post);
+      }
+      const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeLabelTexture(`${this.route.line}  ${station.name}`, { width: 768, height: 160, bg: '#174a73', fg: '#fff' }) }));
+      sign.position.set(2.2, 3.75, 0);
+      sign.scale.set(7, 1.45, 1);
+      group.add(sign);
+      this.stationMarkers.push(sign);
+      this.scene.add(group);
+    }
+  }
+
   private stationIsUnderground(t: number): boolean {
+    if (this.transportMode === 'bus') return false;
     if (this.route.tunnelRanges?.length) {
       const distanceM = THREE.MathUtils.clamp(t, 0, 1) * this.route.routeLengthM;
       return this.route.tunnelRanges.some((range) => distanceM >= range.startM && distanceM <= range.endM);
@@ -658,7 +983,410 @@ export class StadtbahnWorld {
     return Boolean(mask[Math.min(mask.length - 1, Math.round(index + fraction))]);
   }
 
+  private buildBusStops(): void {
+    const poleMaterial = new THREE.MeshStandardMaterial({ color: 0x4c555a, roughness: 0.58, metalness: 0.55 });
+    const yellowMaterial = new THREE.MeshStandardMaterial({ color: 0xffdf00, roughness: 0.48 });
+    const stopGreenMaterial = new THREE.MeshStandardMaterial({ color: 0x16723a, roughness: 0.5 });
+    const shelterMaterial = new THREE.MeshStandardMaterial({
+      color: 0xb9dce7,
+      transparent: true,
+      opacity: 0.32,
+      roughness: 0.1,
+      side: THREE.DoubleSide
+    });
+    const seatMaterial = new THREE.MeshStandardMaterial({ color: 0x234e68, roughness: 0.75 });
+
+    for (const station of this.route.stations) {
+      const t = THREE.MathUtils.clamp(station.distanceM / this.route.routeLengthM, 0, 1);
+      const tangent = this.curve.getTangentAt(t).normalize();
+      const normal = this.normalAt(t);
+      const group = new THREE.Group();
+      group.name = `Bus stop ${station.name}`;
+      group.position.copy(this.curve.getPointAt(t)).add(normal.multiplyScalar(-7.2));
+      group.rotation.y = Math.atan2(tangent.x, tangent.z);
+
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 3.3, 10), poleMaterial);
+      pole.position.y = 1.65;
+      group.add(pole);
+      const discBorder = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.075, 24), stopGreenMaterial);
+      discBorder.rotation.z = Math.PI / 2;
+      discBorder.position.set(0, 2.85, 0);
+      group.add(discBorder);
+      const hBadge = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeLabelTexture('H', { width: 256, height: 256, bg: '#ffdf00', fg: '#176f39' }) }));
+      hBadge.position.set(0.06, 2.85, 0);
+      hBadge.scale.set(0.65, 0.65, 1);
+      group.add(hBadge);
+
+      const label = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: makeLabelTexture(`${this.route.line}  ${station.name}`, { width: 768, height: 160, bg: '#174a73', fg: '#fff' })
+      }));
+      label.position.set(0, 3.65, 0);
+      label.scale.set(7.2, 1.5, 1);
+      group.add(label);
+
+      const dfi = new THREE.Mesh(
+        new THREE.PlaneGeometry(4.6, 0.82),
+        new THREE.MeshBasicMaterial({ map: makeLabelTexture(`${this.route.line}  ${this.route.destination}`, { width: 768, height: 140, bg: '#111820', fg: '#ffb300' }), side: THREE.DoubleSide })
+      );
+      dfi.position.set(-0.65, 3.18, 1.25);
+      group.add(dfi);
+
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.25, 5.6), shelterMaterial);
+      back.position.set(-1.7, 1.42, 2.8);
+      group.add(back);
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.12, 5.8), poleMaterial);
+      roof.position.set(-0.7, 2.58, 2.8);
+      group.add(roof);
+      const fascia = new THREE.Mesh(new THREE.BoxGeometry(2.18, 0.18, 5.95), yellowMaterial);
+      fascia.position.set(-0.7, 2.68, 2.8);
+      group.add(fascia);
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.18, 3.2), seatMaterial);
+      seat.position.set(-1.25, 0.72, 2.8);
+      group.add(seat);
+      this.scene.add(group);
+      this.stationMarkers.push(label);
+    }
+  }
+
+  private buildMercedesBus(): void {
+    const car = new THREE.Group();
+    car.name = 'Articulated car Mercedes-Benz city bus';
+    car.userData.centerOffsetM = 0;
+    const yellow = new THREE.MeshStandardMaterial({ color: 0xffdf00, roughness: 0.48, metalness: 0.04 });
+    const black = new THREE.MeshStandardMaterial({ color: 0x151a1d, roughness: 0.36 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x9bd2e1, transparent: true, opacity: 0.38, roughness: 0.08, depthWrite: true });
+    const interior = new THREE.MeshStandardMaterial({ color: 0xd8d4c8, roughness: 0.88 });
+    const metal = new THREE.MeshStandardMaterial({ color: 0x8b9293, roughness: 0.38, metalness: 0.65 });
+    const seat = new THREE.MeshStandardMaterial({ color: 0x315f77, roughness: 0.88 });
+    const displayMaterial = this.makeInteriorDisplayMaterial();
+    this.vehicleGlassMaterial = glass;
+
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.55, 2.85, 12.1), yellow);
+    body.position.y = 1.72;
+    body.castShadow = true;
+    car.add(body);
+    this.vehiclePassengerShells.push(body);
+    for (const side of [-1, 1]) {
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.18, 10.25), black);
+      band.position.set(side * 1.3, 2.36, -0.25);
+      car.add(band);
+      this.vehicleWindowBands.push(band);
+      for (const z of [-4.65, -3.35, -1.55, 0.05, 2.85, 4.2]) {
+        if (side < 0 && (Math.abs(z + 1.55) < 0.1 || Math.abs(z - 2.85) < 0.1)) continue;
+        const window = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.92, 1.05), glass);
+        window.position.set(side * 1.315, 2.36, z);
+        car.add(window);
+      }
+    }
+    const windscreen = new THREE.Mesh(new THREE.BoxGeometry(2.22, 1.15, 0.08), glass);
+    windscreen.position.set(0, 2.35, 6.09);
+    car.add(windscreen);
+    const destination = new THREE.Mesh(new THREE.PlaneGeometry(1.95, 0.42), new THREE.MeshBasicMaterial({
+      map: makeLabelTexture(`${this.route.line} ${this.route.destination}`, { width: 640, height: 128, bg: '#111', fg: '#ffb900' }),
+      side: THREE.DoubleSide
+    }));
+    destination.position.set(0, 2.98, 6.14);
+    car.add(destination);
+    this.addSlidingVehicleDoor(car, -1.315, -1.55, yellow, glass, black, 1.62, 1.9);
+    this.addSlidingVehicleDoor(car, -1.315, 2.85, yellow, glass, black, 1.62, 1.9);
+    for (const z of [-3.7, 3.7]) {
+      for (const x of [-1.26, 1.26]) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.43, 0.43, 0.18, 20), black);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(x, 0.52, z);
+        car.add(wheel);
+      }
+    }
+    const roofUnit = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.25, 3.2), black);
+    roofUnit.position.set(0, 3.28, -1.2);
+    car.add(roofUnit);
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(2.28, 0.08, 11.4), interior);
+    floor.position.y = 1.02;
+    car.add(floor);
+    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.08, 11.3), interior);
+    ceiling.position.y = 3.02;
+    car.add(ceiling);
+    this.addOpaqueTransitInterior(car, 11.3, 1.18, interior, (side) => side < 0 ? [-1.55, 2.85] : []);
+    for (const z of [-4.35, -3.25, -2.15, 0.15, 1.25, 4.2]) {
+      for (const x of [-0.92, 0.92]) {
+        const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 0.62), seat);
+        cushion.position.set(x, 1.35, z);
+        car.add(cushion);
+        const back = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.7, 0.12), seat);
+        back.position.set(x, 1.7, z - 0.3);
+        car.add(back);
+      }
+    }
+    for (const z of [-2.45, 0.2, 3.7]) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.85, 8), metal);
+      pole.position.set(0.65, 2.02, z);
+      car.add(pole);
+    }
+    const dashboard = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.62, 0.75), black);
+    dashboard.position.set(0, 1.42, 5.48);
+    car.add(dashboard);
+    const nextStopDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.75, 0.44), displayMaterial);
+    nextStopDisplay.position.set(0, 2.72, 4.75);
+    nextStopDisplay.rotation.y = Math.PI;
+    car.add(nextStopDisplay);
+    this.trainHalfLengthM = 6.25;
+    this.trainCars.push(car);
+    this.train.add(car);
+    this.scene.add(this.train);
+    this.updateVehicleGlass();
+  }
+
+  private buildSbahnTrain(): void {
+    const shell = new THREE.MeshStandardMaterial({ color: 0xdfe1df, roughness: 0.42, metalness: 0.1 });
+    const red = new THREE.MeshStandardMaterial({ color: 0xd71920, roughness: 0.4 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x202428, roughness: 0.38 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x8fb9c7, transparent: true, opacity: 0.42, roughness: 0.06, side: THREE.DoubleSide });
+    const interior = new THREE.MeshStandardMaterial({ color: 0xe4e1d8, roughness: 0.88 });
+    const seat = new THREE.MeshStandardMaterial({ color: 0x315f78, roughness: 0.88 });
+    const metal = new THREE.MeshStandardMaterial({ color: 0x989d9e, roughness: 0.35, metalness: 0.7 });
+    const displayMaterial = this.makeInteriorDisplayMaterial();
+    this.vehicleGlassMaterial = glass;
+    const centers = [-25.2, -8.4, 8.4, 25.2];
+    centers.forEach((center, index) => {
+      const car = new THREE.Group();
+      car.name = `Articulated car DB 423 section ${index + 1}`;
+      car.userData.centerOffsetM = center;
+      const body = new THREE.Mesh(new THREE.BoxGeometry(3.02, 3.3, 16.15), shell);
+      body.position.y = 2.05;
+      body.castShadow = true;
+      car.add(body);
+      const lowerRed = new THREE.Mesh(new THREE.BoxGeometry(3.08, 0.68, 16.22), red);
+      lowerRed.position.y = 0.88;
+      car.add(lowerRed);
+      const belt = new THREE.Mesh(new THREE.BoxGeometry(3.09, 0.18, 16.23), red);
+      belt.position.y = 1.72;
+      car.add(belt);
+      for (const side of [-1, 1]) {
+        const band = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.08, 14.5), dark);
+        band.position.set(side * 1.535, 2.43, 0);
+        car.add(band);
+        this.vehicleWindowBands.push(band);
+        for (const z of [-6.25, -4.85, -1.35, 0, 1.35, 4.85, 6.25]) {
+          const window = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.88, 1.08), glass);
+          window.position.set(side * 1.55, 2.43, z);
+          car.add(window);
+        }
+        this.addSlidingVehicleDoor(car, side * 1.55, -3.15, red, glass, dark, 1.72, 2.05);
+        this.addSlidingVehicleDoor(car, side * 1.55, 3.15, red, glass, dark, 1.72, 2.05);
+      }
+      if (index === 0 || index === centers.length - 1) {
+        const cabEnd = index === 0 ? -1 : 1;
+        const nose = this.makeCabNose(red);
+        nose.scale.set(1.18, 1.08, 0.72);
+        nose.position.set(0, 2.02, cabEnd * 8.18);
+        if (cabEnd > 0) nose.rotation.y = Math.PI;
+        car.add(nose);
+        this.vehicleCabShells.push(nose);
+        const cabFace = new THREE.Mesh(new THREE.BoxGeometry(2.82, 2.58, 0.16), red);
+        cabFace.position.set(0, 1.9, cabEnd * 8.43);
+        car.add(cabFace);
+        this.vehicleCabShells.push(cabFace);
+        const windscreen = new THREE.Mesh(new THREE.BoxGeometry(2.36, 0.92, 0.06), glass);
+        windscreen.position.set(0, 2.6, cabEnd * 8.53);
+        car.add(windscreen);
+        const display = new THREE.Mesh(new THREE.PlaneGeometry(2.05, 0.42), new THREE.MeshBasicMaterial({
+          map: makeLabelTexture(`${this.route.line} ${this.route.destination}`, { width: 700, height: 128, bg: '#111', fg: '#fff' }),
+          side: THREE.DoubleSide
+        }));
+        display.position.set(0, 3.17, cabEnd * 8.63);
+        if (cabEnd < 0) display.rotation.y = Math.PI;
+        car.add(display);
+      }
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(2.72, 0.08, 15.5), interior);
+      floor.position.y = 1.05;
+      car.add(floor);
+      const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.68, 0.08, 15.35), interior);
+      ceiling.position.y = 3.32;
+      car.add(ceiling);
+      this.addOpaqueTransitInterior(car, 15.35, 1.4, interior, () => [-3.15, 3.15]);
+      for (const z of [-6.2, -5.1, -1.35, 0, 1.35, 5.1, 6.2]) {
+        for (const x of [-1.04, -0.58, 0.58, 1.04]) {
+          const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.13, 0.52), seat);
+          cushion.position.set(x, 1.37, z);
+          car.add(cushion);
+          const back = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.68, 0.11), seat);
+          back.position.set(x, 1.72, z - 0.25);
+          car.add(back);
+        }
+      }
+      for (const z of [-3.15, 0, 3.15]) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2, 8), metal);
+        pole.position.set(0, 2.1, z);
+        car.add(pole);
+      }
+      const monitor = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 0.54), displayMaterial);
+      monitor.position.set(0, 2.94, 0.15);
+      monitor.rotation.y = Math.PI;
+      monitor.renderOrder = 18;
+      car.add(monitor);
+      for (const z of [-5.2, 5.2]) {
+        const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.42, 1.8), dark);
+        bogie.position.set(0, 0.48, z);
+        car.add(bogie);
+      }
+      this.trainCars.push(car);
+      this.train.add(car);
+    });
+    this.trainHalfLengthM = 34.2;
+    this.addPantograph(new THREE.Vector3(0, 3.86, 8.5), dark);
+    this.scene.add(this.train);
+    this.updateVehicleGlass();
+  }
+
+  private addSlidingVehicleDoor(
+    car: THREE.Group,
+    x: number,
+    z: number,
+    doorMaterial: THREE.Material,
+    glassMaterial: THREE.Material,
+    openingMaterial: THREE.Material,
+    width: number,
+    height: number
+  ): void {
+    const side = Math.sign(x) || 1;
+    const opening = new THREE.Mesh(new THREE.PlaneGeometry(width, height), openingMaterial);
+    opening.position.set(x + side * 0.055, 1.75, z);
+    opening.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+    car.add(opening);
+    for (const direction of [-1, 1] as const) {
+      const closedZ = z + direction * width * 0.24;
+      const leaf = new THREE.Group();
+      leaf.position.z = closedZ;
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(0.12, height - 0.08, width * 0.48), doorMaterial);
+      panel.position.set(x + side * 0.03, 1.75, 0);
+      leaf.add(panel);
+      const window = new THREE.Mesh(new THREE.BoxGeometry(0.13, height * 0.44, width * 0.27), glassMaterial);
+      window.position.set(x + side * 0.045, 2.03, 0);
+      leaf.add(window);
+      car.add(leaf);
+      this.vehicleDoorLeaves.push({ group: leaf, closedZ, direction });
+    }
+  }
+
+  private addOpaqueTransitInterior(
+    car: THREE.Group,
+    length: number,
+    halfWidth: number,
+    material: THREE.Material,
+    doorZones: (side: -1 | 1) => number[]
+  ): void {
+    for (const side of [-1, 1] as const) {
+      const exclusions = doorZones(side).map((center) => ({ start: center - 0.92, end: center + 0.92 })).sort((a, b) => a.start - b.start);
+      let cursor = -length / 2;
+      for (const exclusion of [...exclusions, { start: length / 2, end: length / 2 }]) {
+        const end = Math.min(length / 2, exclusion.start);
+        if (end - cursor > 0.18) {
+          const lowerWall = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.68, end - cursor), material);
+          lowerWall.position.set(side * halfWidth, 1.42, (cursor + end) / 2);
+          car.add(lowerWall);
+        }
+        cursor = Math.max(cursor, exclusion.end);
+      }
+      const header = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.38, length), material);
+      header.position.set(side * (halfWidth - 0.03), 3.02, 0);
+      car.add(header);
+      for (let z = -length / 2 + 1.2; z < length / 2 - 0.6; z += 2.05) {
+        if (exclusions.some((zone) => z >= zone.start && z <= zone.end)) continue;
+        const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.0, 0.1), material);
+        mullion.position.set(side * halfWidth, 2.38, z);
+        car.add(mullion);
+      }
+    }
+  }
+
+  private buildZackeTrain(): void {
+    const car = new THREE.Group();
+    car.name = 'Articulated car S-ZT 4.2';
+    car.userData.centerOffsetM = 0;
+    const yellow = new THREE.MeshStandardMaterial({ color: 0xffdc00, roughness: 0.45 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x1b2228, roughness: 0.38 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x9ccbd7, transparent: true, opacity: 0.42, roughness: 0.06 });
+    const floor = new THREE.MeshStandardMaterial({ color: 0xd8d4c8, roughness: 0.9 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.65, 3.1, 18.6), yellow);
+    body.position.y = 1.88;
+    car.add(body);
+    for (const side of [-1, 1]) {
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.08, 15.8), dark);
+      band.position.set(side * 1.35, 2.38, 0);
+      car.add(band);
+      for (const z of [-6.8, -4.7, -2.4, 0, 2.4, 4.7, 6.8]) {
+        const window = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.88, 1.55), glass);
+        window.position.set(side * 1.37, 2.4, z);
+        car.add(window);
+      }
+    }
+    for (const end of [-1, 1]) {
+      const windscreen = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.95, 0.08), glass);
+      windscreen.position.set(0, 2.45, end * 9.34);
+      car.add(windscreen);
+    }
+    const interiorFloor = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.08, 17.5), floor);
+    interiorFloor.position.y = 1.05;
+    car.add(interiorFloor);
+    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.08, 17.4), floor);
+    ceiling.position.y = 3.18;
+    car.add(ceiling);
+    this.addOpaqueTransitInterior(car, 17.4, 1.2, floor, () => []);
+    this.vehicleGlassMaterial = glass;
+    this.trainHalfLengthM = 9.5;
+    this.trainCars.push(car);
+    this.train.add(car);
+    this.addPantograph(new THREE.Vector3(0, 3.55, 0), dark);
+    this.scene.add(this.train);
+  }
+
+  private buildSeilbahnCar(): void {
+    const car = new THREE.Group();
+    car.name = 'Articulated car 1929 teak funicular';
+    car.userData.centerOffsetM = 0;
+    const teak = new THREE.MeshStandardMaterial({ color: 0x714326, roughness: 0.78 });
+    const trim = new THREE.MeshStandardMaterial({ color: 0x33271f, roughness: 0.72 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0xadcbd1, transparent: true, opacity: 0.38, roughness: 0.08 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.7, 9.8), teak);
+    body.position.y = 1.65;
+    car.add(body);
+    for (const side of [-1, 1]) {
+      for (const z of [-3.6, -1.8, 0, 1.8, 3.6]) {
+        const window = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.05, 1.2), glass);
+        window.position.set(side * 1.12, 2.05, z);
+        car.add(window);
+        const bench = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.16, 1.25), trim);
+        bench.position.set(side * 0.72, 1.0 + (z + 4) * 0.025, z);
+        car.add(bench);
+      }
+    }
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.22, 10.15), trim);
+    roof.position.y = 3.1;
+    car.add(roof);
+    this.vehicleGlassMaterial = glass;
+    this.trainHalfLengthM = 5;
+    this.trainCars.push(car);
+    this.train.add(car);
+    this.scene.add(this.train);
+  }
+
   private buildTrain(): void {
+    if (this.transportMode === 'bus') {
+      this.buildMercedesBus();
+      return;
+    }
+    if (this.transportMode === 's-bahn') {
+      this.buildSbahnTrain();
+      return;
+    }
+    if (this.transportMode === 'zacke') {
+      this.buildZackeTrain();
+      return;
+    }
+    if (this.transportMode === 'seilbahn') {
+      this.buildSeilbahnCar();
+      return;
+    }
     const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffdf00, roughness: 0.52, metalness: 0.05 });
     const blackMat = new THREE.MeshStandardMaterial({ color: 0x20242b, roughness: 0.38 });
     const glassMat = new THREE.MeshStandardMaterial({
@@ -745,7 +1473,7 @@ export class StadtbahnWorld {
   }
 
   private buildOpposingTraffic(): void {
-    const trainCount = this.route.routeLengthM > 5000 ? 3 : 2;
+    const trainCount = this.transportMode === 'seilbahn' ? 1 : this.route.routeLengthM > 5000 ? 3 : 2;
     for (let index = 0; index < trainCount; index++) {
       const root = this.train.clone(true);
       root.name = `Opposing service ${index + 1}`;
@@ -1340,6 +2068,18 @@ export class StadtbahnWorld {
     return THREE.MathUtils.lerp(heights[index] ?? heights.at(-1) ?? 0, heights[next] ?? heights.at(-1) ?? 0, fraction);
   }
 
+  private async scenerySurfaceHeight(lat: number, lon: number): Promise<number> {
+    const sampledHeight = await (this.terrain?.sample(lat, lon) ?? Promise.resolve(0));
+    if (this.routeGeo.length < 2) return sampledHeight;
+    const nearest = this.nearestSelectedGeoPoint(lat, lon, this.routeGeo);
+    const innerCorridorM = this.transportMode === 's-bahn' ? 28 : this.transportMode === 'bus' ? 20 : 12;
+    const outerCorridorM = this.transportMode === 's-bahn' ? 110 : this.transportMode === 'bus' ? 80 : 52;
+    if (nearest.distanceM >= outerCorridorM) return sampledHeight;
+    const routeSurfaceHeight = this.surfaceHeightAt(nearest.t);
+    const blend = THREE.MathUtils.smoothstep(nearest.distanceM, innerCorridorM, outerCorridorM);
+    return THREE.MathUtils.lerp(routeSurfaceHeight, sampledHeight, blend);
+  }
+
   private makeRouteStrip(
     offsetM: number,
     widthM: number,
@@ -1436,13 +2176,25 @@ export class StadtbahnWorld {
     const underground = this.stationIsUnderground(routeT);
     let camPos: THREE.Vector3;
     let lookAt: THREE.Vector3;
+    let cameraUp = new THREE.Vector3(0, 1, 0);
 
     if (this.cameraMode === 'passenger') {
-      camPos = position.clone()
-        .add(tangent.clone().multiplyScalar(4.2))
-        .add(normal.clone().multiplyScalar(0.08))
-        .add(new THREE.Vector3(0, 2.3, 0));
-      lookAt = position.clone().add(tangent.clone().multiplyScalar(85)).add(normal.clone().multiplyScalar(1.5)).add(new THREE.Vector3(0, 2.25, 0));
+      const anchoredInterior = this.transportMode === 'bus' || this.transportMode === 's-bahn';
+      if (anchoredInterior) {
+        this.train.updateMatrixWorld(true);
+        const passengerCar = this.transportMode === 's-bahn' ? this.trainCars[2] : this.trainCars[0];
+        const localZ = this.transportMode === 's-bahn' ? -2 : -4.4;
+        camPos = passengerCar.localToWorld(new THREE.Vector3(0.16, 2.3, localZ));
+        lookAt = passengerCar.localToWorld(new THREE.Vector3(0, 2.25, 70));
+        cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(passengerCar.getWorldQuaternion(new THREE.Quaternion())).normalize();
+      } else {
+        const passengerOffsetM = this.transportMode === 'stadtbahn' ? 4.2 : 0;
+        camPos = position.clone()
+          .add(tangent.clone().multiplyScalar(passengerOffsetM))
+          .add(normal.clone().multiplyScalar(0.08))
+          .add(new THREE.Vector3(0, 2.3, 0));
+        lookAt = position.clone().add(tangent.clone().multiplyScalar(85)).add(normal.clone().multiplyScalar(1.5)).add(new THREE.Vector3(0, 2.25, 0));
+      }
     } else if (this.cameraMode === 'cab') {
       camPos = position.clone().add(tangent.clone().multiplyScalar(this.trainHalfLengthM - 1.75)).add(new THREE.Vector3(0, 2.65, 0));
       lookAt = position.clone().add(tangent.clone().multiplyScalar(120)).add(new THREE.Vector3(0, 2.2, 0));
@@ -1454,7 +2206,8 @@ export class StadtbahnWorld {
       lookAt = position.clone().add(new THREE.Vector3(0, 2, 0));
     }
 
-    this.camera.position.lerp(camPos, 0.12);
+    this.camera.position.lerp(camPos, this.cameraMode === 'chase' ? 0.12 : 0.32);
+    this.camera.up.lerp(cameraUp, 0.32).normalize();
     this.camera.lookAt(lookAt);
   }
 

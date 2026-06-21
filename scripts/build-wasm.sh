@@ -15,5 +15,5 @@ else
   exit 1
 fi
 
-GO111MODULE=off GOCACHE="$GO_BUILD_CACHE" GOOS=js GOARCH=wasm go build -o "$ROOT/public/sim.wasm" "$ROOT/wasm/sim/main.go"
+GO111MODULE=on GOCACHE="$GO_BUILD_CACHE" GOOS=js GOARCH=wasm go build -o "$ROOT/public/sim.wasm" "$ROOT/wasm/sim"
 echo "Built public/sim.wasm"

@@ -903,6 +903,7 @@ export class OsmSceneStreamer {
 
   private buildingColor(value: number | string | boolean | undefined): THREE.Color {
     if (typeof value === 'string') {
+      if (value.toLowerCase() === 'transparent') return new THREE.Color(0xc6c1b7);
       const aliases: Record<string, string> = {
         anthrazit: '#383e42',
         light_blue: '#add8e6',

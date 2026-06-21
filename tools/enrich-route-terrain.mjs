@@ -35,8 +35,9 @@ for (const route of feed.routes) {
     }
   }
 
-  const tunnelMask = geoPoints.map((point) => nearestTransitKind(point, transitFeaturesByTile) === 'tunnel');
-  const bridgeMask = geoPoints.map((point) => nearestTransitKind(point, transitFeaturesByTile) === 'bridge');
+  const followsRails = route.transportMode === 'stadtbahn' || route.transportMode === 's-bahn';
+  const tunnelMask = geoPoints.map((point) => followsRails && nearestTransitKind(point, transitFeaturesByTile) === 'tunnel');
+  const bridgeMask = geoPoints.map((point) => followsRails && nearestTransitKind(point, transitFeaturesByTile) === 'bridge');
   closeMaskGaps(tunnelMask, 3);
   removeShortRuns(tunnelMask, 2);
   removeShortDistanceRuns(tunnelMask, routeDistances, 100);

@@ -1,8 +1,9 @@
 import './style.css';
 import { createRouteCurve, demoRoute, loadRoutePackages, type DemoRoute } from './route';
 import { VehicleMiniMap } from './minimap';
-import { SsbRouteDiagram } from './route-diagram';
-import { StadtbahnWorld } from './world';
+import { TransitRouteDiagram } from './route-diagram';
+import { TransitWorld } from './world';
+import { routeTransportMode, transportModeDefinitions, transportModeLabel, type TransportMode } from './domain/transport';
 import {
   initSimulator,
   loadSimulatorWasm,
@@ -16,15 +17,7 @@ import {
 type Season = 'spring' | 'summer' | 'autumn' | 'winter';
 type Mode = 'ride' | 'driver';
 
-const FREE_RIDES = 3;
-const ENTITLEMENT_KEY = 'ssim.entitlement.v3';
 const TERMINAL_TURNAROUND_MS = 4000;
-
-type Entitlement = {
-  usedFreeRides: number;
-  rideCredits: number;
-  member: boolean;
-};
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app');
@@ -38,41 +31,47 @@ document.body.appendChild(loading);
 const hud = document.createElement('div');
 hud.className = 'hud';
 hud.innerHTML = `
-  <h1>Stuttgart Stadtbahn Simulator</h1>
-  <div class="label">Route packages · ticket mock · driver tariff</div>
-  <div class="toolbar">
-    <select data-action="route" aria-label="Line">
-    </select>
-    <select data-action="station" aria-label="Start station">
-    </select>
-    <select data-action="mode" aria-label="Mode">
-      <option value="ride">Ride</option>
-      <option value="driver">Driver tariff</option>
-    </select>
-    <select data-action="season" aria-label="Season">
-      <option value="spring">Spring</option>
-      <option value="summer" selected>Summer</option>
-      <option value="autumn">Autumn</option>
-      <option value="winter">Winter</option>
-    </select>
+  <div class="hud-header">
+    <div><h1>Stuttgart Transit Simulator</h1><div class="label">Free, non-commercial simulator</div></div>
+    <button class="menu-toggle" data-action="menu" aria-expanded="true" aria-label="Collapse menu">−</button>
   </div>
-  <div class="meta">
-    <div class="card"><div class="label">Line</div><div class="value" data-field="line">-</div></div>
-    <div class="card"><div class="label">Speed</div><div class="value" data-field="speed">-</div></div>
-    <div class="card"><div class="label">Next station</div><div class="value" data-field="station">-</div></div>
-    <div class="card"><div class="label">Doors</div><div class="value" data-field="doors">-</div></div>
-    <div class="card driver-stat"><div class="label">Score</div><div class="value" data-field="score">-</div></div>
-    <div class="card driver-stat"><div class="label">Schedule</div><div class="value" data-field="schedule">-</div></div>
-  </div>
-  <div class="controls">
-    <button data-action="pause">Pause</button>
-    <button data-action="camera">Camera</button>
-    <button data-action="reset">Restart</button>
-  </div>
-  <div class="driver-controls" data-panel="driver">
-    <button data-drive="throttle">Throttle</button>
-    <button data-drive="brake">Brake</button>
-    <div class="hint">W/ArrowUp throttle · S/ArrowDown brake</div>
+  <div class="hud-content">
+    <div class="transport-tabs" role="tablist" aria-label="Means of transport">
+      ${transportModeDefinitions.map((definition) => `<button role="tab" data-mode-tab="${definition.id}" ${definition.available ? '' : 'disabled'}>${definition.label}</button>`).join('')}
+    </div>
+    <div class="toolbar">
+      <select data-action="route" aria-label="Line"></select>
+      <select data-action="station" aria-label="Start station"></select>
+      <select data-action="mode" aria-label="Mode">
+        <option value="ride">Ride</option>
+        <option value="driver">Drive</option>
+      </select>
+      <select data-action="season" aria-label="Season">
+        <option value="spring">Spring</option><option value="summer" selected>Summer</option>
+        <option value="autumn">Autumn</option><option value="winter">Winter</option>
+      </select>
+      <select data-action="time" aria-label="Time of day">
+        <option value="auto" selected>Local time (auto)</option>
+        <option value="6">06:00 · Dawn</option><option value="9">09:00 · Morning</option>
+        <option value="13">13:00 · Day</option><option value="18">18:00 · Evening</option>
+        <option value="22">22:00 · Night</option>
+      </select>
+    </div>
+    <div class="meta">
+      <div class="card"><div class="label">Line</div><div class="value" data-field="line">-</div></div>
+      <div class="card"><div class="label">Speed</div><div class="value" data-field="speed">-</div></div>
+      <div class="card"><div class="label">Next station</div><div class="value" data-field="station">-</div></div>
+      <div class="card"><div class="label">Doors</div><div class="value" data-field="doors">-</div></div>
+      <div class="card driver-stat"><div class="label">Score</div><div class="value" data-field="score">-</div></div>
+      <div class="card driver-stat"><div class="label">Schedule</div><div class="value" data-field="schedule">-</div></div>
+    </div>
+    <div class="controls">
+      <button data-action="pause">Pause</button><button data-action="camera">Camera</button><button data-action="reset">Restart</button>
+    </div>
+    <div class="driver-controls" data-panel="driver">
+      <button data-drive="throttle">Throttle</button><button data-drive="brake">Brake</button>
+      <div class="hint">W/ArrowUp throttle · S/ArrowDown brake</div>
+    </div>
   </div>
 `;
 document.body.appendChild(hud);
@@ -81,24 +80,10 @@ const rightRail = document.createElement('div');
 rightRail.className = 'right-rail';
 document.body.appendChild(rightRail);
 
-const ticketPanel = document.createElement('div');
-ticketPanel.className = 'ticket-panel';
-ticketPanel.innerHTML = `
-  <div>
-    <div class="label">Ride access</div>
-    <div class="ticket-copy" data-field="ticket">-</div>
-  </div>
-  <div class="ticket-actions">
-    <button data-action="buy-ride">+ EUR 0.20 ride</button>
-    <button data-action="membership">EUR 8 month</button>
-  </div>
-`;
-rightRail.appendChild(ticketPanel);
-
 const routeDiagramEl = document.createElement('section');
 routeDiagramEl.className = 'route-diagram';
 rightRail.appendChild(routeDiagramEl);
-const routeDiagram = new SsbRouteDiagram(routeDiagramEl);
+const routeDiagram = new TransitRouteDiagram(routeDiagramEl);
 
 const notice = document.createElement('div');
 notice.className = 'notice';
@@ -111,66 +96,36 @@ document.body.appendChild(miniMapEl);
 let availableRoutes: DemoRoute[] = [demoRoute];
 let gtfsAttribution = 'VVS GTFS route package has not loaded yet.';
 let selectedRoute = demoRoute;
+let selectedTransportMode: TransportMode = 'stadtbahn';
 let selectedMode: Mode = 'ride';
 let selectedSeason: Season = 'summer';
+let selectedTime: 'auto' | number = 'auto';
 let selectedStartStation = 0;
 let paused = false;
 let state: SimulatorState | null = null;
-let world: StadtbahnWorld | null = null;
+let world: TransitWorld | null = null;
 let miniMap: VehicleMiniMap | null = null;
 let lastFrame = performance.now();
+let lastClockUpdateMs = 0;
 let throttleHeld = false;
 let brakeHeld = false;
-let entitlement = loadEntitlement();
-let rideAccessConsumedForSession = false;
 let terminalReachedAt: number | null = null;
-
-function loadEntitlement(): Entitlement {
-  const fallback: Entitlement = { usedFreeRides: 0, rideCredits: 0, member: false };
-  try {
-    return { ...fallback, ...JSON.parse(localStorage.getItem(ENTITLEMENT_KEY) ?? '{}') };
-  } catch {
-    return fallback;
-  }
-}
-
-function saveEntitlement(): void {
-  localStorage.setItem(ENTITLEMENT_KEY, JSON.stringify(entitlement));
-}
-
-function canStartRide(): boolean {
-  return entitlement.member || entitlement.rideCredits > 0 || entitlement.usedFreeRides < FREE_RIDES || selectedMode === 'driver';
-}
-
-function consumeRideIfNeeded(): void {
-  if (selectedMode === 'driver' || entitlement.member || rideAccessConsumedForSession) return;
-  if (entitlement.rideCredits > 0) {
-    entitlement.rideCredits--;
-  } else if (entitlement.usedFreeRides < FREE_RIDES) {
-    entitlement.usedFreeRides++;
-  }
-  rideAccessConsumedForSession = true;
-  saveEntitlement();
-}
-
-function updateTicketPanel(): void {
-  const freeLeft = Math.max(0, FREE_RIDES - entitlement.usedFreeRides);
-  const access = entitlement.member
-    ? 'Membership active. Unlimited simulator rides this month.'
-    : `${freeLeft} free rides left · ${entitlement.rideCredits} paid ride credits`;
-  ticketPanel.querySelector('[data-field="ticket"]')!.textContent =
-    selectedMode === 'driver' ? 'Driver tariff preview: training mode is open in this prototype.' : access;
-}
 
 function updateRouteOptions(): void {
   const select = hud.querySelector<HTMLSelectElement>('[data-action="route"]')!;
-  select.innerHTML = availableRoutes
+  const visibleRoutes = availableRoutes.filter((route) => routeTransportMode(route.transportMode) === selectedTransportMode);
+  select.innerHTML = visibleRoutes
     .map((route) => {
       const label = `${route.line} to ${route.destination}`;
       return `<option value="${route.id}">${label}</option>`;
     })
     .join('');
   select.value = selectedRoute.id;
+  for (const button of hud.querySelectorAll<HTMLButtonElement>('[data-mode-tab]')) {
+    const selected = button.dataset.modeTab === selectedTransportMode;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-selected', String(selected));
+  }
 }
 
 function updateStationOptions(): void {
@@ -198,7 +153,11 @@ function routeConfig(route: DemoRoute) {
 function findOppositeRoute(route: DemoRoute): DemoRoute | undefined {
   const origin = route.stations[0]?.name;
   const terminal = route.stations.at(-1)?.name;
-  const candidates = availableRoutes.filter((candidate) => candidate.line === route.line && candidate.id !== route.id);
+  const candidates = availableRoutes.filter((candidate) =>
+    candidate.line === route.line &&
+    routeTransportMode(candidate.transportMode) === routeTransportMode(route.transportMode) &&
+    candidate.id !== route.id
+  );
   const bestMatch = candidates
     .map((candidate) => {
       const candidateOrigin = candidate.stations[0]?.name;
@@ -230,9 +189,10 @@ function startOppositeRide(): void {
 function rebuildWorld(route: DemoRoute): void {
   world?.dispose();
   appEl.replaceChildren();
-  world = new StadtbahnWorld(createRouteCurve(route), route, availableRoutes);
+  world = new TransitWorld(createRouteCurve(route), route, availableRoutes);
   world.mount(appEl);
   world.setSeason(selectedSeason);
+  world.setTimeOfDay(selectedTime === 'auto' ? currentLocalHour() : selectedTime);
 
   if (!miniMap) {
     miniMap = new VehicleMiniMap(miniMapEl);
@@ -255,7 +215,12 @@ function updateHud(s: SimulatorState): void {
 }
 
 function updateNotice(): void {
-  notice.textContent = `${selectedRoute.description} Source: ${selectedRoute.source ?? 'demo route'}. ${gtfsAttribution} Vector 3D scenery: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. Untextured relief: Mapzen Terrain Tiles on AWS Open Data.`;
+  notice.textContent = `${transportModeLabel(routeTransportMode(selectedRoute.transportMode))} · ${selectedRoute.agency ?? 'SSB'} · ${selectedRoute.description} Free non-commercial simulator. Source: ${selectedRoute.source ?? 'demo route'}. ${gtfsAttribution} Vector 3D scenery: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. Relief: Mapzen Terrain Tiles on AWS Open Data.`;
+}
+
+function currentLocalHour(): number {
+  const now = new Date();
+  return now.getHours() + now.getMinutes() / 60;
 }
 
 function setDriveInput(): void {
@@ -271,22 +236,30 @@ function startSelectedRide(): void {
   updateHud(state);
   updateNotice();
   loading.classList.add('hidden');
-
-  if (!canStartRide()) {
-    paused = true;
-    state = setSimulatorPaused(true);
-    world?.updateTrain(state.distanceM, state.doorsOpen, 1 / 60, state.nextStation);
-    miniMap?.update(state.distanceM);
-    world?.render();
-    updateHud(state);
-    notice.textContent = 'Free rides used. Add a EUR 0.20 ride credit or enable the EUR 8 monthly membership mock to continue ride mode.';
-    updateTicketPanel();
-    return;
-  }
-
-  consumeRideIfNeeded();
   paused = false;
-  updateTicketPanel();
+}
+
+function selectTransportMode(mode: TransportMode): void {
+  const routes = availableRoutes.filter((route) => routeTransportMode(route.transportMode) === mode);
+  if (routes.length === 0) return;
+  selectedTransportMode = mode;
+  selectedRoute = routes[0];
+  selectedStartStation = 0;
+  updateRouteOptions();
+  updateStationOptions();
+  startSelectedRide();
+}
+
+hud.querySelector<HTMLButtonElement>('[data-action="menu"]')?.addEventListener('click', (event) => {
+  const button = event.currentTarget as HTMLButtonElement;
+  const collapsed = hud.classList.toggle('collapsed');
+  button.textContent = collapsed ? '+' : '−';
+  button.setAttribute('aria-expanded', String(!collapsed));
+  button.setAttribute('aria-label', collapsed ? 'Expand menu' : 'Collapse menu');
+});
+
+for (const button of hud.querySelectorAll<HTMLButtonElement>('[data-mode-tab]')) {
+  button.addEventListener('click', () => selectTransportMode(button.dataset.modeTab as TransportMode));
 }
 
 hud.querySelector<HTMLButtonElement>('[data-action="pause"]')?.addEventListener('click', () => {
@@ -328,21 +301,10 @@ hud.querySelector<HTMLSelectElement>('[data-action="season"]')?.addEventListener
   selectedSeason = (event.target as HTMLSelectElement).value as Season;
   world?.setSeason(selectedSeason);
 });
-
-ticketPanel.querySelector<HTMLButtonElement>('[data-action="buy-ride"]')?.addEventListener('click', () => {
-  entitlement.rideCredits++;
-  saveEntitlement();
-  loading.classList.add('hidden');
-  updateTicketPanel();
-  if (selectedMode === 'ride') startSelectedRide();
-});
-
-ticketPanel.querySelector<HTMLButtonElement>('[data-action="membership"]')?.addEventListener('click', () => {
-  entitlement.member = !entitlement.member;
-  saveEntitlement();
-  loading.classList.add('hidden');
-  updateTicketPanel();
-  if (selectedMode === 'ride' && entitlement.member) startSelectedRide();
+hud.querySelector<HTMLSelectElement>('[data-action="time"]')?.addEventListener('change', (event) => {
+  const value = (event.target as HTMLSelectElement).value;
+  selectedTime = value === 'auto' ? 'auto' : Number(value);
+  world?.setTimeOfDay(selectedTime === 'auto' ? currentLocalHour() : selectedTime);
 });
 
 for (const button of hud.querySelectorAll<HTMLButtonElement>('[data-drive]')) {
@@ -374,13 +336,13 @@ async function start(): Promise<void> {
   const loaded = await loadRoutePackages();
   availableRoutes = loaded.routes;
   gtfsAttribution = loaded.attribution;
-  selectedRoute = availableRoutes[0];
+  selectedRoute = availableRoutes.find((route) => routeTransportMode(route.transportMode) === 'stadtbahn') ?? availableRoutes[0];
+  selectedTransportMode = routeTransportMode(selectedRoute.transportMode);
   updateRouteOptions();
   updateStationOptions();
 
   loading.textContent = 'Loading Go/WASM simulator...';
   await loadSimulatorWasm();
-  updateTicketPanel();
   startSelectedRide();
   requestAnimationFrame(frame);
 }
@@ -390,6 +352,10 @@ function frame(now: number): void {
   lastFrame = now;
 
   if (state && world) {
+    if (selectedTime === 'auto' && now - lastClockUpdateMs > 60_000) {
+      world.setTimeOfDay(currentLocalHour());
+      lastClockUpdateMs = now;
+    }
     if (!paused) {
       state = stepSimulator(dt);
     }

@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import type { SimulatorConfig } from './wasm';
+import type { TransportMode } from './domain/transport';
 
 export type DemoRoute = SimulatorConfig & {
   id: string;
+  transportMode?: TransportMode;
+  agency?: string;
   description: string;
   freeRideLabel: string;
   source?: string;

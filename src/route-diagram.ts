@@ -5,7 +5,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const STATION_GAP = 34;
 const TOP_PADDING = 26;
 
-export class SsbRouteDiagram {
+export class TransitRouteDiagram {
   private route: DemoRoute | null = null;
   private readonly title: HTMLElement;
   private readonly scroll: HTMLElement;
@@ -17,10 +17,10 @@ export class SsbRouteDiagram {
   constructor(private readonly root: HTMLElement) {
     this.root.innerHTML = `
       <div class="route-diagram-header">
-        <div class="label">SSB route schematic</div>
+        <div class="label">Transit route schematic</div>
         <div class="route-diagram-title">-</div>
       </div>
-      <div class="route-diagram-scroll"><svg aria-label="Selected SSB line schematic"></svg></div>
+      <div class="route-diagram-scroll"><svg aria-label="Selected transit line schematic"></svg></div>
     `;
     this.title = this.root.querySelector<HTMLElement>('.route-diagram-title')!;
     this.scroll = this.root.querySelector<HTMLElement>('.route-diagram-scroll')!;

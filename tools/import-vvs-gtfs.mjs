@@ -7,7 +7,13 @@ const outPath = process.argv[3] ?? 'public/data/vvs-stadtbahn-routes.json';
 const requestedLimit = process.argv[4] ? Number(process.argv[4]) : Number.POSITIVE_INFINITY;
 const maxRoutes = Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : Number.POSITIVE_INFINITY;
 
-const wantedRouteType = '402';
+const routeSelections = [
+  { routeType: '402', line: /^U\d+$/, transportMode: 'stadtbahn', agency: 'SSB', speedLimitMps: 18 },
+  { routeType: '3', line: /^(40|42|43|44)$/, transportMode: 'bus', agency: 'SSB', speedLimitMps: 13.9 },
+  { routeType: '109', line: /^S1$/, transportMode: 's-bahn', agency: 'DB Regio', speedLimitMps: 38.9 },
+  { routeType: '1400', line: /^10$/, transportMode: 'zacke', agency: 'SSB', speedLimitMps: 8.3 },
+  { routeType: '1400', line: /^20$/, transportMode: 'seilbahn', agency: 'SSB', speedLimitMps: 2.4 }
+];
 const earthMPerDegLat = 111_320;
 const stuttgartLat = 48.7758;
 const earthMPerDegLon = Math.cos((stuttgartLat * Math.PI) / 180) * earthMPerDegLat;
@@ -126,14 +132,19 @@ console.log(`Reading ${zipPath}`);
 
 const routes = new Map();
 await readZipCsv('routes.txt', (r) => {
-  if (r.route_type !== wantedRouteType) return;
-  if (!/^U\d+/.test(r.route_short_name)) return;
+  const selection = routeSelections.find((candidate) =>
+    candidate.routeType === r.route_type && candidate.line.test(r.route_short_name)
+  );
+  if (!selection) return;
   routes.set(r.route_id, {
     routeId: r.route_id,
     line: r.route_short_name,
     description: r.route_long_name,
     color: `#${r.route_color || 'ffd900'}`,
-    textColor: `#${r.route_text_color || '000000'}`
+    textColor: `#${r.route_text_color || '000000'}`,
+    transportMode: selection.transportMode,
+    agency: selection.agency,
+    speedLimitMps: selection.speedLimitMps
   });
 });
 
@@ -237,12 +248,14 @@ for (const trip of selectedTrips) {
     tripId: trip.tripId,
     shapeId: trip.shapeId,
     line: trip.line,
+    transportMode: trip.transportMode,
+    agency: trip.agency,
     destination: trip.destination,
     description: trip.description,
     freeRideLabel: `${trip.line} GTFS ride`,
     color: trip.color,
     textColor: trip.textColor,
-    speedLimitMps: 18.0,
+    speedLimitMps: trip.speedLimitMps,
     routeLengthM,
     stations: stationList,
     controlPoints,
