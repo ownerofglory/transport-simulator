@@ -9,6 +9,7 @@ import {
   type DemoRoute,
   type RouteFeedManifest
 } from '../route';
+import { loadCityCatalog, resolveCities, stuttgartCity, type CityDefinition } from '../cities';
 import { transportModeLabel, type TransportMode } from '../domain/transport';
 import { TransitWorld } from '../world';
 import { createInitialAppState, type AppState } from './AppState';
@@ -18,11 +19,6 @@ import { SimulatorClient } from '../simulator/SimulatorClient';
 import type { SimulatorConfig, SimulatorState } from '../simulator/simulator-types';
 
 const TERMINAL_TURNAROUND_MS = 4000;
-const DEFAULT_LINE_BY_MODE: Partial<Record<TransportMode, string>> = {
-  stadtbahn: 'U12',
-  bus: '43',
-  's-bahn': 'S1'
-};
 
 export class AppController {
   private readonly hud = new HudView(document.body);
@@ -33,8 +29,10 @@ export class AppController {
   private readonly routeDiagram: TransitRouteDiagram;
   private readonly miniMap: VehicleMiniMap;
   private readonly state: AppState = createInitialAppState(demoRoute);
-  private readonly routesByMode = new Map<TransportMode, DemoRoute[]>();
+  private readonly routesByCityMode = new Map<string, DemoRoute[]>();
   private world: TransitWorld | null = null;
+  private cityCatalog: CityDefinition[] = [stuttgartCity];
+  private currentCity: CityDefinition = stuttgartCity;
   private manifest: RouteFeedManifest | null = null;
   private gtfsAttribution = 'VVS GTFS route package has not loaded yet.';
   private readonly loop = new SimulatorLoop({
@@ -62,10 +60,15 @@ export class AppController {
   }
 
   async start(): Promise<void> {
-    this.hud.showLoading('Loading VVS route manifest...');
-    this.manifest = await loadRouteManifest();
-    this.gtfsAttribution = this.manifest.attribution;
-    await this.selectTransportMode('stadtbahn', false);
+    this.hud.showLoading('Loading city catalog...');
+    const catalog = await loadCityCatalog();
+    this.cityCatalog = resolveCities(catalog);
+    this.currentCity = this.cityCatalog.find((city) => city.id === this.state.selectedCityId) ?? this.cityCatalog[0] ?? stuttgartCity;
+    this.state.selectedCityId = this.currentCity.id;
+    this.hud.setCities(this.cityCatalog, this.currentCity.id);
+    this.hud.setCity(this.currentCity);
+    await this.loadManifestForCity(this.currentCity);
+    await this.selectTransportMode(this.currentCity.defaultTransportMode, false);
     this.hud.showLoading('Loading Go/WASM simulator...');
     await this.simulator.load();
     this.startSelectedRide();
@@ -73,6 +76,7 @@ export class AppController {
   }
 
   private bindHud(): void {
+    this.hud.onCityChange(async (cityId) => this.selectCity(cityId));
     this.hud.onTransportModeChange(async (mode) => this.selectTransportMode(mode));
     this.hud.onRouteChange((routeId) => {
       this.state.selectedRoute = this.availableRoutes().find((route) => route.id === routeId) ?? this.availableRoutes()[0] ?? demoRoute;
@@ -138,13 +142,30 @@ export class AppController {
     });
   }
 
+  private async selectCity(cityId: string): Promise<void> {
+    const city = this.cityCatalog.find((entry) => entry.id === cityId) ?? this.currentCity;
+    if (city.id === this.currentCity.id) return;
+    this.currentCity = city;
+    this.state.selectedCityId = city.id;
+    this.hud.setCity(city);
+    await this.loadManifestForCity(city);
+    await this.selectTransportMode(city.defaultTransportMode);
+  }
+
+  private async loadManifestForCity(city: CityDefinition): Promise<void> {
+    this.hud.showLoading(`Loading ${city.name} route manifest...`);
+    this.manifest = await loadRouteManifest(city.manifestFile, city.routeManifestFallback);
+    this.gtfsAttribution = this.manifest.attribution;
+    this.updateAvailableModes();
+  }
+
   private async selectTransportMode(mode: TransportMode, restart = true): Promise<void> {
     if (!this.manifest) return;
     await this.ensureModeLoaded(mode);
     const routes = this.availableRoutes(mode);
     if (routes.length === 0) return;
     this.state.selectedTransportMode = mode;
-    const defaultLine = DEFAULT_LINE_BY_MODE[mode];
+    const defaultLine = this.currentCity.defaultLineByMode[mode];
     this.state.selectedRoute = routes.find((route) => route.line === defaultLine) ?? routes[0];
     this.state.selectedStartStation = 0;
     this.syncRouteSelectors();
@@ -152,19 +173,28 @@ export class AppController {
   }
 
   private async ensureModeLoaded(mode: TransportMode): Promise<void> {
-    if (!this.manifest || this.routesByMode.has(mode)) return;
-    this.hud.showLoading(`Loading ${transportModeLabel(mode)} routes...`);
-    const loaded = await loadRoutesForMode(mode, this.manifest);
+    if (!this.manifest) return;
+    const cacheKey = `${this.currentCity.id}:${mode}`;
+    if (this.routesByCityMode.has(cacheKey)) return;
+    this.hud.showLoading(`Loading ${this.currentCity.name} ${transportModeLabel(mode)} routes...`);
+    const loaded = await loadRoutesForMode(
+      mode,
+      this.manifest,
+      this.currentCity.demoRoutesFallback,
+      this.currentCity.routeManifestFallback.attribution
+    );
     this.gtfsAttribution = loaded.attribution;
-    this.routesByMode.set(mode, loaded.routes);
+    this.routesByCityMode.set(cacheKey, loaded.routes);
     this.hud.hideLoading();
   }
 
   private availableRoutes(mode = this.state.selectedTransportMode): DemoRoute[] {
-    return this.routesByMode.get(mode) ?? [];
+    return this.routesByCityMode.get(`${this.currentCity.id}:${mode}`) ?? [];
   }
 
   private syncRouteSelectors(): void {
+    this.hud.setCity(this.currentCity);
+    this.updateAvailableModes();
     this.hud.setTransportMode(this.state.selectedTransportMode);
     this.hud.setRoutes(this.availableRoutes(), this.state.selectedRoute.id);
     this.hud.setStations(this.state.selectedRoute, this.state.selectedStartStation);
@@ -189,7 +219,7 @@ export class AppController {
   private rebuildWorld(route: DemoRoute): void {
     this.world?.dispose();
     this.appEl.replaceChildren();
-    this.world = new TransitWorld(createRouteCurve(route), route, this.availableRoutes());
+    this.world = new TransitWorld(createRouteCurve(route), route, this.availableRoutes(), this.currentCity);
     this.world.mount(this.appEl);
     this.world.setInteriorLookInput(this.state.lookLeftHeld, this.state.lookRightHeld);
     this.world.setSeason(this.state.selectedSeason);
@@ -226,7 +256,7 @@ export class AppController {
   private updateNotice(): void {
     const route = this.state.selectedRoute;
     this.hud.updateNotice(
-      `${transportModeLabel(routeMode(route))} · ${route.agency ?? 'SSB'} · ${route.description} Free non-commercial simulator. Source: ${route.source ?? 'demo route'}. ${this.gtfsAttribution} Vector 3D scenery: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. Relief: Mapzen Terrain Tiles on AWS Open Data.`
+      `${this.currentCity.shortLabel} · ${transportModeLabel(routeMode(route))} · ${route.agency ?? this.currentCity.noticeNetworkName} · ${route.description} ${this.currentCity.freeRideNotice} Source: ${route.source ?? 'demo route'}. ${this.gtfsAttribution} Vector 3D scenery: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. Relief: Mapzen Terrain Tiles on AWS Open Data.`
     );
   }
 
@@ -270,5 +300,10 @@ export class AppController {
   private currentLocalHour(): number {
     const now = new Date();
     return now.getHours() + now.getMinutes() / 60;
+  }
+
+  private updateAvailableModes(): void {
+    const modes = this.manifest?.modes.map((mode) => mode.mode) ?? [this.currentCity.defaultTransportMode];
+    this.hud.setAvailableTransportModes(modes, this.state.selectedTransportMode);
   }
 }

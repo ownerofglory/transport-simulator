@@ -135,21 +135,6 @@ export const routePackages: DemoRoute[] = [
 
 export const demoRoute = routePackages[0];
 
-const fallbackManifest: RouteFeedManifest = {
-  generatedAt: new Date(0).toISOString(),
-  sourceUrl: 'demo',
-  license: 'internal',
-  attribution: 'Demo route fallback. Real VVS GTFS route packages could not be loaded.',
-  modes: [
-    {
-      mode: 'stadtbahn',
-      file: '/data/demo-route.json',
-      routeCount: routePackages.length,
-      lines: [...new Set(routePackages.map((route) => route.line))]
-    }
-  ]
-};
-
 function routeSortKey(route: DemoRoute): [number, string, string, string] {
   const line = route.line.trim();
   const plainNumeric = /^\d{1,2}[A-Z]?$/i.test(line);
@@ -174,9 +159,12 @@ function sortRoutes(routes: DemoRoute[]): DemoRoute[] {
   });
 }
 
-export async function loadRouteManifest(): Promise<RouteFeedManifest> {
+export async function loadRouteManifest(
+  file: string,
+  fallbackManifest: RouteFeedManifest
+): Promise<RouteFeedManifest> {
   try {
-    const response = await fetch('/data/route-manifest.json');
+    const response = await fetch(file);
     if (!response.ok) throw new Error(`Route manifest request failed: ${response.status}`);
     const manifest = (await response.json()) as RouteFeedManifest;
     if (!Array.isArray(manifest.modes) || manifest.modes.length === 0) {
@@ -191,12 +179,14 @@ export async function loadRouteManifest(): Promise<RouteFeedManifest> {
 
 export async function loadRoutesForMode(
   mode: TransportMode,
-  manifest: RouteFeedManifest
+  manifest: RouteFeedManifest,
+  fallbackRoutes: DemoRoute[],
+  fallbackAttribution: string
 ): Promise<{ routes: DemoRoute[]; attribution: string }> {
   const descriptor = manifest.modes.find((entry) => entry.mode === mode);
   if (!descriptor) {
     if (mode === 'stadtbahn') {
-      return { routes: sortRoutes(routePackages), attribution: fallbackManifest.attribution };
+      return { routes: sortRoutes(fallbackRoutes), attribution: fallbackAttribution };
     }
     return { routes: [], attribution: manifest.attribution };
   }
@@ -212,7 +202,7 @@ export async function loadRoutesForMode(
   } catch (error) {
     console.warn(`Falling back for ${mode} route feed.`, error);
     return mode === 'stadtbahn'
-      ? { routes: sortRoutes(routePackages), attribution: fallbackManifest.attribution }
+      ? { routes: sortRoutes(fallbackRoutes), attribution: fallbackAttribution }
       : { routes: [], attribution: manifest.attribution };
   }
 }

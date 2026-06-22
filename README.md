@@ -2,6 +2,8 @@
 
 Free, non-commercial browser prototype for Stuttgart public transport.
 
+The app is now structured so Stuttgart is the first city module rather than a hard-coded one-off. New cities can be added through a city catalog entry, a city definition, and city-specific route manifests while reusing the shared renderer, simulator, HUD, minimap, and route diagram.
+
 This first slice uses:
 
 - **TypeScript + Three.js** for browser rendering
@@ -174,11 +176,13 @@ The raw ZIP is intentionally ignored because it is large. The generated JSON inc
 .
 ├── public/
 │   ├── data/demo-route.json
+│   ├── data/cities.json      # available cities and their route manifests
 │   ├── sim.wasm              # generated
 │   └── wasm_exec.js          # copied from Go toolchain
 ├── scripts/build-wasm.sh
 ├── src/
 │   ├── main.ts               # app bootstrap and HUD
+│   ├── cities/               # city catalog + per-city definitions
 │   ├── domain/transport.ts   # transport modes and vehicle families
 │   ├── minimap.ts            # Leaflet map and vehicle marker
 │   ├── osm-scene.ts          # streamed OSM buildings and surface objects

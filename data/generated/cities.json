@@ -1,0 +1,13 @@
+{
+  "generatedAt": "2026-06-22T00:00:00.000Z",
+  "cities": [
+    {
+      "id": "stuttgart",
+      "name": "Stuttgart",
+      "title": "Stuttgart Transit Simulator",
+      "description": "Free, non-commercial simulator for Stuttgart public transport.",
+      "manifestFile": "/data/route-manifest.json",
+      "defaultTransportMode": "stadtbahn"
+    }
+  ]
+}

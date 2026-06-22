@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { makeLabelTexture } from './labels';
-import { createStuttgartLandmarks, type LandmarkZone } from './landmarks';
+import type { LandmarkZone } from './landmarks';
 import { OsmSceneStreamer } from './osm-scene';
 import type { DemoRoute } from './route';
 import { TerrainSampler } from './terrain';
 import { routeTransportMode, type TransportMode } from './domain/transport';
 import type { Season } from './app/types';
+import type { CityDefinition } from './cities';
 import { LightingController } from './world/LightingController';
 import { CameraController } from './world/CameraController';
 type GeoPoint = { lat: number; lon: number };
@@ -56,7 +57,8 @@ export class TransitWorld {
   constructor(
     curve: THREE.CatmullRomCurve3,
     private readonly route: DemoRoute,
-    private readonly networkRoutes: DemoRoute[] = [route]
+    private readonly networkRoutes: DemoRoute[] = [route],
+    private readonly city?: CityDefinition
   ) {
     this.curve = curve;
     this.routeGeo = (route.geoPoints ?? []).map(([lat, lon]) => ({ lat, lon }));
@@ -78,13 +80,13 @@ export class TransitWorld {
     this.scene.background = new THREE.Color(0xaac8df);
     this.scene.fog = new THREE.Fog(0xaac8df, 900, 2800);
     if (route.elevationDatumM !== undefined) this.terrain = new TerrainSampler(route.elevationDatumM);
-    const landmarkLayer = createStuttgartLandmarks(
+    const landmarkLayer = this.city?.landmarkFactory?.(
       this.routeGeo,
       (lat, lon) => this.projectGeo(lat, lon),
       (lat, lon) => this.terrain?.sample(lat, lon) ?? Promise.resolve(0)
     );
-    this.landmarkGroup = landmarkLayer.group;
-    this.landmarkExclusions = landmarkLayer.zones;
+    this.landmarkGroup = landmarkLayer?.group ?? new THREE.Group();
+    this.landmarkExclusions = landmarkLayer?.zones ?? [];
     this.scene.add(this.landmarkGroup);
 
     this.camera.position.set(0, 5, -12);
