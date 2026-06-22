@@ -90,7 +90,6 @@ export class TransitWorld {
     this.camera.position.set(0, 5, -12);
     this.lighting.initialize();
     this.buildGround();
-    this.buildAdjacentLines();
     this.buildTrack();
     this.buildTunnels();
     this.buildStations();
@@ -380,48 +379,6 @@ export class TransitWorld {
     positions.needsUpdate = true;
     geometry.computeVertexNormals();
     return geometry;
-  }
-
-  private buildAdjacentLines(): void {
-    const selectedGeo = this.routeGeoPoints();
-    if (selectedGeo.length < 2) return;
-    const renderedLines = new Set<string>([this.route.line]);
-
-    for (const candidate of this.networkRoutes) {
-      if (renderedLines.has(candidate.line) || !candidate.geoPoints || candidate.geoPoints.length < 2) continue;
-      const runs: THREE.Vector3[][] = [];
-      let run: THREE.Vector3[] = [];
-      for (const [lat, lon] of candidate.geoPoints) {
-        const projected = this.projectGeo(lat, lon);
-        const nearest = this.nearestSelectedGeoPoint(lat, lon, selectedGeo);
-        if (nearest.distanceM <= 42) {
-          projected.y = this.curve.getPointAt(nearest.t).y + 0.48;
-          run.push(projected);
-        } else if (run.length) {
-          if (run.length >= 3) runs.push(run);
-          run = [];
-        }
-      }
-      if (run.length >= 3) runs.push(run);
-      if (runs.length === 0) continue;
-
-      renderedLines.add(candidate.line);
-      const color = new THREE.Color(candidate.color ?? '#f0d000');
-      const material = new THREE.MeshBasicMaterial({ color });
-      for (const points of runs) {
-        const smooth = new THREE.CatmullRomCurve3(points, false, 'centripetal');
-        const tube = new THREE.Mesh(new THREE.TubeGeometry(smooth, Math.max(12, points.length * 2), 0.13, 6), material);
-        tube.name = `Adjacent ${candidate.line}`;
-        this.scene.add(tube);
-      }
-
-      const anchor = runs[0][Math.floor(runs[0].length / 2)];
-      const badge = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeLabelTexture(candidate.line, { width: 256, height: 128, bg: candidate.color ?? '#ffd900', fg: candidate.textColor ?? '#111' }) }));
-      badge.position.copy(anchor).add(new THREE.Vector3(0, 4.5, 0));
-      badge.scale.set(7, 3.5, 1);
-      badge.name = `Adjacent line badge ${candidate.line}`;
-      this.scene.add(badge);
-    }
   }
 
   private nearestSelectedGeoPoint(lat: number, lon: number, points: GeoPoint[]): { distanceM: number; t: number } {
