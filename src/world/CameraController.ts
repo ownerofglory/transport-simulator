@@ -41,13 +41,21 @@ export class CameraController {
     let cameraUp = new THREE.Vector3(0, 1, 0);
 
     if (this.mode === 'passenger') {
-      const anchoredInterior = input.interiorCameraProfile === 'bus' || input.interiorCameraProfile === 's-bahn';
+      const anchoredInterior = input.interiorCameraProfile === 'bus' || input.interiorCameraProfile === 's-bahn' || input.interiorCameraProfile === 'tram';
       if (anchoredInterior) {
         input.train.updateMatrixWorld(true);
-        const passengerCar = input.interiorCameraProfile === 's-bahn' ? input.trainCars[2] : input.trainCars[0];
-        const localZ = input.interiorCameraProfile === 's-bahn' ? -2 : -4.4;
+        const passengerCar = input.interiorCameraProfile === 's-bahn'
+          ? input.trainCars[2]
+          : input.interiorCameraProfile === 'tram'
+            ? input.trainCars[2]
+            : input.trainCars[0];
+        const localZ = input.interiorCameraProfile === 's-bahn'
+          ? -2
+          : input.interiorCameraProfile === 'tram'
+            ? -0.6
+            : -4.4;
         camPos = passengerCar.localToWorld(new THREE.Vector3(0.16, 2.3, localZ));
-        lookAt = passengerCar.localToWorld(new THREE.Vector3(0, 2.25, 70));
+        lookAt = passengerCar.localToWorld(new THREE.Vector3(0, 2.25, input.interiorCameraProfile === 'tram' ? 26 : 70));
         cameraUp = new THREE.Vector3(0, 1, 0)
           .applyQuaternion(passengerCar.getWorldQuaternion(new THREE.Quaternion()))
           .normalize();

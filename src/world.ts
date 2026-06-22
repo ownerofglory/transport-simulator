@@ -1363,7 +1363,179 @@ export class TransitWorld {
     this.updateVehicleGlass();
   }
 
+  private buildUlmAvenioMTram(): void {
+    const shell = new THREE.MeshStandardMaterial({ color: 0xf1f3f4, roughness: 0.42, metalness: 0.16 });
+    const lightGrey = new THREE.MeshStandardMaterial({ color: 0xc6ccd2, roughness: 0.52, metalness: 0.12 });
+    const glossyBlack = new THREE.MeshStandardMaterial({ color: 0x161b1f, roughness: 0.18, metalness: 0.32 });
+    const blue = new THREE.MeshStandardMaterial({ color: 0x76b8e8, roughness: 0.34, metalness: 0.08 });
+    const doorBlue = new THREE.MeshStandardMaterial({ color: 0x3e8ec7, roughness: 0.36, metalness: 0.1 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x9bc8d8, transparent: true, opacity: 0.42, roughness: 0.06, side: THREE.DoubleSide });
+    const floor = new THREE.MeshStandardMaterial({ color: 0x72787d, roughness: 0.92 });
+    const ceiling = new THREE.MeshStandardMaterial({ color: 0xe1e3e4, roughness: 0.86 });
+    const seat = new THREE.MeshStandardMaterial({ color: 0x2d667f, roughness: 0.88 });
+    const metal = new THREE.MeshStandardMaterial({ color: 0x93999b, roughness: 0.36, metalness: 0.72 });
+    const ledPanel = new THREE.MeshBasicMaterial({
+      map: makeLabelTexture(`${this.route.line} ${this.route.destination}`, { width: 700, height: 128, bg: '#101417', fg: '#ffb300' }),
+      side: THREE.DoubleSide
+    });
+    const interiorDisplayMat = this.makeInteriorDisplayMaterial();
+    this.vehicleGlassMaterial = glass;
+
+    const sections = [
+      { center: -12.4, length: 6.6, end: -1 as -1 | 0 | 1 },
+      { center: -6.2, length: 5.2, end: 0 as -1 | 0 | 1 },
+      { center: 0, length: 6.0, end: 0 as -1 | 0 | 1 },
+      { center: 6.2, length: 5.2, end: 0 as -1 | 0 | 1 },
+      { center: 12.4, length: 6.6, end: 1 as -1 | 0 | 1 }
+    ];
+
+    for (const section of sections) {
+      const car = new THREE.Group();
+      car.name = `Articulated car Ulm Avenio section ${section.center}`;
+      car.userData.centerOffsetM = section.center;
+
+      const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.46, 0.34, section.length - 0.1), lightGrey);
+      skirt.position.y = 0.56;
+      car.add(skirt);
+      this.vehiclePassengerShells.push(skirt);
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(2.36, 2.56, section.length), shell);
+      body.position.y = 1.78;
+      body.castShadow = true;
+      car.add(body);
+      this.vehiclePassengerShells.push(body);
+
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(2.08, 0.2, section.length - 0.1), lightGrey);
+      roof.position.y = 3.14;
+      car.add(roof);
+      this.vehiclePassengerShells.push(roof);
+
+      for (const side of [-1, 1] as const) {
+        const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.12, section.length - 0.2), glossyBlack);
+        band.position.set(side * 1.22, 2.28, 0);
+        car.add(band);
+        this.vehicleWindowBands.push(band);
+
+        const windowCount = section.length > 6 ? 3 : 2;
+        for (let index = 0; index < windowCount; index++) {
+          const z = -section.length * 0.28 + (index * (section.length * 0.56)) / Math.max(1, windowCount - 1);
+          const win = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.88, windowCount === 3 && index === 1 ? 1.25 : 0.98), glass);
+          win.position.set(side * 1.24, 2.28, z);
+          car.add(win);
+        }
+
+        if (section.end === 0 || (section.end < 0 && side < 0) || (section.end > 0 && side > 0)) {
+          const doorZ = section.length > 6 ? 0.55 : 0;
+          this.addSlidingVehicleDoor(car, side * 1.245, doorZ, doorBlue, glass, glossyBlack, 1.48, 1.95);
+          const blueAccent = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.08, 1.62), blue);
+          blueAccent.position.set(side * 1.215, 1.75, doorZ);
+          car.add(blueAccent);
+        }
+      }
+
+      const interiorFloor = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.08, section.length - 0.28), floor);
+      interiorFloor.position.y = 0.98;
+      car.add(interiorFloor);
+      const interiorCeiling = new THREE.Mesh(new THREE.BoxGeometry(2.06, 0.08, section.length - 0.34), ceiling);
+      interiorCeiling.position.y = 2.98;
+      car.add(interiorCeiling);
+      this.addOpaqueTransitInterior(car, section.length - 0.34, 1.08, ceiling, (side) => {
+        if (section.end === 0 || (section.end < 0 && side < 0) || (section.end > 0 && side > 0)) {
+          return [section.length > 6 ? 0.55 : 0];
+        }
+        return [];
+      });
+
+      for (const z of section.length > 6 ? [-1.55, 1.55] : [-1.0, 1.0]) {
+        for (const x of [-0.74, 0.74]) {
+          const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.12, 0.54), seat);
+          cushion.position.set(x, 1.28, z);
+          car.add(cushion);
+          const back = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.62, 0.11), seat);
+          back.position.set(x, 1.62, z - 0.26);
+          car.add(back);
+        }
+      }
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 1.8, 10), metal);
+      pole.position.set(0, 1.95, 0);
+      car.add(pole);
+
+      if (section.end !== 0) {
+        const cabDirection = section.end;
+        const frontPanel = new THREE.Mesh(this.makeCabNose(blue).geometry.clone(), blue);
+        frontPanel.scale.set(1.02, 1.02, 0.82);
+        frontPanel.position.set(0, 1.86, cabDirection * (section.length / 2 - 0.18));
+        if (cabDirection > 0) frontPanel.rotation.y = Math.PI;
+        car.add(frontPanel);
+        this.vehicleCabShells.push(frontPanel);
+
+        const face = new THREE.Mesh(new THREE.BoxGeometry(2.1, 1.92, 0.12), glossyBlack);
+        face.position.set(0, 2.12, cabDirection * (section.length / 2 + 0.12));
+        car.add(face);
+        this.vehicleCabShells.push(face);
+
+        const windscreen = new THREE.Mesh(new THREE.BoxGeometry(1.76, 0.94, 0.08), glass);
+        windscreen.position.set(0, 2.44, cabDirection * (section.length / 2 + 0.16));
+        windscreen.rotation.x = cabDirection * -0.22;
+        car.add(windscreen);
+
+        const routeDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.58, 0.34), ledPanel);
+        routeDisplay.position.set(0, 2.98, cabDirection * (section.length / 2 + 0.2));
+        if (cabDirection < 0) routeDisplay.rotation.y = Math.PI;
+        routeDisplay.renderOrder = 20;
+        car.add(routeDisplay);
+        this.vehicleCabDisplays.push(routeDisplay);
+
+        const lowerMask = new THREE.Mesh(new THREE.BoxGeometry(2.18, 0.34, 0.1), lightGrey);
+        lowerMask.position.set(0, 0.84, cabDirection * (section.length / 2 + 0.11));
+        car.add(lowerMask);
+
+        const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf8f4d0, emissiveIntensity: 2.0 });
+        for (const x of [-0.66, 0.66]) {
+          const headlight = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.06, 0.08), headlightMat);
+          headlight.position.set(x, 1.1, cabDirection * (section.length / 2 + 0.22));
+          car.add(headlight);
+        }
+      } else {
+        const internalDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.42), interiorDisplayMat);
+        internalDisplay.position.set(0, 2.76, 0);
+        internalDisplay.rotation.y = Math.PI;
+        internalDisplay.renderOrder = 18;
+        car.add(internalDisplay);
+      }
+
+      this.trainCars.push(car);
+      this.train.add(car);
+    }
+
+    for (const z of [-9.3, -3.1, 3.1, 9.3]) {
+      const bellows = new THREE.Mesh(new THREE.BoxGeometry(2.18, 2.24, 0.7), glossyBlack);
+      bellows.position.set(0, 1.84, z);
+      this.train.add(bellows);
+      this.vehiclePassengerShells.push(bellows);
+    }
+
+    for (const z of [-9.35, -3.15, 3.15, 9.35]) {
+      const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.36, 1.5), glossyBlack);
+      bogie.position.set(0, 0.42, z);
+      this.train.add(bogie);
+    }
+
+    const roofHvac = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.22, 7.8), lightGrey);
+    roofHvac.position.set(0, 3.36, -0.4);
+    this.train.add(roofHvac);
+    this.addPantograph(new THREE.Vector3(0, 3.58, 2.2), metal);
+
+    this.trainHalfLengthM = 15.6;
+    this.scene.add(this.train);
+    this.updateVehicleGlass();
+  }
+
   private buildTrain(): void {
+    if (this.city?.id === 'ulm' && this.modeDefinition?.id === 'tram') {
+      this.buildUlmAvenioMTram();
+      return;
+    }
     if (this.vehicleKind === 'bus') {
       this.buildMercedesBus();
       return;

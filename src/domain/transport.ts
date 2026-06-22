@@ -2,7 +2,7 @@ export type TransportMode = string;
 
 export type VehicleKind = 'stadtbahn' | 'bus' | 's-bahn' | 'zacke' | 'seilbahn';
 export type GuidewayKind = 'stadtbahn' | 'bus' | 's-bahn' | 'zacke' | 'seilbahn';
-export type InteriorCameraProfile = 'rail' | 'bus' | 's-bahn';
+export type InteriorCameraProfile = 'rail' | 'bus' | 's-bahn' | 'tram';
 
 export type TransportModeDefinition = {
   id: TransportMode;

@@ -4,6 +4,11 @@ Free, non-commercial browser prototype for Stuttgart public transport.
 
 The app is now structured so Stuttgart is the first city module rather than a hard-coded one-off. New cities can be added through a city catalog entry, a city definition, and city-specific route manifests while reusing the shared renderer, simulator, HUD, minimap, and route diagram. Transport modes and vehicle families are now defined per city, so another city can expose a different set of modes and map those modes onto different vehicle and guideway behaviors.
 
+The repository now includes two city modules:
+
+- Stuttgart with Stadtbahn, bus, S-Bahn, Zacke and Seilbahn
+- Ulm with tram lines 1 and 2 plus SWU bus line 5
+
 This first slice uses:
 
 - **TypeScript + Three.js** for browser rendering

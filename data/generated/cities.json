@@ -8,6 +8,14 @@
       "description": "Free, non-commercial simulator for Stuttgart public transport.",
       "manifestFile": "/data/route-manifest.json",
       "defaultTransportMode": "stadtbahn"
+    },
+    {
+      "id": "ulm",
+      "name": "Ulm",
+      "title": "Ulm Transit Simulator",
+      "description": "Free, non-commercial simulator for SWU public transport in Ulm/Neu-Ulm.",
+      "manifestFile": "/data/ulm/route-manifest.json",
+      "defaultTransportMode": "tram"
     }
   ]
 }
