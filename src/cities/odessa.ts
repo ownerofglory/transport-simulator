@@ -53,7 +53,7 @@ export const odessaCity: CityDefinition = {
     license: 'Routing/dimensions derived for simulator use from public Odesa line information.',
     attribution: 'Based on public Odesmiskelektrotrans and Odesa public transport line information.',
     modes: [
-      { mode: 'tram', file: '/data/odessa/routes-tram.json', routeCount: 8, lines: ['5', '10', '17', '28'] },
+      { mode: 'tram', file: '/data/odessa/routes-tram.json', routeCount: 36, lines: ['1', '3', '5', '6', '7', '7-к', '10', '11', '12', '13', '15', '17', '18', '20', '21', '26', '27', '28'] },
       { mode: 'trolleybus', file: '/data/odessa/routes-trolleybus.json', routeCount: 4, lines: ['7', '10'] },
       { mode: 'bus', file: '/data/odessa/routes-bus.json', routeCount: 2, lines: ['117'] }
     ]
