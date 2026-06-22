@@ -188,7 +188,7 @@ export class AppController {
     this.world.setSeason(this.state.selectedSeason);
     this.world.setTimeOfDay(this.state.selectedTime === 'auto' ? this.currentLocalHour() : this.state.selectedTime);
     this.miniMap.setRoute(route);
-    this.routeDiagram.setRoute(route);
+    this.routeDiagram.setRoute(route, this.availableRoutes());
     window.setTimeout(() => this.miniMap.invalidateSize(), 0);
   }
 

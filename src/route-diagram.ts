@@ -7,6 +7,7 @@ const TOP_PADDING = 26;
 
 export class TransitRouteDiagram {
   private route: DemoRoute | null = null;
+  private stationTransfers = new Map<string, string[]>();
   private readonly title: HTMLElement;
   private readonly scroll: HTMLElement;
   private readonly svg: SVGSVGElement;
@@ -27,8 +28,9 @@ export class TransitRouteDiagram {
     this.svg = this.root.querySelector<SVGSVGElement>('svg')!;
   }
 
-  setRoute(route: DemoRoute): void {
+  setRoute(route: DemoRoute, networkRoutes: DemoRoute[] = [route]): void {
     this.route = route;
+    this.stationTransfers = this.computeTransfers(route, networkRoutes);
     this.stationNodes.length = 0;
     this.svg.replaceChildren();
     this.title.textContent = `${route.line}  ·  ${route.stations[0]?.name ?? ''} → ${route.destination}`;
@@ -57,6 +59,12 @@ export class TransitRouteDiagram {
       label.setAttribute('x', '48');
       label.setAttribute('y', String(y + 4));
       label.textContent = station.name;
+      const transfers = this.stationTransfers.get(station.name) ?? [];
+      if (transfers.length) {
+        const transferText = this.svgElement('tspan', 'route-station-transfer');
+        transferText.textContent = `  ·  ${transfers.join(' ')}`;
+        label.appendChild(transferText);
+      }
       group.append(node, label);
       this.svg.appendChild(group);
       this.stationNodes.push(node);
@@ -130,6 +138,26 @@ export class TransitRouteDiagram {
 
   private updateMarker(y: number): void {
     this.vehicleMarker?.setAttribute('transform', `translate(30 ${y})`);
+  }
+
+  private computeTransfers(route: DemoRoute, networkRoutes: DemoRoute[]): Map<string, string[]> {
+    const transfers = new Map<string, Set<string>>();
+    const currentStations = new Set(route.stations.map((station) => station.name));
+    for (const candidate of networkRoutes) {
+      if (candidate.id === route.id || candidate.line === route.line) continue;
+      for (const station of candidate.stations) {
+        if (!currentStations.has(station.name)) continue;
+        let stationTransfers = transfers.get(station.name);
+        if (!stationTransfers) {
+          stationTransfers = new Set<string>();
+          transfers.set(station.name, stationTransfers);
+        }
+        stationTransfers.add(candidate.line);
+      }
+    }
+    return new Map(
+      [...transfers.entries()].map(([stationName, lines]) => [stationName, [...lines].sort((a, b) => a.localeCompare(b, 'de', { numeric: true }))])
+    );
   }
 
   private stationY(index: number): number {

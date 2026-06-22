@@ -252,6 +252,12 @@ select:hover {
   font-weight: 650;
 }
 
+.route-station-transfer {
+  fill: rgba(255, 223, 0, 0.8);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .route-vehicle-halo {
   fill: rgba(255, 216, 0, 0.2);
   stroke: rgba(255, 255, 255, 0.88);
