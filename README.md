@@ -8,6 +8,7 @@ The repository now includes two city modules:
 
 - Stuttgart with Stadtbahn, bus, S-Bahn, Zacke and Seilbahn
 - Ulm with tram lines 1 and 2 plus SWU bus line 5
+- Odessa with tram line 28, trolleybus line 7, and bus line 117
 
 This first slice uses:
 

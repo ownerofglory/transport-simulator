@@ -16,6 +16,14 @@
       "description": "Free, non-commercial simulator for SWU public transport in Ulm/Neu-Ulm.",
       "manifestFile": "/data/ulm/route-manifest.json",
       "defaultTransportMode": "tram"
+    },
+    {
+      "id": "odessa",
+      "name": "Odessa",
+      "title": "Odessa Transit Simulator",
+      "description": "Free, non-commercial simulator for Odesa urban transport.",
+      "manifestFile": "/data/odessa/route-manifest.json",
+      "defaultTransportMode": "tram"
     }
   ]
 }

@@ -29,6 +29,7 @@ export type CityDefinition = CityCatalogEntry & {
   noticeNetworkName: string;
   freeRideNotice: string;
   transportModes: TransportModeDefinition[];
+  mirrorRouteX?: boolean;
   routeManifestFallback: RouteFeedManifest;
   demoRoutesFallback: DemoRoute[];
   defaultLineByMode: Partial<Record<TransportMode, string>>;

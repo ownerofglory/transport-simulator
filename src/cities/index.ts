@@ -1,10 +1,12 @@
 import { stuttgartCity } from './stuttgart';
 import { ulmCity } from './ulm';
+import { odessaCity } from './odessa';
 import type { CityCatalog, CityCatalogEntry, CityDefinition } from './types';
 
 const registry = new Map<string, CityDefinition>([
   [stuttgartCity.id, stuttgartCity],
-  [ulmCity.id, ulmCity]
+  [ulmCity.id, ulmCity],
+  [odessaCity.id, odessaCity]
 ]);
 
 const fallbackCatalog: CityCatalog = {
@@ -25,6 +27,14 @@ const fallbackCatalog: CityCatalog = {
       description: ulmCity.description,
       manifestFile: ulmCity.manifestFile,
       defaultTransportMode: ulmCity.defaultTransportMode
+    },
+    {
+      id: odessaCity.id,
+      name: odessaCity.name,
+      title: odessaCity.title,
+      description: odessaCity.description,
+      manifestFile: odessaCity.manifestFile,
+      defaultTransportMode: odessaCity.defaultTransportMode
     }
   ]
 };
@@ -74,4 +84,5 @@ export function cityDefinitionById(id: string): CityDefinition {
 
 export { stuttgartCity };
 export { ulmCity };
+export { odessaCity };
 export type { CityCatalog, CityCatalogEntry, CityDefinition } from './types';

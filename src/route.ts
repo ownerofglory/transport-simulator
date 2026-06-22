@@ -206,8 +206,9 @@ export async function loadRoutesForMode(
   }
 }
 
-export function createRouteCurve(route: DemoRoute): THREE.CatmullRomCurve3 {
-  let points = route.controlPoints.map(([x, y, z]) => new THREE.Vector3(x, y, z));
+export function createRouteCurve(route: DemoRoute, options?: { mirrorX?: boolean }): THREE.CatmullRomCurve3 {
+  const mirrorX = options?.mirrorX ? -1 : 1;
+  let points = route.controlPoints.map(([x, y, z]) => new THREE.Vector3(x * mirrorX, y, z));
   for (let pass = 0; pass < 2; pass++) {
     points = points.map((point, index, source) => {
       if (index === 0 || index === source.length - 1) return point.clone();

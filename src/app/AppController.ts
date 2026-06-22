@@ -221,7 +221,7 @@ export class AppController {
     this.world?.dispose();
     this.appEl.replaceChildren();
     this.world = new TransitWorld(
-      createRouteCurve(route),
+      createRouteCurve(route, { mirrorX: this.currentCity.mirrorRouteX }),
       route,
       this.availableRoutes(),
       this.currentCity,
