@@ -29,6 +29,7 @@ function mergeCityEntry(entry: CityCatalogEntry): CityDefinition {
       menuTitle: entry.title,
       noticeNetworkName: entry.name,
       freeRideNotice: 'Free non-commercial simulator.',
+      transportModes: stuttgartCity.transportModes,
       landmarkFactory: undefined
     };
   }

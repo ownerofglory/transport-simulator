@@ -1,4 +1,4 @@
-import { transportModeDefinitions, type TransportMode } from '../domain/transport';
+import type { TransportMode, TransportModeDefinition } from '../domain/transport';
 import type { CityDefinition } from '../cities';
 import type { DemoRoute } from '../route';
 import type { SimulatorState } from '../simulator/simulator-types';
@@ -12,6 +12,7 @@ export class HudView {
   private readonly routeSelect: HTMLSelectElement;
   private readonly stationSelect: HTMLSelectElement;
   private readonly citySelect: HTMLSelectElement;
+  private readonly transportTabsEl: HTMLDivElement;
   private readonly modeSelect: HTMLSelectElement;
   private readonly seasonSelect: HTMLSelectElement;
   private readonly timeSelect: HTMLSelectElement;
@@ -27,6 +28,7 @@ export class HudView {
   private readonly doorsField: HTMLElement;
   private readonly scoreField: HTMLElement;
   private readonly scheduleField: HTMLElement;
+  private transportModeHandler: ((mode: TransportMode) => void | Promise<void>) | null = null;
 
   constructor(parent: HTMLElement) {
     this.loading = document.createElement('div');
@@ -45,9 +47,7 @@ export class HudView {
         <div class="toolbar city-toolbar">
           <select data-action="city" aria-label="City"></select>
         </div>
-        <div class="transport-tabs" role="tablist" aria-label="Means of transport">
-          ${transportModeDefinitions.map((definition) => `<button role="tab" data-mode-tab="${definition.id}" ${definition.available ? '' : 'disabled'}>${definition.label}</button>`).join('')}
-        </div>
+        <div class="transport-tabs" role="tablist" aria-label="Means of transport"></div>
         <div class="toolbar">
           <select data-action="route" aria-label="Line"></select>
           <select data-action="station" aria-label="Start station"></select>
@@ -91,6 +91,7 @@ export class HudView {
     this.routeSelect = this.root.querySelector('[data-action="route"]') as HTMLSelectElement;
     this.stationSelect = this.root.querySelector('[data-action="station"]') as HTMLSelectElement;
     this.citySelect = this.root.querySelector('[data-action="city"]') as HTMLSelectElement;
+    this.transportTabsEl = this.root.querySelector('.transport-tabs') as HTMLDivElement;
     this.modeSelect = this.root.querySelector('[data-action="mode"]') as HTMLSelectElement;
     this.seasonSelect = this.root.querySelector('[data-action="season"]') as HTMLSelectElement;
     this.timeSelect = this.root.querySelector('[data-action="time"]') as HTMLSelectElement;
@@ -139,6 +140,7 @@ export class HudView {
     this.citySelect.value = city.id;
     this.titleEl.textContent = city.menuTitle;
     this.subtitleEl.textContent = city.freeRideNotice;
+    this.setTransportModes(city.transportModes, city.defaultTransportMode);
   }
 
   setStations(route: DemoRoute, selectedIndex: number): void {
@@ -150,16 +152,26 @@ export class HudView {
   }
 
   setTransportMode(mode: TransportMode): void {
-    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-mode-tab]')) {
+    for (const button of this.transportTabsEl.querySelectorAll<HTMLButtonElement>('[data-mode-tab]')) {
       const selected = button.dataset.modeTab === mode;
       button.classList.toggle('active', selected);
       button.setAttribute('aria-selected', String(selected));
     }
   }
 
+  setTransportModes(definitions: TransportModeDefinition[], selectedMode: TransportMode): void {
+    this.transportTabsEl.innerHTML = definitions
+      .map((definition) => `<button role="tab" data-mode-tab="${definition.id}" ${definition.available ? '' : 'disabled'}>${definition.label}</button>`)
+      .join('');
+    for (const button of this.transportTabsEl.querySelectorAll<HTMLButtonElement>('[data-mode-tab]')) {
+      button.addEventListener('click', () => this.transportModeHandler?.(button.dataset.modeTab as TransportMode));
+    }
+    this.setTransportMode(selectedMode);
+  }
+
   setAvailableTransportModes(availableModes: TransportMode[], selectedMode: TransportMode): void {
     const enabled = new Set(availableModes);
-    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-mode-tab]')) {
+    for (const button of this.transportTabsEl.querySelectorAll<HTMLButtonElement>('[data-mode-tab]')) {
       const mode = button.dataset.modeTab as TransportMode;
       const available = enabled.has(mode);
       button.disabled = !available;
@@ -212,9 +224,7 @@ export class HudView {
   }
 
   onTransportModeChange(handler: (mode: TransportMode) => void | Promise<void>): void {
-    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-mode-tab]')) {
-      button.addEventListener('click', () => handler(button.dataset.modeTab as TransportMode));
-    }
+    this.transportModeHandler = handler;
   }
 
   onCityChange(handler: (cityId: string) => void | Promise<void>): void {

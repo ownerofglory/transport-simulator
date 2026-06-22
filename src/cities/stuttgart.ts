@@ -1,6 +1,61 @@
 import { createStuttgartLandmarks } from '../landmarks';
 import { routePackages, type RouteFeedManifest } from '../route';
+import type { TransportModeDefinition } from '../domain/transport';
 import type { CityDefinition } from './types';
+
+const stuttgartTransportModes: TransportModeDefinition[] = [
+  {
+    id: 'stadtbahn',
+    label: 'Stadtbahn',
+    available: true,
+    vehicleFamily: 'SSB DT8 / Stadler Tango',
+    vehicleKind: 'stadtbahn',
+    guidewayKind: 'stadtbahn',
+    interiorCameraProfile: 'rail',
+    passengerOffsetM: 4.2,
+    lineAccentColor: '#ffd800'
+  },
+  {
+    id: 'bus',
+    label: 'Bus',
+    available: true,
+    vehicleFamily: 'Mercedes-Benz city bus',
+    vehicleKind: 'bus',
+    guidewayKind: 'bus',
+    interiorCameraProfile: 'bus',
+    lineAccentColor: '#ffd800'
+  },
+  {
+    id: 's-bahn',
+    label: 'S-Bahn',
+    available: true,
+    vehicleFamily: 'DB class 423',
+    vehicleKind: 's-bahn',
+    guidewayKind: 's-bahn',
+    interiorCameraProfile: 's-bahn',
+    lineAccentColor: '#e0202b'
+  },
+  {
+    id: 'zacke',
+    label: 'Zacke',
+    available: true,
+    vehicleFamily: 'SSB S-ZT 4.2',
+    vehicleKind: 'zacke',
+    guidewayKind: 'zacke',
+    interiorCameraProfile: 'rail',
+    lineAccentColor: '#ffd800'
+  },
+  {
+    id: 'seilbahn',
+    label: 'Seilbahn',
+    available: true,
+    vehicleFamily: 'Historic Stuttgart funicular car',
+    vehicleKind: 'seilbahn',
+    guidewayKind: 'seilbahn',
+    interiorCameraProfile: 'rail',
+    lineAccentColor: '#ffd800'
+  }
+];
 
 const fallbackManifest: RouteFeedManifest = {
   generatedAt: new Date(0).toISOString(),
@@ -28,6 +83,7 @@ export const stuttgartCity: CityDefinition = {
   defaultTransportMode: 'stadtbahn',
   noticeNetworkName: 'VVS / SSB',
   freeRideNotice: 'Free non-commercial simulator.',
+  transportModes: stuttgartTransportModes,
   routeManifestFallback: fallbackManifest,
   demoRoutesFallback: routePackages,
   defaultLineByMode: {

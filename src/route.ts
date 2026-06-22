@@ -183,11 +183,10 @@ export async function loadRoutesForMode(
   fallbackRoutes: DemoRoute[],
   fallbackAttribution: string
 ): Promise<{ routes: DemoRoute[]; attribution: string }> {
+  const matchingFallbackRoutes = sortRoutes(fallbackRoutes.filter((route) => routeMode(route) === mode));
   const descriptor = manifest.modes.find((entry) => entry.mode === mode);
   if (!descriptor) {
-    if (mode === 'stadtbahn') {
-      return { routes: sortRoutes(fallbackRoutes), attribution: fallbackAttribution };
-    }
+    if (matchingFallbackRoutes.length) return { routes: matchingFallbackRoutes, attribution: fallbackAttribution };
     return { routes: [], attribution: manifest.attribution };
   }
 
@@ -201,8 +200,8 @@ export async function loadRoutesForMode(
     return { routes: sortRoutes(feed.routes), attribution: feed.attribution };
   } catch (error) {
     console.warn(`Falling back for ${mode} route feed.`, error);
-    return mode === 'stadtbahn'
-      ? { routes: sortRoutes(fallbackRoutes), attribution: fallbackAttribution }
+    return matchingFallbackRoutes.length
+      ? { routes: matchingFallbackRoutes, attribution: fallbackAttribution }
       : { routes: [], attribution: manifest.attribution };
   }
 }

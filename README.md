@@ -2,7 +2,7 @@
 
 Free, non-commercial browser prototype for Stuttgart public transport.
 
-The app is now structured so Stuttgart is the first city module rather than a hard-coded one-off. New cities can be added through a city catalog entry, a city definition, and city-specific route manifests while reusing the shared renderer, simulator, HUD, minimap, and route diagram.
+The app is now structured so Stuttgart is the first city module rather than a hard-coded one-off. New cities can be added through a city catalog entry, a city definition, and city-specific route manifests while reusing the shared renderer, simulator, HUD, minimap, and route diagram. Transport modes and vehicle families are now defined per city, so another city can expose a different set of modes and map those modes onto different vehicle and guideway behaviors.
 
 This first slice uses:
 
@@ -183,7 +183,7 @@ The raw ZIP is intentionally ignored because it is large. The generated JSON inc
 ├── src/
 │   ├── main.ts               # app bootstrap and HUD
 │   ├── cities/               # city catalog + per-city definitions
-│   ├── domain/transport.ts   # transport modes and vehicle families
+│   ├── domain/transport.ts   # transport-mode definitions, vehicle kinds and guideway profiles
 │   ├── minimap.ts            # Leaflet map and vehicle marker
 │   ├── osm-scene.ts          # streamed OSM buildings and surface objects
 │   ├── route.ts              # route packages and geometry

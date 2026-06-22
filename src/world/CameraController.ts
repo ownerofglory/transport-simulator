@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { TransportMode } from '../domain/transport';
+import type { InteriorCameraProfile } from '../domain/transport';
 
 export type CameraMode = 'passenger' | 'cab' | 'chase';
 
@@ -7,7 +7,8 @@ type CameraUpdateInput = {
   position: THREE.Vector3;
   tangent: THREE.Vector3;
   underground: boolean;
-  transportMode: TransportMode;
+  interiorCameraProfile: InteriorCameraProfile;
+  passengerOffsetM: number;
   trainHalfLengthM: number;
   train: THREE.Group;
   trainCars: THREE.Group[];
@@ -40,20 +41,19 @@ export class CameraController {
     let cameraUp = new THREE.Vector3(0, 1, 0);
 
     if (this.mode === 'passenger') {
-      const anchoredInterior = input.transportMode === 'bus' || input.transportMode === 's-bahn';
+      const anchoredInterior = input.interiorCameraProfile === 'bus' || input.interiorCameraProfile === 's-bahn';
       if (anchoredInterior) {
         input.train.updateMatrixWorld(true);
-        const passengerCar = input.transportMode === 's-bahn' ? input.trainCars[2] : input.trainCars[0];
-        const localZ = input.transportMode === 's-bahn' ? -2 : -4.4;
+        const passengerCar = input.interiorCameraProfile === 's-bahn' ? input.trainCars[2] : input.trainCars[0];
+        const localZ = input.interiorCameraProfile === 's-bahn' ? -2 : -4.4;
         camPos = passengerCar.localToWorld(new THREE.Vector3(0.16, 2.3, localZ));
         lookAt = passengerCar.localToWorld(new THREE.Vector3(0, 2.25, 70));
         cameraUp = new THREE.Vector3(0, 1, 0)
           .applyQuaternion(passengerCar.getWorldQuaternion(new THREE.Quaternion()))
           .normalize();
       } else {
-        const passengerOffsetM = input.transportMode === 'stadtbahn' ? 4.2 : 0;
         camPos = input.position.clone()
-          .add(input.tangent.clone().multiplyScalar(passengerOffsetM))
+          .add(input.tangent.clone().multiplyScalar(input.passengerOffsetM))
           .add(normal.clone().multiplyScalar(0.08))
           .add(new THREE.Vector3(0, 2.3, 0));
         lookAt = input.position.clone()

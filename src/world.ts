@@ -4,7 +4,7 @@ import type { LandmarkZone } from './landmarks';
 import { OsmSceneStreamer } from './osm-scene';
 import type { DemoRoute } from './route';
 import { TerrainSampler } from './terrain';
-import { routeTransportMode, type TransportMode } from './domain/transport';
+import type { GuidewayKind, TransportModeDefinition, VehicleKind } from './domain/transport';
 import type { Season } from './app/types';
 import type { CityDefinition } from './cities';
 import { LightingController } from './world/LightingController';
@@ -58,7 +58,8 @@ export class TransitWorld {
     curve: THREE.CatmullRomCurve3,
     private readonly route: DemoRoute,
     private readonly networkRoutes: DemoRoute[] = [route],
-    private readonly city?: CityDefinition
+    private readonly city?: CityDefinition,
+    private readonly modeDefinition?: TransportModeDefinition
   ) {
     this.curve = curve;
     this.routeGeo = (route.geoPoints ?? []).map(([lat, lon]) => ({ lat, lon }));
@@ -187,7 +188,7 @@ export class TransitWorld {
     this.updateInteriorDisplay(nextStation, doorsOpen);
     this.updateArticulatedVehicle(this.train, this.trainCars, distanceM, 1, this.activeLaneOffsetM);
     for (const traffic of this.opposingTrains) {
-      const opposingDistance = this.transportMode === 'seilbahn'
+      const opposingDistance = this.guidewayKind === 'seilbahn'
         ? this.route.routeLengthM - distanceM
         : this.wrapDistance(this.route.routeLengthM - distanceM + traffic.phaseM);
       this.updateArticulatedVehicle(traffic.root, traffic.cars, opposingDistance, -1, this.oppositeLaneOffsetM);
@@ -196,7 +197,8 @@ export class TransitWorld {
       position,
       tangent,
       underground,
-      transportMode: this.transportMode,
+      interiorCameraProfile: this.modeDefinition?.interiorCameraProfile ?? 'rail',
+      passengerOffsetM: this.modeDefinition?.passengerOffsetM ?? 0,
       trainHalfLengthM: this.trainHalfLengthM,
       train: this.train,
       trainCars: this.trainCars
@@ -241,7 +243,7 @@ export class TransitWorld {
     if (!context) return;
     context.fillStyle = '#071015';
     context.fillRect(0, 0, 1024, 256);
-    const accent = this.transportMode === 's-bahn' ? '#e0202b' : '#ffd800';
+    const accent = this.modeDefinition?.lineAccentColor ?? (this.vehicleKind === 's-bahn' ? '#e0202b' : '#ffd800');
     context.fillStyle = accent;
     context.fillRect(0, 0, 1024, 14);
     context.fillRect(24, 40, 126, 126);
@@ -283,24 +285,28 @@ export class TransitWorld {
     this.renderer.dispose();
   }
 
-  private get transportMode(): TransportMode {
-    return routeTransportMode(this.route.transportMode);
+  private get vehicleKind(): VehicleKind {
+    return this.modeDefinition?.vehicleKind ?? 'stadtbahn';
+  }
+
+  private get guidewayKind(): GuidewayKind {
+    return this.modeDefinition?.guidewayKind ?? 'stadtbahn';
   }
 
   private get activeLaneOffsetM(): number {
-    if (this.transportMode === 'bus') return -1.65;
-    if (this.transportMode === 'zacke' || this.transportMode === 'seilbahn') return 0;
-    return this.transportMode === 's-bahn' ? -2.35 : ACTIVE_TRACK_OFFSET_M;
+    if (this.guidewayKind === 'bus') return -1.65;
+    if (this.guidewayKind === 'zacke' || this.guidewayKind === 'seilbahn') return 0;
+    return this.guidewayKind === 's-bahn' ? -2.35 : ACTIVE_TRACK_OFFSET_M;
   }
 
   private get oppositeLaneOffsetM(): number {
-    if (this.transportMode === 'bus') return 1.65;
-    if (this.transportMode === 'zacke' || this.transportMode === 'seilbahn') return 0;
-    return this.transportMode === 's-bahn' ? 2.35 : OPPOSITE_TRACK_OFFSET_M;
+    if (this.guidewayKind === 'bus') return 1.65;
+    if (this.guidewayKind === 'zacke' || this.guidewayKind === 'seilbahn') return 0;
+    return this.guidewayKind === 's-bahn' ? 2.35 : OPPOSITE_TRACK_OFFSET_M;
   }
 
   private get railGaugeM(): number {
-    return this.transportMode === 's-bahn' ? 1.435 : TRACK_GAUGE_M;
+    return this.guidewayKind === 's-bahn' ? 1.435 : TRACK_GAUGE_M;
   }
 
   private buildGround(): void {
@@ -419,11 +425,11 @@ export class TransitWorld {
   }
 
   private buildTrack(): void {
-    if (this.transportMode === 'bus') {
+    if (this.guidewayKind === 'bus') {
       this.buildBusRouteStreet();
       return;
     }
-    if (this.transportMode === 'zacke' || this.transportMode === 'seilbahn') {
+    if (this.guidewayKind === 'zacke' || this.guidewayKind === 'seilbahn') {
       this.buildMountainRailwayTrack();
       return;
     }
@@ -446,7 +452,7 @@ export class TransitWorld {
       }
     }
 
-    const sleeperGeo = new THREE.BoxGeometry(this.transportMode === 's-bahn' ? 2.65 : 3.2, 0.15, 0.55);
+    const sleeperGeo = new THREE.BoxGeometry(this.guidewayKind === 's-bahn' ? 2.65 : 3.2, 0.15, 0.55);
     const sleeperCount = THREE.MathUtils.clamp(Math.ceil(this.route.routeLengthM / 8), 240, 4000);
     for (const trackOffset of [this.activeLaneOffsetM, this.oppositeLaneOffsetM]) {
       const sleepers = new THREE.InstancedMesh(sleeperGeo, sleeperMaterial, sleeperCount);
@@ -478,10 +484,10 @@ export class TransitWorld {
       const line = new THREE.CatmullRomCurve3(this.offsetCurvePoints(offset, 240, 0.22));
       this.scene.add(new THREE.Mesh(new THREE.TubeGeometry(line, 240, 0.07, 7), rail));
     }
-    const count = Math.max(80, Math.min(520, Math.floor(this.route.routeLengthM / (this.transportMode === 'zacke' ? 1.4 : 2.5))));
+    const count = Math.max(80, Math.min(520, Math.floor(this.route.routeLengthM / (this.guidewayKind === 'zacke' ? 1.4 : 2.5))));
     const bars = new THREE.InstancedMesh(
-      new THREE.BoxGeometry(this.transportMode === 'zacke' ? 1.05 : 2.15, 0.12, 0.22),
-      this.transportMode === 'zacke' ? rack : sleeper,
+      new THREE.BoxGeometry(this.guidewayKind === 'zacke' ? 1.05 : 2.15, 0.12, 0.22),
+      this.guidewayKind === 'zacke' ? rack : sleeper,
       count
     );
     const matrix = new THREE.Matrix4();
@@ -494,10 +500,10 @@ export class TransitWorld {
       matrix.compose(point, rotation, new THREE.Vector3(1, 1, 1));
       bars.setMatrixAt(index, matrix);
     }
-    bars.name = this.transportMode === 'zacke' ? 'Zacke center rack' : 'Seilbahn sleepers';
+    bars.name = this.guidewayKind === 'zacke' ? 'Zacke center rack' : 'Seilbahn sleepers';
     bars.instanceMatrix.needsUpdate = true;
     this.scene.add(bars);
-    if (this.transportMode === 'seilbahn') {
+    if (this.guidewayKind === 'seilbahn') {
       const cableCurve = new THREE.CatmullRomCurve3(this.offsetCurvePoints(0, 240, 0.34));
       const cable = new THREE.Mesh(new THREE.TubeGeometry(cableCurve, 240, 0.035, 5), rack);
       cable.name = 'Funicular haul cable';
@@ -560,7 +566,7 @@ export class TransitWorld {
   }
 
   private buildTunnels(): void {
-    if (this.transportMode === 'bus') return;
+    if (this.guidewayKind === 'bus') return;
     const mask = this.route.tunnelMask;
     if (!mask || !mask.some(Boolean)) return;
     const liningMaterial = new THREE.MeshStandardMaterial({
@@ -596,15 +602,15 @@ export class TransitWorld {
   }
 
   private buildStations(): void {
-    if (this.transportMode === 'bus') {
+    if (this.guidewayKind === 'bus') {
       this.buildBusStops();
       return;
     }
-    if (this.transportMode === 's-bahn') {
+    if (this.guidewayKind === 's-bahn') {
       this.buildSbahnStations();
       return;
     }
-    if (this.transportMode === 'zacke' || this.transportMode === 'seilbahn') {
+    if (this.guidewayKind === 'zacke' || this.guidewayKind === 'seilbahn') {
       this.buildMountainRailwayStops();
       return;
     }
@@ -869,11 +875,11 @@ export class TransitWorld {
       const group = new THREE.Group();
       group.position.copy(this.curve.getPointAt(t));
       group.rotation.y = Math.atan2(this.curve.getTangentAt(t).x, this.curve.getTangentAt(t).z);
-      const length = this.transportMode === 'seilbahn' ? 14 : 28;
+      const length = this.guidewayKind === 'seilbahn' ? 14 : 28;
       const platform = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.22, length), platformMaterial);
       platform.position.set(2.15, 0.08, 0);
       group.add(platform);
-      const shelter = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.18, 5.5), this.transportMode === 'seilbahn' ? wood : postMaterial);
+      const shelter = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.18, 5.5), this.guidewayKind === 'seilbahn' ? wood : postMaterial);
       shelter.position.set(2.2, 3.05, 0);
       group.add(shelter);
       for (const z of [-2.4, 2.4]) {
@@ -891,7 +897,7 @@ export class TransitWorld {
   }
 
   private stationIsUnderground(t: number): boolean {
-    if (this.transportMode === 'bus') return false;
+    if (this.guidewayKind === 'bus') return false;
     if (this.route.tunnelRanges?.length) {
       const distanceM = THREE.MathUtils.clamp(t, 0, 1) * this.route.routeLengthM;
       return this.route.tunnelRanges.some((range) => distanceM >= range.startM && distanceM <= range.endM);
@@ -1358,19 +1364,19 @@ export class TransitWorld {
   }
 
   private buildTrain(): void {
-    if (this.transportMode === 'bus') {
+    if (this.vehicleKind === 'bus') {
       this.buildMercedesBus();
       return;
     }
-    if (this.transportMode === 's-bahn') {
+    if (this.vehicleKind === 's-bahn') {
       this.buildSbahnTrain();
       return;
     }
-    if (this.transportMode === 'zacke') {
+    if (this.vehicleKind === 'zacke') {
       this.buildZackeTrain();
       return;
     }
-    if (this.transportMode === 'seilbahn') {
+    if (this.vehicleKind === 'seilbahn') {
       this.buildSeilbahnCar();
       return;
     }
@@ -1460,7 +1466,7 @@ export class TransitWorld {
   }
 
   private buildOpposingTraffic(): void {
-    const trainCount = this.transportMode === 'seilbahn' ? 1 : this.route.routeLengthM > 5000 ? 3 : 2;
+    const trainCount = this.guidewayKind === 'seilbahn' ? 1 : this.route.routeLengthM > 5000 ? 3 : 2;
     for (let index = 0; index < trainCount; index++) {
       const root = this.train.clone(true);
       root.name = `Opposing service ${index + 1}`;
@@ -2077,8 +2083,8 @@ export class TransitWorld {
     const sampledHeight = await (this.terrain?.sample(lat, lon) ?? Promise.resolve(0));
     if (this.routeGeo.length < 2) return sampledHeight;
     const nearest = this.nearestSelectedGeoPoint(lat, lon, this.routeGeo);
-    const innerCorridorM = this.transportMode === 's-bahn' ? 28 : this.transportMode === 'bus' ? 20 : 12;
-    const outerCorridorM = this.transportMode === 's-bahn' ? 110 : this.transportMode === 'bus' ? 80 : 52;
+    const innerCorridorM = this.guidewayKind === 's-bahn' ? 28 : this.guidewayKind === 'bus' ? 20 : 12;
+    const outerCorridorM = this.guidewayKind === 's-bahn' ? 110 : this.guidewayKind === 'bus' ? 80 : 52;
     if (nearest.distanceM >= outerCorridorM) return sampledHeight;
     const routeSurfaceHeight = this.surfaceHeightAt(nearest.t);
     const blend = THREE.MathUtils.smoothstep(nearest.distanceM, innerCorridorM, outerCorridorM);

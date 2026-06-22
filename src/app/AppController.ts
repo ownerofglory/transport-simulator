@@ -10,7 +10,7 @@ import {
   type RouteFeedManifest
 } from '../route';
 import { loadCityCatalog, resolveCities, stuttgartCity, type CityDefinition } from '../cities';
-import { transportModeLabel, type TransportMode } from '../domain/transport';
+import { resolveTransportModeDefinition, transportModeLabel, type TransportMode } from '../domain/transport';
 import { TransitWorld } from '../world';
 import { createInitialAppState, type AppState } from './AppState';
 import { SimulatorLoop } from './SimulatorLoop';
@@ -176,7 +176,7 @@ export class AppController {
     if (!this.manifest) return;
     const cacheKey = `${this.currentCity.id}:${mode}`;
     if (this.routesByCityMode.has(cacheKey)) return;
-    this.hud.showLoading(`Loading ${this.currentCity.name} ${transportModeLabel(mode)} routes...`);
+    this.hud.showLoading(`Loading ${this.currentCity.name} ${transportModeLabel(mode, this.currentCity.transportModes)} routes...`);
     const loaded = await loadRoutesForMode(
       mode,
       this.manifest,
@@ -194,6 +194,7 @@ export class AppController {
 
   private syncRouteSelectors(): void {
     this.hud.setCity(this.currentCity);
+    this.hud.setTransportModes(this.currentCity.transportModes, this.state.selectedTransportMode);
     this.updateAvailableModes();
     this.hud.setTransportMode(this.state.selectedTransportMode);
     this.hud.setRoutes(this.availableRoutes(), this.state.selectedRoute.id);
@@ -219,7 +220,13 @@ export class AppController {
   private rebuildWorld(route: DemoRoute): void {
     this.world?.dispose();
     this.appEl.replaceChildren();
-    this.world = new TransitWorld(createRouteCurve(route), route, this.availableRoutes(), this.currentCity);
+    this.world = new TransitWorld(
+      createRouteCurve(route),
+      route,
+      this.availableRoutes(),
+      this.currentCity,
+      resolveTransportModeDefinition(routeMode(route), this.currentCity.transportModes)
+    );
     this.world.mount(this.appEl);
     this.world.setInteriorLookInput(this.state.lookLeftHeld, this.state.lookRightHeld);
     this.world.setSeason(this.state.selectedSeason);
@@ -256,7 +263,7 @@ export class AppController {
   private updateNotice(): void {
     const route = this.state.selectedRoute;
     this.hud.updateNotice(
-      `${this.currentCity.shortLabel} · ${transportModeLabel(routeMode(route))} · ${route.agency ?? this.currentCity.noticeNetworkName} · ${route.description} ${this.currentCity.freeRideNotice} Source: ${route.source ?? 'demo route'}. ${this.gtfsAttribution} Vector 3D scenery: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. Relief: Mapzen Terrain Tiles on AWS Open Data.`
+      `${this.currentCity.shortLabel} · ${transportModeLabel(routeMode(route), this.currentCity.transportModes)} · ${route.agency ?? this.currentCity.noticeNetworkName} · ${route.description} ${this.currentCity.freeRideNotice} Source: ${route.source ?? 'demo route'}. ${this.gtfsAttribution} Vector 3D scenery: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. Relief: Mapzen Terrain Tiles on AWS Open Data.`
     );
   }
 

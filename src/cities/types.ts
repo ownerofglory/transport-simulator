@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { DemoRoute, RouteFeedManifest } from '../route';
 import type { LandmarkZone } from '../landmarks';
-import type { TransportMode } from '../domain/transport';
+import type { TransportMode, TransportModeDefinition } from '../domain/transport';
 
 export type CityCatalogEntry = {
   id: string;
@@ -28,6 +28,7 @@ export type CityDefinition = CityCatalogEntry & {
   menuTitle: string;
   noticeNetworkName: string;
   freeRideNotice: string;
+  transportModes: TransportModeDefinition[];
   routeManifestFallback: RouteFeedManifest;
   demoRoutesFallback: DemoRoute[];
   defaultLineByMode: Partial<Record<TransportMode, string>>;
