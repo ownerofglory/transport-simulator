@@ -100,6 +100,60 @@ npm run build:vercel
 
 Import the repository into Vercel or run `vercel`. The checked-in `vercel.json` selects the Vite preset, runs the cloud-safe build command, publishes `dist/`, and serves `sim.wasm` with the WebAssembly MIME type. After changing the Go simulator, run `npm run wasm:build` and commit the refreshed `public/sim.wasm` and `public/wasm_exec.js` artifacts before deploying.
 
+## Deploy with Docker
+
+The multi-stage Docker build compiles the Go WebAssembly simulator and the Vite client, then serves the production files with Nginx:
+
+```bash
+docker build -t stuttgart-transit-simulator .
+docker run -d \
+  --name stuttgart-transit-simulator \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  stuttgart-transit-simulator
+```
+
+Open `http://your-server:8080`. The container exposes `/healthz` for Docker, reverse-proxy, and hosting-platform health checks. For a public deployment, place the container behind Caddy, Nginx, Traefik, or another HTTPS reverse proxy and forward traffic to port `8080`.
+
+To update the deployment after pulling new code:
+
+```bash
+docker build -t stuttgart-transit-simulator .
+docker rm -f stuttgart-transit-simulator
+docker run -d \
+  --name stuttgart-transit-simulator \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  stuttgart-transit-simulator
+```
+
+## Deploy to Kubernetes with Helm
+
+The chart includes a Deployment, ClusterIP Service, optional Ingress, health probes, resources, and a ConfigMap for non-sensitive container variables. First push the Docker image to a registry, then install the chart:
+
+```bash
+helm upgrade --install stuttgart-transit \
+  deploy/helm/stuttgart-transit-simulator \
+  --namespace stuttgart-transit \
+  --create-namespace \
+  --set image.repository=ghcr.io/your-account/stuttgart-transit-simulator \
+  --set image.tag=latest
+```
+
+Enable the Ingress and set its host with a values file or command-line values:
+
+```bash
+helm upgrade --install stuttgart-transit \
+  deploy/helm/stuttgart-transit-simulator \
+  --namespace stuttgart-transit \
+  --set image.repository=ghcr.io/your-account/stuttgart-transit-simulator \
+  --set image.tag=latest \
+  --set ingress.enabled=true \
+  --set 'ingress.hosts[0].host=simulator.example.com'
+```
+
+Edit `deploy/helm/stuttgart-transit-simulator/values.yaml` to configure replicas, resources, Service type, Ingress TLS, image pull secrets, scheduling, or ConfigMap variables. Sensitive values should be supplied through a Kubernetes Secret rather than the chart ConfigMap.
+
 ## Refresh VVS GTFS route packages
 
 The app reads compact generated route packages from `public/data/vvs-stadtbahn-routes.json`.

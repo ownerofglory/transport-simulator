@@ -1,0 +1,68 @@
+replicaCount: 1
+
+image:
+  repository: stuttgart-transit-simulator
+  pullPolicy: IfNotPresent
+  tag: latest
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# These values are stored in a ConfigMap and injected into the container.
+# Add non-sensitive runtime variables here. Use a Secret for credentials.
+config:
+  TZ: Europe/Berlin
+  NGINX_ENTRYPOINT_QUIET_LOGS: "1"
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+securityContext:
+  allowPrivilegeEscalation: false
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: simulator.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # - secretName: simulator-tls
+  #   hosts:
+  #     - simulator.example.com
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 2
+  periodSeconds: 10
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+

@@ -1,0 +1,10 @@
+.git
+.gitignore
+.cache
+node_modules
+dist
+data/generated
+data/raw
+npm-debug.log*
+.DS_Store
+
