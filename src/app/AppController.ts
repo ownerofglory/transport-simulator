@@ -122,13 +122,19 @@ export class AppController {
       if (event.repeat) return;
       if (event.key === 'w' || event.key === 'ArrowUp') this.state.throttleHeld = true;
       if (event.key === 's' || event.key === 'ArrowDown') this.state.brakeHeld = true;
+      if (event.key === 'ArrowLeft') this.state.lookLeftHeld = true;
+      if (event.key === 'ArrowRight') this.state.lookRightHeld = true;
       this.setDriveInput();
+      this.setLookInput();
     });
 
     window.addEventListener('keyup', (event) => {
       if (event.key === 'w' || event.key === 'ArrowUp') this.state.throttleHeld = false;
       if (event.key === 's' || event.key === 'ArrowDown') this.state.brakeHeld = false;
+      if (event.key === 'ArrowLeft') this.state.lookLeftHeld = false;
+      if (event.key === 'ArrowRight') this.state.lookRightHeld = false;
       this.setDriveInput();
+      this.setLookInput();
     });
   }
 
@@ -185,6 +191,7 @@ export class AppController {
     this.appEl.replaceChildren();
     this.world = new TransitWorld(createRouteCurve(route), route, this.availableRoutes());
     this.world.mount(this.appEl);
+    this.world.setInteriorLookInput(this.state.lookLeftHeld, this.state.lookRightHeld);
     this.world.setSeason(this.state.selectedSeason);
     this.world.setTimeOfDay(this.state.selectedTime === 'auto' ? this.currentLocalHour() : this.state.selectedTime);
     this.miniMap.setRoute(route);
@@ -226,6 +233,10 @@ export class AppController {
   private setDriveInput(): void {
     if (this.state.selectedMode !== 'driver') return;
     this.updateFromState(this.simulator.setDriverInput(this.state.throttleHeld ? 1 : 0, this.state.brakeHeld ? 1 : 0));
+  }
+
+  private setLookInput(): void {
+    this.world?.setInteriorLookInput(this.state.lookLeftHeld, this.state.lookRightHeld);
   }
 
   private findOppositeRoute(route: DemoRoute): DemoRoute | undefined {

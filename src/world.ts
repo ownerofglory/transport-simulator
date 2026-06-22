@@ -151,6 +151,10 @@ export class TransitWorld {
     return this.cameraController.currentMode();
   }
 
+  setInteriorLookInput(leftHeld: boolean, rightHeld: boolean): void {
+    this.cameraController.setLookInput(leftHeld, rightHeld);
+  }
+
   private updateVehicleGlass(): void {
     if (!this.vehicleGlassMaterial) return;
     const mode = this.cameraController.currentMode();
@@ -1055,6 +1059,7 @@ export class TransitWorld {
     const dark = new THREE.MeshStandardMaterial({ color: 0x202428, roughness: 0.38 });
     const glass = new THREE.MeshStandardMaterial({ color: 0x8fb9c7, transparent: true, opacity: 0.42, roughness: 0.06, side: THREE.DoubleSide });
     const interior = new THREE.MeshStandardMaterial({ color: 0xe4e1d8, roughness: 0.88 });
+    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x8f9398, roughness: 0.9 });
     const seat = new THREE.MeshStandardMaterial({ color: 0x315f78, roughness: 0.88 });
     const metal = new THREE.MeshStandardMaterial({ color: 0x989d9e, roughness: 0.35, metalness: 0.7 });
     const displayMaterial = this.makeInteriorDisplayMaterial();
@@ -1068,12 +1073,15 @@ export class TransitWorld {
       body.position.y = 2.05;
       body.castShadow = true;
       car.add(body);
-      const lowerRed = new THREE.Mesh(new THREE.BoxGeometry(3.08, 0.68, 16.22), red);
-      lowerRed.position.y = 0.88;
+      this.vehiclePassengerShells.push(body);
+      const lowerRed = new THREE.Mesh(new THREE.BoxGeometry(3.08, 0.28, 16.22), red);
+      lowerRed.position.y = 0.62;
       car.add(lowerRed);
+      this.vehiclePassengerShells.push(lowerRed);
       const belt = new THREE.Mesh(new THREE.BoxGeometry(3.09, 0.18, 16.23), red);
       belt.position.y = 1.72;
       car.add(belt);
+      this.vehiclePassengerShells.push(belt);
       for (const side of [-1, 1]) {
         const band = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.08, 14.5), dark);
         band.position.set(side * 1.535, 2.43, 0);
@@ -1110,8 +1118,8 @@ export class TransitWorld {
         if (cabEnd < 0) display.rotation.y = Math.PI;
         car.add(display);
       }
-      const floor = new THREE.Mesh(new THREE.BoxGeometry(2.72, 0.08, 15.5), interior);
-      floor.position.y = 1.05;
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.12, 15.5), floorMaterial);
+      floor.position.y = 1.12;
       car.add(floor);
       const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.68, 0.08, 15.35), interior);
       ceiling.position.y = 3.32;
@@ -1170,12 +1178,20 @@ export class TransitWorld {
       const closedZ = z + direction * width * 0.24;
       const leaf = new THREE.Group();
       leaf.position.z = closedZ;
-      const panel = new THREE.Mesh(new THREE.BoxGeometry(0.12, height - 0.08, width * 0.48), doorMaterial);
-      panel.position.set(x + side * 0.03, 1.75, 0);
-      leaf.add(panel);
-      const window = new THREE.Mesh(new THREE.BoxGeometry(0.13, height * 0.44, width * 0.27), glassMaterial);
-      window.position.set(x + side * 0.045, 2.03, 0);
-      leaf.add(window);
+      for (const edge of [-1, 1] as const) {
+        const stile = new THREE.Mesh(new THREE.BoxGeometry(0.125, height - 0.08, width * 0.075), doorMaterial);
+        stile.position.set(x + side * 0.03, 1.75, edge * width * 0.205);
+        leaf.add(stile);
+      }
+      const crystal = new THREE.Mesh(new THREE.BoxGeometry(0.082, height * 0.8, width * 0.37), glassMaterial);
+      crystal.position.set(x + side * 0.018, 1.9, 0);
+      leaf.add(crystal);
+      const frameTop = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.16, width * 0.48), doorMaterial);
+      frameTop.position.set(x + side * 0.032, 2.64, 0);
+      leaf.add(frameTop);
+      const frameBottom = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.18, width * 0.48), doorMaterial);
+      frameBottom.position.set(x + side * 0.032, 0.88, 0);
+      leaf.add(frameBottom);
       car.add(leaf);
       this.vehicleDoorLeaves.push({ group: leaf, closedZ, direction });
     }
@@ -1260,30 +1276,83 @@ export class TransitWorld {
     const car = new THREE.Group();
     car.name = 'Articulated car 1929 teak funicular';
     car.userData.centerOffsetM = 0;
-    const teak = new THREE.MeshStandardMaterial({ color: 0x714326, roughness: 0.78 });
-    const trim = new THREE.MeshStandardMaterial({ color: 0x33271f, roughness: 0.72 });
-    const glass = new THREE.MeshStandardMaterial({ color: 0xadcbd1, transparent: true, opacity: 0.38, roughness: 0.08 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.7, 9.8), teak);
-    body.position.y = 1.65;
+    const teak = new THREE.MeshStandardMaterial({ color: 0x7b4b2a, roughness: 0.74 });
+    const mahogany = new THREE.MeshStandardMaterial({ color: 0x4f301f, roughness: 0.82 });
+    const brass = new THREE.MeshStandardMaterial({ color: 0xc7a04c, roughness: 0.34, metalness: 0.72 });
+    const cream = new THREE.MeshStandardMaterial({ color: 0xd9ccb1, roughness: 0.88 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0xc2e0e7, transparent: true, opacity: 0.38, roughness: 0.08 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.24, 2.72, 9.9), teak);
+    body.position.y = 1.67;
     car.add(body);
-    for (const side of [-1, 1]) {
-      for (const z of [-3.6, -1.8, 0, 1.8, 3.6]) {
-        const window = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.05, 1.2), glass);
-        window.position.set(side * 1.12, 2.05, z);
+    this.vehiclePassengerShells.push(body);
+    for (const side of [-1, 1] as const) {
+      const lowerBelt = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.32, 9.5), mahogany);
+      lowerBelt.position.set(side * 1.08, 1.12, 0);
+      car.add(lowerBelt);
+      const header = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.34, 9.5), mahogany);
+      header.position.set(side * 1.08, 2.98, 0);
+      car.add(header);
+      for (const z of [-3.7, -1.85, 0, 1.85, 3.7]) {
+        const window = new THREE.Mesh(new THREE.BoxGeometry(0.075, 1.22, 1.28), glass);
+        window.position.set(side * 1.13, 2.06, z);
         car.add(window);
-        const bench = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.16, 1.25), trim);
-        bench.position.set(side * 0.72, 1.0 + (z + 4) * 0.025, z);
-        car.add(bench);
+        const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.42, 0.12), mahogany);
+        mullion.position.set(side * 1.08, 2.04, z + 0.92);
+        car.add(mullion);
       }
     }
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.22, 10.15), trim);
-    roof.position.y = 3.1;
+    for (const end of [-1, 1] as const) {
+      const windscreen = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.24, 0.075), glass);
+      windscreen.position.set(0, 2.04, end * 4.94);
+      car.add(windscreen);
+      const endFrame = new THREE.Mesh(new THREE.BoxGeometry(2.02, 0.18, 0.12), mahogany);
+      endFrame.position.set(0, 3.01, end * 4.88);
+      car.add(endFrame);
+    }
+    const floorBase = new THREE.Mesh(new THREE.BoxGeometry(2.04, 0.12, 9.05), mahogany);
+    floorBase.position.y = 0.9;
+    car.add(floorBase);
+    for (let z = -4.15; z <= 4.15; z += 0.48) {
+      const plank = new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.028, 0.28), teak);
+      plank.position.set(0, 0.98, z);
+      car.add(plank);
+    }
+    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.04, 0.08, 8.9), cream);
+    ceiling.position.y = 3.02;
+    car.add(ceiling);
+    this.addOpaqueTransitInterior(car, 8.9, 1.0, mahogany, () => []);
+    for (const side of [-1, 1] as const) {
+      const benchBase = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.18, 8.15), mahogany);
+      benchBase.position.set(side * 0.6, 1.14, 0);
+      car.add(benchBase);
+      const benchBack = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.8, 8.0), teak);
+      benchBack.position.set(side * 0.77, 1.54, 0);
+      car.add(benchBack);
+      for (const z of [-3.1, -1.5, 0, 1.5, 3.1]) {
+        const divider = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.76, 0.06), brass);
+        divider.position.set(side * 0.7, 1.48, z);
+        car.add(divider);
+      }
+    }
+    for (const x of [-0.78, 0, 0.78]) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 2.0, 10), brass);
+      pole.position.set(x, 1.98, 0);
+      car.add(pole);
+    }
+    const handrail = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 7.9, 10), brass);
+    handrail.rotation.z = Math.PI / 2;
+    handrail.position.set(0, 2.6, 0);
+    car.add(handrail);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(2.54, 0.24, 10.2), mahogany);
+    roof.position.y = 3.14;
     car.add(roof);
+    this.vehiclePassengerShells.push(roof);
     this.vehicleGlassMaterial = glass;
     this.trainHalfLengthM = 5;
     this.trainCars.push(car);
     this.train.add(car);
     this.scene.add(this.train);
+    this.updateVehicleGlass();
   }
 
   private buildTrain(): void {
@@ -1556,13 +1625,23 @@ export class TransitWorld {
           leafGroup.name = `Sliding door leaf ${side}/${z}/${direction}`;
           leafGroup.position.z = closedZ;
 
-          const door = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.9, 0.69), doorMat);
-          door.position.set(0.055, 1.69, 0);
-          leafGroup.add(door);
+          for (const edge of [-1, 1] as const) {
+            const stile = new THREE.Mesh(new THREE.BoxGeometry(0.125, 1.9, 0.1), doorMat);
+            stile.position.set(0.055, 1.69, edge * 0.295);
+            leafGroup.add(stile);
+          }
 
-          const doorGlass = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.82, 0.4), glassMat);
-          doorGlass.position.set(0.075, 2.08, 0);
+          const doorGlass = new THREE.Mesh(new THREE.BoxGeometry(0.082, 1.5, 0.5), glassMat);
+          doorGlass.position.set(0.05, 1.9, 0);
           leafGroup.add(doorGlass);
+
+          const upperFrame = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.16, 0.69), blackMat);
+          upperFrame.position.set(0.06, 2.58, 0);
+          leafGroup.add(upperFrame);
+
+          const lowerFrame = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.22, 0.69), blackMat);
+          lowerFrame.position.set(0.06, 0.9, 0);
+          leafGroup.add(lowerFrame);
 
           const innerEdge = new THREE.Mesh(new THREE.BoxGeometry(0.13, 1.88, 0.035), blackMat);
           innerEdge.position.set(0.085, 1.69, -direction * 0.345);

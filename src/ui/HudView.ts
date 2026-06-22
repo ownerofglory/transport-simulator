@@ -98,11 +98,17 @@ export class HudView {
     this.scheduleField = this.root.querySelector('[data-field="schedule"]') as HTMLElement;
 
     this.menuButton.addEventListener('click', () => {
-      const collapsed = this.root.classList.toggle('collapsed');
-      this.menuButton.textContent = collapsed ? '+' : '−';
-      this.menuButton.setAttribute('aria-expanded', String(!collapsed));
-      this.menuButton.setAttribute('aria-label', collapsed ? 'Expand menu' : 'Collapse menu');
+      this.setCollapsed(!this.root.classList.contains('collapsed'));
     });
+
+    this.setCollapsed(window.matchMedia('(max-width: 760px)').matches);
+  }
+
+  private setCollapsed(collapsed: boolean): void {
+    this.root.classList.toggle('collapsed', collapsed);
+    this.menuButton.textContent = collapsed ? '+' : '−';
+    this.menuButton.setAttribute('aria-expanded', String(!collapsed));
+    this.menuButton.setAttribute('aria-label', collapsed ? 'Expand menu' : 'Collapse menu');
   }
 
   setRoutes(routes: DemoRoute[], selectedRouteId: string): void {

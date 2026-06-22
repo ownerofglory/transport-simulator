@@ -12,6 +12,8 @@ export type AppState = {
   paused: boolean;
   throttleHeld: boolean;
   brakeHeld: boolean;
+  lookLeftHeld: boolean;
+  lookRightHeld: boolean;
 };
 
 export function createInitialAppState(route: DemoRoute): AppState {
@@ -24,6 +26,8 @@ export function createInitialAppState(route: DemoRoute): AppState {
     selectedStartStation: 0,
     paused: false,
     throttleHeld: false,
-    brakeHeld: false
+    brakeHeld: false,
+    lookLeftHeld: false,
+    lookRightHeld: false
   };
 }

@@ -15,6 +15,8 @@ type CameraUpdateInput = {
 
 export class CameraController {
   private mode: CameraMode = 'chase';
+  private lookDirection: -1 | 0 | 1 = 0;
+  private currentLookYaw = 0;
 
   constructor(private readonly camera: THREE.PerspectiveCamera) {}
 
@@ -25,6 +27,10 @@ export class CameraController {
 
   currentMode(): CameraMode {
     return this.mode;
+  }
+
+  setLookInput(leftHeld: boolean, rightHeld: boolean): void {
+    this.lookDirection = leftHeld === rightHeld ? 0 : leftHeld ? 1 : -1;
   }
 
   update(input: CameraUpdateInput): void {
@@ -74,6 +80,16 @@ export class CameraController {
         .add(input.tangent.clone().multiplyScalar(-(input.trainHalfLengthM + 14)))
         .add(new THREE.Vector3(0, 16, 0));
       lookAt = input.position.clone().add(new THREE.Vector3(0, 2, 0));
+    }
+
+    const lookYawTarget = this.mode === 'chase' ? 0 : this.lookDirection * (Math.PI * 0.34);
+    this.currentLookYaw = THREE.MathUtils.lerp(this.currentLookYaw, lookYawTarget, this.mode === 'chase' ? 0.18 : 0.12);
+    if (Math.abs(this.currentLookYaw) > 0.001) {
+      const viewDirection = lookAt.clone().sub(camPos);
+      if (viewDirection.lengthSq() > 1e-6) {
+        viewDirection.applyAxisAngle(cameraUp, this.currentLookYaw);
+        lookAt = camPos.clone().add(viewDirection);
+      }
     }
 
     this.camera.position.lerp(camPos, this.mode === 'chase' ? 0.12 : 0.32);
