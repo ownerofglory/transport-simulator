@@ -32,6 +32,7 @@ export type CityDefinition = CityCatalogEntry & {
   mirrorRouteX?: boolean;
   routeManifestFallback: RouteFeedManifest;
   demoRoutesFallback: DemoRoute[];
+  defaultRouteIdByMode?: Partial<Record<TransportMode, string>>;
   defaultLineByMode: Partial<Record<TransportMode, string>>;
   landmarkFactory?: CityLandmarkFactory;
 };

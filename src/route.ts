@@ -206,8 +206,20 @@ export async function loadRoutesForMode(
   }
 }
 
+function inferredMirrorX(route: DemoRoute): boolean {
+  const firstControl = route.controlPoints[0];
+  const lastControl = route.controlPoints.at(-1);
+  const firstGeo = route.geoPoints?.[0];
+  const lastGeo = route.geoPoints?.at(-1);
+  if (!firstControl || !lastControl || !firstGeo || !lastGeo) return false;
+  const controlDx = lastControl[0] - firstControl[0];
+  const geoDx = lastGeo[1] - firstGeo[1];
+  if (Math.abs(controlDx) < 1e-6 || Math.abs(geoDx) < 1e-9) return false;
+  return Math.sign(controlDx) === Math.sign(geoDx);
+}
+
 export function createRouteCurve(route: DemoRoute, options?: { mirrorX?: boolean }): THREE.CatmullRomCurve3 {
-  const mirrorX = options?.mirrorX ? -1 : 1;
+  const mirrorX = (options?.mirrorX ?? inferredMirrorX(route)) ? -1 : 1;
   let points = route.controlPoints.map(([x, y, z]) => new THREE.Vector3(x * mirrorX, y, z));
   for (let pass = 0; pass < 2; pass++) {
     points = points.map((point, index, source) => {

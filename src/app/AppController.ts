@@ -165,8 +165,11 @@ export class AppController {
     const routes = this.availableRoutes(mode);
     if (routes.length === 0) return;
     this.state.selectedTransportMode = mode;
+    const defaultRouteId = this.currentCity.defaultRouteIdByMode?.[mode];
     const defaultLine = this.currentCity.defaultLineByMode[mode];
-    this.state.selectedRoute = routes.find((route) => route.line === defaultLine) ?? routes[0];
+    this.state.selectedRoute = routes.find((route) => route.id === defaultRouteId)
+      ?? routes.find((route) => route.line === defaultLine)
+      ?? routes[0];
     this.state.selectedStartStation = 0;
     this.syncRouteSelectors();
     if (restart) this.startSelectedRide();
@@ -221,7 +224,7 @@ export class AppController {
     this.world?.dispose();
     this.appEl.replaceChildren();
     this.world = new TransitWorld(
-      createRouteCurve(route, { mirrorX: this.currentCity.mirrorRouteX }),
+      createRouteCurve(route),
       route,
       this.availableRoutes(),
       this.currentCity,

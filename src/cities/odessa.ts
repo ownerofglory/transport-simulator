@@ -47,7 +47,6 @@ export const odessaCity: CityDefinition = {
   noticeNetworkName: 'Odesmiskelektrotrans',
   freeRideNotice: 'Free non-commercial simulator.',
   transportModes: odessaTransportModes,
-  mirrorRouteX: true,
   routeManifestFallback: {
     generatedAt: '2026-06-22T00:00:00.000Z',
     sourceUrl: 'https://www.oget.od.ua/',
@@ -55,11 +54,14 @@ export const odessaCity: CityDefinition = {
     attribution: 'Based on public Odesmiskelektrotrans and Odesa public transport line information.',
     modes: [
       { mode: 'tram', file: '/data/odessa/routes-tram.json', routeCount: 8, lines: ['5', '10', '17', '28'] },
-      { mode: 'trolleybus', file: '/data/odessa/routes-trolleybus.json', routeCount: 2, lines: ['7'] },
+      { mode: 'trolleybus', file: '/data/odessa/routes-trolleybus.json', routeCount: 4, lines: ['7', '10'] },
       { mode: 'bus', file: '/data/odessa/routes-bus.json', routeCount: 2, lines: ['117'] }
     ]
   },
   demoRoutesFallback: [],
+  defaultRouteIdByMode: {
+    tram: '1655942'
+  },
   defaultLineByMode: {
     tram: '28',
     trolleybus: '7',
