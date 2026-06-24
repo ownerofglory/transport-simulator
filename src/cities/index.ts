@@ -3,14 +3,16 @@ import { ulmCity } from './ulm';
 import { odessaCity } from './odessa';
 import type { CityCatalog, CityCatalogEntry, CityDefinition } from './types';
 
+// Built-in city definitions keyed by stable city id.
 const registry = new Map<string, CityDefinition>([
   [stuttgartCity.id, stuttgartCity],
   [ulmCity.id, ulmCity],
   [odessaCity.id, odessaCity]
 ]);
 
+// Fallback catalog used when public/data/cities.json cannot be loaded.
 const fallbackCatalog: CityCatalog = {
-  generatedAt: new Date(0).toISOString(),
+  generatedAt: new Date(0).toISOString(), // Unix epoch marks this as built-in fallback metadata.
   cities: [
     {
       id: stuttgartCity.id,
@@ -39,9 +41,12 @@ const fallbackCatalog: CityCatalog = {
   ]
 };
 
+/** Combines public catalog metadata with the matching built-in city behavior. */
 function mergeCityEntry(entry: CityCatalogEntry): CityDefinition {
   const registered = registry.get(entry.id);
+
   if (!registered) {
+    // Unknown catalog cities reuse Stuttgart defaults until a real code module exists.
     return {
       ...stuttgartCity,
       ...entry,
@@ -50,9 +55,10 @@ function mergeCityEntry(entry: CityCatalogEntry): CityDefinition {
       noticeNetworkName: entry.name,
       freeRideNotice: 'Free non-commercial simulator.',
       transportModes: stuttgartCity.transportModes,
-      landmarkFactory: undefined
+      landmarkFactory: undefined // avoid Stuttgart landmarks for unknown cities.
     };
   }
+
   return {
     ...registered,
     ...entry,
@@ -61,12 +67,17 @@ function mergeCityEntry(entry: CityCatalogEntry): CityDefinition {
   };
 }
 
+/** Loads the public city catalog, falling back to built-in city entries. */
 export async function loadCityCatalog(): Promise<CityCatalog> {
   try {
     const response = await fetch('/data/cities.json');
     if (!response.ok) throw new Error(`City catalog request failed: ${response.status}`);
+
     const catalog = (await response.json()) as CityCatalog;
-    if (!Array.isArray(catalog.cities) || catalog.cities.length === 0) throw new Error('City catalog did not include any cities.');
+    if (!Array.isArray(catalog.cities) || catalog.cities.length === 0) {
+      throw new Error('City catalog did not include any cities.');
+    }
+
     return catalog;
   } catch (error) {
     console.warn('Falling back to built-in city catalog.', error);
@@ -74,10 +85,12 @@ export async function loadCityCatalog(): Promise<CityCatalog> {
   }
 }
 
+/** Resolves catalog entries into full city definitions used by the app. */
 export function resolveCities(catalog: CityCatalog): CityDefinition[] {
   return catalog.cities.map(mergeCityEntry);
 }
 
+/** Returns a built-in city definition by id, defaulting to Stuttgart. */
 export function cityDefinitionById(id: string): CityDefinition {
   return registry.get(id) ?? stuttgartCity;
 }
