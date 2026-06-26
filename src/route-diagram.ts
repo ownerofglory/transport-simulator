@@ -1,5 +1,5 @@
 import type { DemoRoute } from './route';
-import type { SimulatorState } from './wasm';
+import type { SimulatorState } from './simulator/simulator-types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const STATION_GAP = 34;

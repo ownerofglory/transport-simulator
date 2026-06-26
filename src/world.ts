@@ -10,6 +10,7 @@ import type { CityDefinition } from './cities';
 import { LightingController } from './world/LightingController';
 import { CameraController } from './world/CameraController';
 import { buildTransitVehicle } from './vehicles';
+import type { VehicleInstance } from './vehicles/types';
 type GeoPoint = { lat: number; lon: number };
 
 const EARTH_M_PER_DEG_LAT = 111_320;
@@ -21,10 +22,13 @@ export class TransitWorld {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 5000);
   readonly renderer = new THREE.WebGLRenderer({ antialias: true });
-  readonly train = new THREE.Group();
+  private train = new THREE.Group();
+  private vehicle: VehicleInstance | null = null;
   readonly curve: THREE.CatmullRomCurve3;
   private readonly stationMarkers: THREE.Object3D[] = [];
   private readonly seasonalObjects = new THREE.Group();
+  // Legacy procedural helpers still reference these caches; the active vehicle
+  // path now uses `this.vehicle` from the vehicles module boundary instead.
   private readonly trainCars: THREE.Group[] = [];
   private readonly opposingTrains: { root: THREE.Group; cars: THREE.Group[]; phaseM: number }[] = [];
   private readonly vehicleWindowBands: THREE.Mesh[] = [];
@@ -170,18 +174,19 @@ export class TransitWorld {
   }
 
   private updateVehicleGlass(): void {
-    if (!this.vehicleGlassMaterial) return;
+    const glassMaterial = this.vehicle?.glassMaterial;
+    if (!glassMaterial) return;
     const mode = this.cameraController.currentMode();
     const interiorView = mode === 'passenger' || mode === 'cab';
     const cabView = mode === 'cab';
-    this.vehicleGlassMaterial.opacity = interiorView ? 0.1 : 0.58;
-    this.vehicleGlassMaterial.depthWrite = !interiorView;
-    this.vehicleGlassMaterial.color.setHex(interiorView ? 0xd9f2f8 : 0x91c7dd);
-    this.vehicleGlassMaterial.needsUpdate = true;
-    for (const band of this.vehicleWindowBands) band.visible = !interiorView;
-    for (const shell of this.vehicleCabShells) shell.visible = !cabView;
-    for (const shell of this.vehiclePassengerShells) shell.visible = !interiorView;
-    for (const display of this.vehicleCabDisplays) display.visible = !cabView;
+    glassMaterial.opacity = interiorView ? 0.1 : 0.58;
+    glassMaterial.depthWrite = !interiorView;
+    glassMaterial.color.setHex(interiorView ? 0xd9f2f8 : 0x91c7dd);
+    glassMaterial.needsUpdate = true;
+    for (const band of this.vehicle?.windowBands ?? []) band.visible = !interiorView;
+    for (const shell of this.vehicle?.cabShells ?? []) shell.visible = !cabView;
+    for (const shell of this.vehicle?.passengerShells ?? []) shell.visible = !interiorView;
+    for (const display of this.vehicle?.cabDisplays ?? []) display.visible = !cabView;
   }
 
   updateTrain(distanceM: number, doorsOpen = false, deltaSeconds = 1 / 60, nextStation = ''): void {
@@ -197,7 +202,7 @@ export class TransitWorld {
     this.landmarkGroup.visible = !underground;
     this.updateDoors(doorsOpen, deltaSeconds);
     this.updateInteriorDisplay(nextStation, doorsOpen);
-    this.updateArticulatedVehicle(this.train, this.trainCars, distanceM, 1, this.activeLaneOffsetM);
+    this.updateArticulatedVehicle(this.train, this.vehicle?.cars ?? [], distanceM, 1, this.activeLaneOffsetM);
     for (const traffic of this.opposingTrains) {
       const opposingDistance = this.guidewayKind === 'seilbahn'
         ? this.route.routeLengthM - distanceM
@@ -210,9 +215,9 @@ export class TransitWorld {
       underground,
       interiorCameraProfile: this.modeDefinition?.interiorCameraProfile ?? 'rail',
       passengerOffsetM: this.modeDefinition?.passengerOffsetM ?? 0,
-      trainHalfLengthM: this.trainHalfLengthM,
+      trainHalfLengthM: this.vehicle?.trainHalfLengthM ?? 20.15,
       train: this.train,
-      trainCars: this.trainCars
+      trainCars: this.vehicle?.cars ?? []
     });
   }
 
@@ -224,7 +229,7 @@ export class TransitWorld {
       THREE.MathUtils.clamp(deltaSeconds, 0, 0.1)
     );
     const eased = this.doorOpenAmount * this.doorOpenAmount * (3 - 2 * this.doorOpenAmount);
-    for (const leaf of this.vehicleDoorLeaves) {
+    for (const leaf of this.vehicle?.doors ?? []) {
       leaf.group.position.z = leaf.closedZ + leaf.direction * 0.72 * eased;
     }
   }
@@ -290,6 +295,7 @@ export class TransitWorld {
   dispose(): void {
     window.removeEventListener('resize', this.onResizeBound);
     this.osmScene?.dispose();
+    this.vehicle?.dispose?.();
     this.osmScene = null;
     this.terrain = null;
     this.renderer.domElement.remove();
@@ -1838,30 +1844,19 @@ export class TransitWorld {
   }
 
   private buildTrain(): void {
-    buildTransitVehicle({
-      train: this.train,
+    this.vehicle = buildTransitVehicle({
       route: this.route,
       city: this.city,
       modeDefinition: this.modeDefinition,
-      trainCars: this.trainCars,
-      vehicleWindowBands: this.vehicleWindowBands,
-      vehicleCabShells: this.vehicleCabShells,
-      vehiclePassengerShells: this.vehiclePassengerShells,
-      vehicleCabDisplays: this.vehicleCabDisplays,
-      vehicleDoorLeaves: this.vehicleDoorLeaves,
-      makeInteriorDisplayMaterial: () => this.makeInteriorDisplayMaterial(),
-      setVehicleGlassMaterial: (material) => {
-        this.vehicleGlassMaterial = material;
-      },
-      setTrainHalfLengthM: (length) => {
-        this.trainHalfLengthM = length;
-      }
+      makeInteriorDisplayMaterial: () => this.makeInteriorDisplayMaterial()
     });
-    this.scene.add(this.train);
+    this.train = this.vehicle.root;
+    this.scene.add(this.vehicle.root);
     this.updateVehicleGlass();
   }
 
   private buildOpposingTraffic(): void {
+    if (!this.vehicle) return;
     const trainCount = this.guidewayKind === 'seilbahn' ? 1 : this.route.routeLengthM > 5000 ? 3 : 2;
     for (let index = 0; index < trainCount; index++) {
       const root = this.train.clone(true);

@@ -25,18 +25,23 @@ export type VehicleVisualConfig = {
   };
 };
 
+export type VehicleInstance = {
+  root: THREE.Group;
+  cars: THREE.Group[];
+  doors: VehicleDoorLeaf[];
+  windowBands: THREE.Mesh[];
+  cabShells: THREE.Mesh[];
+  passengerShells: THREE.Mesh[];
+  cabDisplays: THREE.Mesh[];
+  glassMaterial?: THREE.MeshStandardMaterial;
+  trainHalfLengthM: number;
+  updateInteriorDisplay?: (nextStation: string, doorsOpen: boolean) => void;
+  dispose?: () => void;
+};
+
 export type VehicleBuildContext = {
-  train: THREE.Group;
   route: DemoRoute;
   city?: CityDefinition;
   modeDefinition?: TransportModeDefinition;
-  trainCars: THREE.Group[];
-  vehicleWindowBands: THREE.Mesh[];
-  vehicleCabShells: THREE.Mesh[];
-  vehiclePassengerShells: THREE.Mesh[];
-  vehicleCabDisplays: THREE.Mesh[];
-  vehicleDoorLeaves: VehicleDoorLeaf[];
   makeInteriorDisplayMaterial: () => THREE.MeshBasicMaterial;
-  setVehicleGlassMaterial: (material: THREE.MeshStandardMaterial | null) => void;
-  setTrainHalfLengthM: (length: number) => void;
 };
