@@ -34,13 +34,20 @@ for (const route of feed.routes) {
 
   for (const point of geoPoints) {
     const tile = geoToTile(point, vectorZoom);
-    const key = `${tile.x}/${tile.y}`;
-    if (!transitFeaturesByTile.has(key)) {
-      transitFeaturesByTile.set(key, await loadTransitTile(tile.x, tile.y));
+    // Load the 3x3 neighbourhood so features just outside a geoPoint's tile are found.
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const key = `${tile.x + dx}/${tile.y + dy}`;
+        if (!transitFeaturesByTile.has(key)) {
+          transitFeaturesByTile.set(key, await loadTransitTile(tile.x + dx, tile.y + dy));
+        }
+      }
     }
   }
 
-  const followsRails = route.transportMode === 'stadtbahn' || route.transportMode === 's-bahn';
+  // Include all guided rail and metro modes so tunnel/bridge detection and
+  // depth profiling run for metro, tram, and regional rail routes too.
+  const followsRails = ['stadtbahn', 's-bahn', 'metro', 'rail', 'tram'].includes(route.transportMode ?? '');
   const tunnelMask = geoPoints.map((point) => followsRails && nearestTransitKind(point, transitFeaturesByTile) === 'tunnel');
   const bridgeMask = geoPoints.map((point) => followsRails && nearestTransitKind(point, transitFeaturesByTile) === 'bridge');
   closeMaskGaps(tunnelMask, 3);
@@ -144,7 +151,7 @@ function nearestTransitKind(point, tileMap) {
       }
     }
   }
-  return nearest.distance <= 32 ? nearest.kind : null;
+  return nearest.distance <= 60 ? nearest.kind : null;
 }
 
 function pointSegmentDistance(point, a, b) {

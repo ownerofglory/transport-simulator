@@ -60,10 +60,11 @@ export class CameraController {
         // Anchor interior cameras to a car mesh so articulated vehicles turn correctly.
         input.train.updateMatrixWorld(true);
 
+        const midCar = input.trainCars[2] ?? input.trainCars[Math.floor(input.trainCars.length / 2)] ?? input.trainCars[0];
         const passengerCar = input.interiorCameraProfile === 's-bahn'
-          ? input.trainCars[2] // middle S-Bahn car gives a stable passenger view.
+          ? midCar // middle S-Bahn car gives a stable passenger view.
           : input.interiorCameraProfile === 'tram'
-            ? input.trainCars[2] // rear/middle tram section avoids front cab obstruction.
+            ? midCar // middle tram section avoids front cab obstruction; falls back if fewer than 3 cars.
             : input.trainCars[0]; // bus has one body group.
 
         const localZ = input.interiorCameraProfile === 's-bahn'

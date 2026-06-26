@@ -14,6 +14,7 @@ class ProceduralTransitVehicleFactory {
     const vehicleKind = this.context.modeDefinition?.vehicleKind ?? 'stadtbahn';
 
     if (cityId === 'odessa' && modeId === 'tram') return this.createOdessaTramVehicle();
+    if (cityId === 'lviv' && modeId === 'tram') return this.createOdessaTramVehicle(); // Ukrainian tram stand-in; shares 3-section layout.
     if (cityId === 'ulm' && modeId === 'tram') return this.createUlmTramVehicle();
     if (cityId === 'zurich' && modeId === 'tram') return this.createZurichTramVehicle();
     if (cityId === 'freiburg' && modeId === 'tram') return this.createFreiburgTramVehicle();
@@ -21,6 +22,7 @@ class ProceduralTransitVehicleFactory {
     if (vehicleKind === 's-bahn') return this.createSBahnVehicle();
     if (vehicleKind === 'zacke') return this.createZackeVehicle();
     if (vehicleKind === 'seilbahn') return this.createSeilbahnVehicle();
+    if (vehicleKind === 'ferry') return this.createFerryVehicle();
     this.createStadtbahnVehicle();
   }
 
@@ -335,6 +337,120 @@ class ProceduralTransitVehicleFactory {
     this.context.setTrainHalfLengthM(5);
     this.context.trainCars.push(car);
     this.context.train.add(car);
+  }
+
+  createFerryVehicle(): void {
+    const vessel = new THREE.Group();
+    vessel.name = 'Articulated car Bodensee ferry';
+    vessel.userData.centerOffsetM = 0;
+    const hullWhite = new THREE.MeshStandardMaterial({ color: 0xf2f4f5, roughness: 0.5, metalness: 0.08 });
+    const hullBlue = new THREE.MeshStandardMaterial({ color: 0x1f5e88, roughness: 0.44, metalness: 0.1 });
+    const deckGrey = new THREE.MeshStandardMaterial({ color: 0xaeb6bb, roughness: 0.92 });
+    const roofWhite = new THREE.MeshStandardMaterial({ color: 0xe7ecee, roughness: 0.58, metalness: 0.08 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x1a2228, roughness: 0.32, metalness: 0.26 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0xa8d1dc, transparent: true, opacity: 0.4, roughness: 0.08, side: THREE.DoubleSide });
+    const waterline = new THREE.MeshStandardMaterial({ color: 0xcf2f2a, roughness: 0.48 });
+    const displayMat = new THREE.MeshBasicMaterial({
+      map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 700, height: 128, bg: '#0f1418', fg: '#ffffff' }),
+      side: THREE.DoubleSide
+    });
+    this.context.setVehicleGlassMaterial(glass);
+
+    const lowerHull = new THREE.Mesh(new THREE.BoxGeometry(5.2, 1.5, 26.8), hullWhite);
+    lowerHull.position.y = 0.78;
+    vessel.add(lowerHull);
+    this.context.vehiclePassengerShells.push(lowerHull);
+
+    const waterlineStripe = new THREE.Mesh(new THREE.BoxGeometry(5.28, 0.16, 26.92), waterline);
+    waterlineStripe.position.y = 0.12;
+    vessel.add(waterlineStripe);
+    this.context.vehiclePassengerShells.push(waterlineStripe);
+
+    const passengerDeck = new THREE.Mesh(new THREE.BoxGeometry(4.9, 2.3, 20.2), hullWhite);
+    passengerDeck.position.y = 2.22;
+    vessel.add(passengerDeck);
+    this.context.vehiclePassengerShells.push(passengerDeck);
+
+    const bridgeDeck = new THREE.Mesh(new THREE.BoxGeometry(4.25, 1.25, 8.4), hullWhite);
+    bridgeDeck.position.set(0, 3.88, -5.1);
+    vessel.add(bridgeDeck);
+    this.context.vehicleCabShells.push(bridgeDeck);
+
+    const sideBand = new THREE.Mesh(new THREE.BoxGeometry(5.02, 0.28, 20.3), hullBlue);
+    sideBand.position.y = 2.48;
+    vessel.add(sideBand);
+    this.context.vehiclePassengerShells.push(sideBand);
+
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(4.65, 0.18, 19.8), roofWhite);
+    roof.position.y = 3.52;
+    vessel.add(roof);
+    this.context.vehiclePassengerShells.push(roof);
+
+    const bridgeRoof = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.16, 8.0), roofWhite);
+    bridgeRoof.position.set(0, 4.58, -5.1);
+    vessel.add(bridgeRoof);
+    this.context.vehicleCabShells.push(bridgeRoof);
+
+    const interiorFloor = new THREE.Mesh(new THREE.BoxGeometry(4.56, 0.08, 19.2), deckGrey);
+    interiorFloor.position.y = 1.3;
+    vessel.add(interiorFloor);
+    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.08, 19.0), roofWhite);
+    ceiling.position.y = 3.2;
+    vessel.add(ceiling);
+    this.addOpaqueTransitInterior(vessel, 18.8, 2.3, hullWhite, () => []);
+
+    for (const side of [-1, 1] as const) {
+      const windowBand = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.04, 18.3), dark);
+      windowBand.position.set(side * 2.48, 2.45, 0);
+      vessel.add(windowBand);
+      this.context.vehicleWindowBands.push(windowBand);
+      for (const z of [-7.2, -4.8, -2.4, 0, 2.4, 4.8, 7.2]) {
+        const window = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.9, 1.55), glass);
+        window.position.set(side * 2.52, 2.45, z);
+        vessel.add(window);
+      }
+    }
+
+    for (const x of [-1.35, 1.35]) {
+      const bridgeWindow = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.72, 0.08), glass);
+      bridgeWindow.position.set(x, 4.05, -9.34);
+      vessel.add(bridgeWindow);
+    }
+    const frontBridgeWindow = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.86, 0.08), glass);
+    frontBridgeWindow.position.set(0, 4.0, -9.34);
+    vessel.add(frontBridgeWindow);
+
+    const sternWindow = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.92, 0.08), glass);
+    sternWindow.position.set(0, 2.42, 10.04);
+    vessel.add(sternWindow);
+
+    const display = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.38), displayMat);
+    display.position.set(0, 4.56, -9.42);
+    vessel.add(display);
+    this.context.vehicleCabDisplays.push(display);
+
+    for (const z of [-6.8, -3.4, 0, 3.4, 6.8]) {
+      for (const x of [-1.3, 1.3]) {
+        const bench = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.16, 0.9), hullBlue);
+        bench.position.set(x, 1.7, z);
+        vessel.add(bench);
+        const back = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.74, 0.1), hullBlue);
+        back.position.set(x, 2.05, z - 0.38);
+        vessel.add(back);
+      }
+    }
+
+    const funnel = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.42, 1.1, 14), dark);
+    funnel.position.set(0, 4.15, 5.4);
+    vessel.add(funnel);
+
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.8, 10), dark);
+    mast.position.set(0, 5.25, -1.8);
+    vessel.add(mast);
+
+    this.context.setTrainHalfLengthM(13.6);
+    this.context.trainCars.push(vessel);
+    this.context.train.add(vessel);
   }
 
   createUlmTramVehicle(): void {
@@ -1589,6 +1705,10 @@ export function createZackeVehicle(context: VehicleBuildContext): void {
 
 export function createSeilbahnVehicle(context: VehicleBuildContext): void {
   new ProceduralTransitVehicleFactory(context).createSeilbahnVehicle();
+}
+
+export function createFerryVehicle(context: VehicleBuildContext): void {
+  new ProceduralTransitVehicleFactory(context).createFerryVehicle();
 }
 
 export type { VehicleBuildContext } from './types';

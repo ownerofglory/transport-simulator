@@ -89,7 +89,16 @@ export class TransitWorld {
     this.landmarkExclusions = landmarkLayer?.zones ?? [];
     this.scene.add(this.landmarkGroup);
 
-    this.camera.position.set(0, 5, -12);
+    // Place the camera near the route start so cities that use a regional
+    // coordinate origin (e.g. Bodensee) don't produce a long fly-in over
+    // empty terrain before the first frame.
+    const startPoint = this.curve.getPointAt(0);
+    const startTangent = this.curve.getTangentAt(0).normalize();
+    this.camera.position.set(
+      startPoint.x - startTangent.x * 60,
+      startPoint.y + 16,
+      startPoint.z - startTangent.z * 60
+    );
     this.lighting.initialize();
     this.buildGround();
     this.buildTrack();
@@ -97,7 +106,10 @@ export class TransitWorld {
     this.buildStations();
     this.buildTrain();
     this.buildOpposingTraffic();
-    if (this.routeGeoPoints().length >= 2) {
+    // Ferry routes are on open water — streaming land buildings from surrounding hills
+    // at their real elevation (often 200–300 m above the lake) produces floating boxes.
+    const osmEnabled = this.guidewayKind !== 'ferry' && this.routeGeoPoints().length >= 2;
+    if (osmEnabled) {
       this.osmScene = new OsmSceneStreamer(
         this.scene,
         (lat, lon) => this.projectGeo(lat, lon),
@@ -105,7 +117,7 @@ export class TransitWorld {
         this.landmarkExclusions
       );
       this.osmScene.update(this.geoPointAt(0));
-    } else {
+    } else if (this.guidewayKind !== 'ferry') {
       this.buildCityBlocks();
     }
     this.scene.add(this.seasonalObjects);
@@ -294,13 +306,13 @@ export class TransitWorld {
 
   private get activeLaneOffsetM(): number {
     if (this.guidewayKind === 'bus') return -1.65;
-    if (this.guidewayKind === 'zacke' || this.guidewayKind === 'seilbahn') return 0;
+    if (this.guidewayKind === 'zacke' || this.guidewayKind === 'seilbahn' || this.guidewayKind === 'ferry') return 0;
     return this.guidewayKind === 's-bahn' ? -2.35 : ACTIVE_TRACK_OFFSET_M;
   }
 
   private get oppositeLaneOffsetM(): number {
     if (this.guidewayKind === 'bus') return 1.65;
-    if (this.guidewayKind === 'zacke' || this.guidewayKind === 'seilbahn') return 0;
+    if (this.guidewayKind === 'zacke' || this.guidewayKind === 'seilbahn' || this.guidewayKind === 'ferry') return 0;
     return this.guidewayKind === 's-bahn' ? 2.35 : OPPOSITE_TRACK_OFFSET_M;
   }
 
@@ -360,13 +372,14 @@ export class TransitWorld {
     const routeSamples = Array.from({ length: 321 }, (_, index) => {
       const t = index / 320;
       const point = this.curve.getPointAt(t);
-      return { x: point.x, z: point.z, t };
+      return { x: point.x, y: point.y, z: point.z, t };
     });
     const positions = geometry.getAttribute('position') as THREE.BufferAttribute;
     for (let vertex = 0; vertex < positions.count; vertex++) {
       const x = positions.getX(vertex);
       const z = positions.getZ(vertex);
       let nearestDistanceSq = Number.POSITIVE_INFINITY;
+      let nearestY = 0;
       let nearestT = 0;
       for (let index = 1; index < routeSamples.length; index++) {
         const a = routeSamples[index - 1];
@@ -380,12 +393,15 @@ export class TransitWorld {
         const distanceSq = (x - closestX) ** 2 + (z - closestZ) ** 2;
         if (distanceSq < nearestDistanceSq) {
           nearestDistanceSq = distanceSq;
+          nearestY = THREE.MathUtils.lerp(a.y, b.y, segmentT);
           nearestT = THREE.MathUtils.lerp(a.t, b.t, segmentT);
         }
       }
-      // Keep a physical gap below ballast and wheel flanges. The old route-wide
-      // ribbon could overlap itself and rise above the vehicle on tight bends.
-      positions.setY(vertex, this.surfaceHeightAt(nearestT) - 0.55);
+      // Use the actual curve Y so terrain tracks the spline exactly. For tunnel
+      // segments the curve dips underground, so take max with surface height to
+      // keep the terrain mesh at ground level above tunnels.
+      const surfaceY = this.surfaceHeightAt(nearestT);
+      positions.setY(vertex, Math.max(nearestY, surfaceY) - 0.55);
     }
     positions.needsUpdate = true;
     geometry.computeVertexNormals();
@@ -426,6 +442,10 @@ export class TransitWorld {
   private buildTrack(): void {
     if (this.guidewayKind === 'bus') {
       this.buildBusRouteStreet();
+      return;
+    }
+    if (this.guidewayKind === 'ferry') {
+      this.buildFerryRoutePath();
       return;
     }
     if (this.guidewayKind === 'zacke' || this.guidewayKind === 'seilbahn') {
@@ -564,8 +584,46 @@ export class TransitWorld {
     this.scene.add(markings);
   }
 
+  private buildFerryRoutePath(): void {
+    const wakeMaterial = new THREE.MeshStandardMaterial({
+      color: 0xd4e8ef,
+      roughness: 0.24,
+      emissive: 0x5b9cc0,
+      emissiveIntensity: 0.25,
+      transparent: true,
+      opacity: 0.72
+    });
+    const channelMaterial = new THREE.MeshStandardMaterial({
+      color: 0x76b3cd,
+      roughness: 0.42,
+      transparent: true,
+      opacity: 0.28
+    });
+    const path = new THREE.Mesh(this.makeRouteStrip(0, 10.5, 0, 1, 320, 0.18), channelMaterial);
+    path.name = `Ferry route channel ${this.route.line}`;
+    path.renderOrder = 1;
+    this.scene.add(path);
+
+    const wakeCount = THREE.MathUtils.clamp(Math.floor(this.route.routeLengthM / 55), 18, 220);
+    const wakes = new THREE.InstancedMesh(new THREE.BoxGeometry(0.18, 0.04, 7.5), wakeMaterial, wakeCount);
+    const matrix = new THREE.Matrix4();
+    const rotation = new THREE.Quaternion();
+    for (let index = 0; index < wakeCount; index++) {
+      const t = (index + 0.5) / wakeCount;
+      const position = this.curve.getPointAt(t).add(new THREE.Vector3(0, 0.24, 0));
+      const tangent = this.curve.getTangentAt(t).normalize();
+      rotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(tangent.x, tangent.z));
+      matrix.compose(position, rotation, new THREE.Vector3(1, 1, 1));
+      wakes.setMatrixAt(index, matrix);
+    }
+    wakes.instanceMatrix.needsUpdate = true;
+    wakes.renderOrder = 2;
+    wakes.name = 'Ferry wake markers';
+    this.scene.add(wakes);
+  }
+
   private buildTunnels(): void {
-    if (this.guidewayKind === 'bus') return;
+    if (this.guidewayKind === 'bus' || this.guidewayKind === 'ferry') return;
     const mask = this.route.tunnelMask;
     if (!mask || !mask.some(Boolean)) return;
     const liningMaterial = new THREE.MeshStandardMaterial({
@@ -603,6 +661,10 @@ export class TransitWorld {
   private buildStations(): void {
     if (this.guidewayKind === 'bus') {
       this.buildBusStops();
+      return;
+    }
+    if (this.guidewayKind === 'ferry') {
+      this.buildFerryStops();
       return;
     }
     if (this.guidewayKind === 's-bahn') {
@@ -896,7 +958,7 @@ export class TransitWorld {
   }
 
   private stationIsUnderground(t: number): boolean {
-    if (this.guidewayKind === 'bus') return false;
+    if (this.guidewayKind === 'bus' || this.guidewayKind === 'ferry') return false;
     if (this.route.tunnelRanges?.length) {
       const distanceM = THREE.MathUtils.clamp(t, 0, 1) * this.route.routeLengthM;
       return this.route.tunnelRanges.some((range) => distanceM >= range.startM && distanceM <= range.endM);
@@ -969,6 +1031,54 @@ export class TransitWorld {
       group.add(seat);
       this.scene.add(group);
       this.stationMarkers.push(label);
+    }
+  }
+
+  private buildFerryStops(): void {
+    const dockMaterial = new THREE.MeshStandardMaterial({ color: 0xb8b3a6, roughness: 0.96 });
+    const postMaterial = new THREE.MeshStandardMaterial({ color: 0x1f5e88, roughness: 0.56 });
+    const roofMaterial = new THREE.MeshStandardMaterial({ color: 0xe6ecee, roughness: 0.48 });
+    const glassMaterial = new THREE.MeshStandardMaterial({
+      color: 0xb6dbe4,
+      transparent: true,
+      opacity: 0.3,
+      roughness: 0.12,
+      side: THREE.DoubleSide
+    });
+    for (const station of this.route.stations) {
+      const t = THREE.MathUtils.clamp(station.distanceM / this.route.routeLengthM, 0, 1);
+      const tangent = this.curve.getTangentAt(t).normalize();
+      const normal = this.normalAt(t);
+      const group = new THREE.Group();
+      group.name = `Ferry dock ${station.name}`;
+      group.position.copy(this.curve.getPointAt(t)).add(normal.multiplyScalar(6));
+      group.rotation.y = Math.atan2(tangent.x, tangent.z);
+
+      const pier = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.28, 18), dockMaterial);
+      pier.position.y = 0.08;
+      group.add(pier);
+      const pontoon = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.4, 8.5), dockMaterial);
+      pontoon.position.set(0, -0.12, -4.2);
+      group.add(pontoon);
+      const shelterRoof = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.14, 5.4), roofMaterial);
+      shelterRoof.position.set(0, 2.55, 3.1);
+      group.add(shelterRoof);
+      for (const x of [-1.2, 1.2]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.4, 0.12), postMaterial);
+        post.position.set(x, 1.26, 3.1);
+        group.add(post);
+      }
+      const glassBack = new THREE.Mesh(new THREE.BoxGeometry(2.85, 1.8, 0.08), glassMaterial);
+      glassBack.position.set(0, 1.55, 4.55);
+      group.add(glassBack);
+      const sign = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: makeLabelTexture(`${this.route.line}  ${station.name}`, { width: 768, height: 160, bg: '#1f5e88', fg: '#ffffff' })
+      }));
+      sign.position.set(0, 3.3, 3.1);
+      sign.scale.set(7, 1.45, 1);
+      group.add(sign);
+      this.stationMarkers.push(sign);
+      this.scene.add(group);
     }
   }
 

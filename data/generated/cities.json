@@ -56,6 +56,14 @@
       "description": "Free, non-commercial simulator for Mexico City public transport.",
       "manifestFile": "/data/mexico-city/route-manifest.json",
       "defaultTransportMode": "metro"
+    },
+    {
+      "id": "bodo",
+      "name": "Bodensee",
+      "title": "Bodensee Transit Simulator",
+      "description": "Free, non-commercial simulator for the bodo Bodensee-Oberschwaben regional network.",
+      "manifestFile": "/data/bodo/route-manifest.json",
+      "defaultTransportMode": "ferry"
     }
   ]
 }

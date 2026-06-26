@@ -5,6 +5,7 @@ import { zurichCity } from './zurich';
 import { freiburgCity } from './freiburg';
 import { lvivCity } from './lviv';
 import { mexicoCity } from './mexico-city';
+import { bodoCity } from './bodo';
 import type { CityCatalog, CityCatalogEntry, CityDefinition } from './types';
 
 // Built-in city definitions keyed by stable city id.
@@ -15,7 +16,8 @@ const registry = new Map<string, CityDefinition>([
   [zurichCity.id, zurichCity],
   [freiburgCity.id, freiburgCity],
   [lvivCity.id, lvivCity],
-  [mexicoCity.id, mexicoCity]
+  [mexicoCity.id, mexicoCity],
+  [bodoCity.id, bodoCity]
 ]);
 
 // Fallback catalog used when public/data/cities.json cannot be loaded.
@@ -77,6 +79,14 @@ const fallbackCatalog: CityCatalog = {
       description: mexicoCity.description,
       manifestFile: mexicoCity.manifestFile,
       defaultTransportMode: mexicoCity.defaultTransportMode
+    },
+    {
+      id: bodoCity.id,
+      name: bodoCity.name,
+      title: bodoCity.title,
+      description: bodoCity.description,
+      manifestFile: bodoCity.manifestFile,
+      defaultTransportMode: bodoCity.defaultTransportMode
     }
   ]
 };
@@ -142,4 +152,5 @@ export { zurichCity };
 export { freiburgCity };
 export { lvivCity };
 export { mexicoCity };
+export { bodoCity };
 export type { CityCatalog, CityCatalogEntry, CityDefinition } from './types';

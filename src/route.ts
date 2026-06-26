@@ -249,15 +249,14 @@ export function createRouteCurve(route: DemoRoute, options?: { mirrorX?: boolean
   const mirrorX = (options?.mirrorX ?? inferredMirrorX(route)) ? -1 : 1;
   let points = route.controlPoints.map(([x, y, z]) => new THREE.Vector3(x * mirrorX, y, z));
 
-  // Two light smoothing passes reduce jagged GTFS-derived control points without changing endpoints.
+  // Two light smoothing passes reduce jagged GTFS-derived XZ shapes without changing endpoints.
+  // Y is excluded: elevation is already correctly set by terrain enrichment and must match surfaceHeightsM.
   for (let pass = 0; pass < 2; pass++) {
     points = points.map((point, index, source) => {
       if (index === 0 || index === source.length - 1) return point.clone();
-
-      return source[index - 1].clone()
-        .multiplyScalar(0.2) // previous-point blend weight
-        .add(point.clone().multiplyScalar(0.6)) // current-point blend weight
-        .add(source[index + 1].clone().multiplyScalar(0.2)); // next-point blend weight
+      const blendedX = source[index - 1].x * 0.2 + point.x * 0.6 + source[index + 1].x * 0.2;
+      const blendedZ = source[index - 1].z * 0.2 + point.z * 0.6 + source[index + 1].z * 0.2;
+      return new THREE.Vector3(blendedX, point.y, blendedZ);
     });
   }
 
