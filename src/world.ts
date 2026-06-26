@@ -8,7 +8,7 @@ import type { GuidewayKind, TransportModeDefinition, VehicleKind } from './domai
 import type { Season } from './app/types';
 import type { CityDefinition } from './cities';
 import { LightingController } from './world/LightingController';
-import { CameraController } from './world/CameraController';
+import { CameraController, type CameraMode } from './world/CameraController';
 import { buildTransitVehicle } from './vehicles';
 import type { VehicleInstance } from './vehicles/types';
 type GeoPoint = { lat: number; lon: number };
@@ -163,8 +163,18 @@ export class TransitWorld {
     this.lighting.setTimeOfDay(hour);
   }
 
-  cycleCamera(): string {
+  cycleCamera(): CameraMode {
     this.cameraController.cycle();
+    this.updateVehicleGlass();
+    return this.cameraController.currentMode();
+  }
+
+  currentCameraMode(): CameraMode {
+    return this.cameraController.currentMode();
+  }
+
+  setCameraMode(mode: CameraMode): CameraMode {
+    this.cameraController.setMode(mode);
     this.updateVehicleGlass();
     return this.cameraController.currentMode();
   }

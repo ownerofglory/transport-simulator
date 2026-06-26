@@ -37,6 +37,12 @@ export class CameraController {
     return this.mode;
   }
 
+  /** Restores a specific camera mode when rebuilding the world from selection state. */
+  setMode(mode: CameraMode): CameraMode {
+    this.mode = mode;
+    return this.mode;
+  }
+
   /** Stores held look direction from keyboard/touch input. */
   setLookInput(leftHeld: boolean, rightHeld: boolean): void {
     this.lookDirection = leftHeld === rightHeld ? 0 : leftHeld ? 1 : -1;

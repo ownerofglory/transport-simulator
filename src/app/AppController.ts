@@ -13,10 +13,12 @@ import { loadCityCatalog, resolveCities, stuttgartCity, type CityDefinition } fr
 import { resolveTransportModeDefinition, transportModeLabel, type TransportMode } from '../domain/transport';
 import { TransitWorld } from '../world';
 import { createInitialAppState, type AppState } from './AppState';
+import { readUrlState, writeUrlState } from './AppUrlState';
 import { SimulatorLoop } from './SimulatorLoop';
 import { HudView } from '../ui/HudView';
 import { SimulatorClient } from '../simulator/SimulatorClient';
 import type { SimulatorConfig, SimulatorState } from '../simulator/simulator-types';
+import type { CameraMode } from '../world/CameraController';
 
 // Delay before automatically starting the opposite direction after reaching a terminal.
 const TERMINAL_TURNAROUND_MS = 4000;
@@ -49,6 +51,7 @@ export class AppController {
   private activeLookTouchId: number | null = null;
   private touchLookStartX = 0;
   private touchLookStartY = 0;
+  private selectedCameraMode: CameraMode = 'chase';
 
   // Shared animation/simulator loop; callbacks keep controller state as the single owner.
   private readonly loop = new SimulatorLoop({
@@ -82,18 +85,29 @@ export class AppController {
   /** Bootstraps catalog, initial routes, WASM simulator, and the render loop. */
   async start(): Promise<void> {
     this.hud.showLoading('Loading city catalog...');
+    const urlState = readUrlState();
 
     const catalog = await loadCityCatalog();
     this.cityCatalog = resolveCities(catalog);
 
-    this.currentCity = this.cityCatalog.find((city) => city.id === this.state.selectedCityId) ?? this.cityCatalog[0] ?? stuttgartCity;
+    this.state.selectedSeason = urlState.season ?? this.state.selectedSeason;
+    this.state.selectedTime = urlState.time ?? this.state.selectedTime;
+    this.state.selectedMode = urlState.rideMode ?? this.state.selectedMode;
+    this.selectedCameraMode = urlState.cameraMode ?? this.selectedCameraMode;
+
+    this.currentCity = this.cityCatalog.find((city) => city.id === (urlState.city ?? this.state.selectedCityId)) ?? this.cityCatalog[0] ?? stuttgartCity;
     this.state.selectedCityId = this.currentCity.id;
 
     this.hud.setCities(this.cityCatalog, this.currentCity.id);
     this.hud.setCity(this.currentCity);
 
     await this.loadManifestForCity(this.currentCity);
-    await this.selectTransportMode(this.currentCity.defaultTransportMode, false);
+    await this.selectTransportMode(
+      this.resolveTransportModeFromUrl(urlState.transportMode),
+      false,
+      urlState.routeId,
+      urlState.startStationIndex
+    );
 
     this.hud.showLoading('Loading Go/WASM simulator...');
     await this.simulator.load();
@@ -127,11 +141,13 @@ export class AppController {
     this.hud.onSeasonChange((season) => {
       this.state.selectedSeason = season;
       this.world?.setSeason(season);
+      this.updateUrlState();
     });
 
     this.hud.onTimeChange((time) => {
       this.state.selectedTime = time;
       this.world?.setTimeOfDay(time === 'auto' ? this.currentLocalHour() : time);
+      this.updateUrlState();
     });
 
     this.hud.onPause(() => {
@@ -141,7 +157,8 @@ export class AppController {
     });
 
     this.hud.onCamera(() => {
-      this.world?.cycleCamera();
+      this.selectedCameraMode = (this.world?.cycleCamera() as CameraMode | undefined) ?? this.selectedCameraMode;
+      this.updateUrlState();
 
       const state = this.loop.currentState();
       if (state && this.world) {
@@ -260,7 +277,12 @@ export class AppController {
   }
 
   /** Selects a transport mode, lazily loading routes for that city/mode if needed. */
-  private async selectTransportMode(mode: TransportMode, restart = true): Promise<void> {
+  private async selectTransportMode(
+    mode: TransportMode,
+    restart = true,
+    preferredRouteId?: string,
+    preferredStartStationIndex?: number
+  ): Promise<void> {
     if (!this.manifest) return;
 
     await this.ensureModeLoaded(mode);
@@ -273,14 +295,17 @@ export class AppController {
     const defaultRouteId = this.currentCity.defaultRouteIdByMode?.[mode];
     const defaultLine = this.currentCity.defaultLineByMode[mode];
 
-    this.state.selectedRoute = routes.find((route) => route.id === defaultRouteId)
+    this.state.selectedRoute = routes.find((route) => route.id === preferredRouteId)
+      ?? routes.find((route) => route.id === defaultRouteId)
       ?? routes.find((route) => route.line === defaultLine)
       ?? routes[0];
 
-    this.state.selectedStartStation = 0;
+    const requestedStationIndex = preferredStartStationIndex ?? 0;
+    this.state.selectedStartStation = Math.max(0, Math.min(this.state.selectedRoute.stations.length - 1, requestedStationIndex));
     this.syncRouteSelectors();
 
     if (restart) this.startSelectedRide();
+    else this.updateUrlState();
   }
 
   /** Loads route packages for a city/mode once and stores them in the local cache. */
@@ -350,6 +375,7 @@ export class AppController {
     );
 
     this.world.mount(this.appEl);
+    this.world.setCameraMode(this.selectedCameraMode);
     this.world.setInteriorLookInput(this.state.lookLeftHeld, this.state.lookRightHeld);
     this.world.setSeason(this.state.selectedSeason);
     this.world.setTimeOfDay(this.state.selectedTime === 'auto' ? this.currentLocalHour() : this.state.selectedTime);
@@ -369,6 +395,7 @@ export class AppController {
     this.updateFromState(this.simulator.init(this.routeConfig(this.state.selectedRoute)));
     this.updateNotice();
     this.hud.hideLoading();
+    this.updateUrlState();
   }
 
   /** Stores simulator state and refreshes HUD/diagram immediately. */
@@ -470,5 +497,16 @@ export class AppController {
   private updateAvailableModes(): void {
     const modes = this.manifest?.modes.map((mode) => mode.mode) ?? [this.currentCity.defaultTransportMode];
     this.hud.setAvailableTransportModes(modes, this.state.selectedTransportMode);
+  }
+
+  private resolveTransportModeFromUrl(requestedMode?: TransportMode): TransportMode {
+    if (!requestedMode) return this.currentCity.defaultTransportMode;
+    return this.currentCity.transportModes.some((definition) => definition.id === requestedMode)
+      ? requestedMode
+      : this.currentCity.defaultTransportMode;
+  }
+
+  private updateUrlState(): void {
+    writeUrlState(this.state, this.selectedCameraMode);
   }
 }
