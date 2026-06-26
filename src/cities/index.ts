@@ -80,14 +80,6 @@ const fallbackCatalog: CityCatalog = {
       manifestFile: mexicoCity.manifestFile,
       defaultTransportMode: mexicoCity.defaultTransportMode
     },
-    {
-      id: bodoCity.id,
-      name: bodoCity.name,
-      title: bodoCity.title,
-      description: bodoCity.description,
-      manifestFile: bodoCity.manifestFile,
-      defaultTransportMode: bodoCity.defaultTransportMode
-    }
   ]
 };
 
