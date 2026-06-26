@@ -24,6 +24,14 @@
       "description": "Free, non-commercial simulator for Odesa urban transport.",
       "manifestFile": "/data/odessa/route-manifest.json",
       "defaultTransportMode": "tram"
+    },
+    {
+      "id": "zurich",
+      "name": "Zurich",
+      "title": "Zurich Transit Simulator",
+      "description": "Free, non-commercial simulator for VBZ and Zürich-area public transport.",
+      "manifestFile": "/data/zurich/route-manifest.json",
+      "defaultTransportMode": "tram"
     }
   ]
 }
