@@ -115,7 +115,7 @@ export class CameraController {
       lookAt = input.position.clone().add(new THREE.Vector3(0, 2, 0)); // target near vehicle center mass.
     }
 
-    const lookYawTarget = this.mode === 'chase' ? 0 : this.lookDirection * (Math.PI * 0.34); // about 61° side-look.
+    const lookYawTarget = this.lookDirection * (this.mode === 'chase' ? Math.PI * 0.18 : Math.PI * 0.34); // chase gets a gentler side-look than interior views.
     this.currentLookYaw = THREE.MathUtils.lerp(
       this.currentLookYaw,
       lookYawTarget,

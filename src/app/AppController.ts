@@ -23,6 +23,9 @@ const TERMINAL_TURNAROUND_MS = 4000;
 
 /** Coordinates HUD, city/route loading, simulator state, world rendering, and input. */
 export class AppController {
+  private static readonly TOUCH_LOOK_DEADZONE_PX = 24;
+  private static readonly TOUCH_LOOK_MAX_VERTICAL_DRIFT_PX = 64;
+
   private readonly hud = new HudView(document.body);
   private readonly simulator = new SimulatorClient();
 
@@ -43,6 +46,9 @@ export class AppController {
   private currentCity: CityDefinition = stuttgartCity;
   private manifest: RouteFeedManifest | null = null;
   private gtfsAttribution = 'VVS GTFS route package has not loaded yet.';
+  private activeLookTouchId: number | null = null;
+  private touchLookStartX = 0;
+  private touchLookStartY = 0;
 
   // Shared animation/simulator loop; callbacks keep controller state as the single owner.
   private readonly loop = new SimulatorLoop({
@@ -70,6 +76,7 @@ export class AppController {
 
     this.bindHud();
     this.bindKeyboard();
+    this.bindTouchLook();
   }
 
   /** Bootstraps catalog, initial routes, WASM simulator, and the render loop. */
@@ -176,6 +183,59 @@ export class AppController {
       this.setDriveInput();
       this.setLookInput();
     });
+  }
+
+  /** Lets mobile users look left/right with a horizontal swipe on the 3D viewport. */
+  private bindTouchLook(): void {
+    this.appEl.addEventListener('touchstart', (event) => {
+      if (event.touches.length !== 1) return;
+
+      const touch = event.touches[0];
+      if (!touch) return;
+
+      this.activeLookTouchId = touch.identifier;
+      this.touchLookStartX = touch.clientX;
+      this.touchLookStartY = touch.clientY;
+    }, { passive: true });
+
+    this.appEl.addEventListener('touchmove', (event) => {
+      if (this.activeLookTouchId == null) return;
+
+      const touch = Array.from(event.touches).find((entry) => entry.identifier === this.activeLookTouchId);
+      if (!touch) return;
+
+      const deltaX = touch.clientX - this.touchLookStartX;
+      const deltaY = touch.clientY - this.touchLookStartY;
+
+      if (Math.abs(deltaY) > AppController.TOUCH_LOOK_MAX_VERTICAL_DRIFT_PX) {
+        this.clearLookTouch();
+        return;
+      }
+
+      const shouldLookLeft = deltaX > AppController.TOUCH_LOOK_DEADZONE_PX;
+      const shouldLookRight = deltaX < -AppController.TOUCH_LOOK_DEADZONE_PX;
+
+      if (
+        this.state.lookLeftHeld !== shouldLookLeft
+        || this.state.lookRightHeld !== shouldLookRight
+      ) {
+        this.state.lookLeftHeld = shouldLookLeft;
+        this.state.lookRightHeld = shouldLookRight;
+        this.setLookInput();
+      }
+    }, { passive: true });
+
+    const releaseTouch = (event: TouchEvent) => {
+      if (this.activeLookTouchId == null) return;
+
+      const changed = Array.from(event.changedTouches).some((touch) => touch.identifier === this.activeLookTouchId);
+      if (!changed) return;
+
+      this.clearLookTouch();
+    };
+
+    this.appEl.addEventListener('touchend', releaseTouch, { passive: true });
+    this.appEl.addEventListener('touchcancel', releaseTouch, { passive: true });
   }
 
   /** Switches active city, loads its manifest, and selects its default transport mode. */
@@ -351,6 +411,17 @@ export class AppController {
   /** Sends current cab/passenger look state to the world camera controller. */
   private setLookInput(): void {
     this.world?.setInteriorLookInput(this.state.lookLeftHeld, this.state.lookRightHeld);
+  }
+
+  /** Clears any active touch look gesture and recenters the camera view. */
+  private clearLookTouch(): void {
+    this.activeLookTouchId = null;
+
+    if (!this.state.lookLeftHeld && !this.state.lookRightHeld) return;
+
+    this.state.lookLeftHeld = false;
+    this.state.lookRightHeld = false;
+    this.setLookInput();
   }
 
   /** Finds the best same-line route going back from terminal to origin. */
