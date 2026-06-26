@@ -17,11 +17,11 @@ const freiburgTransportModes: TransportModeDefinition[] = [
     id: 's-bahn',
     label: 'S-Bahn',
     available: true,
-    vehicleFamily: 'Breisgau S-Bahn',
+    vehicleFamily: 'Breisgau S-Bahn (bwegt / Coradia Continental / Mireo style)',
     vehicleKind: 's-bahn',
     guidewayKind: 's-bahn',
     interiorCameraProfile: 's-bahn',
-    lineAccentColor: '#c62828'
+    lineAccentColor: '#f2d21b'
   },
   {
     id: 'bus',

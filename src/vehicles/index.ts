@@ -18,6 +18,7 @@ class ProceduralTransitVehicleFactory {
     if (cityId === 'ulm' && modeId === 'tram') return this.createUlmTramVehicle();
     if (cityId === 'zurich' && modeId === 'tram') return this.createZurichTramVehicle();
     if (cityId === 'freiburg' && modeId === 'tram') return this.createFreiburgTramVehicle();
+    if (cityId === 'freiburg' && modeId === 's-bahn') return this.createFreiburgSBahnVehicle();
     if (vehicleKind === 'bus') return this.createBusVehicle();
     if (vehicleKind === 's-bahn') return this.createSBahnVehicle();
     if (vehicleKind === 'zacke') return this.createZackeVehicle();
@@ -214,6 +215,131 @@ class ProceduralTransitVehicleFactory {
     });
     this.context.setTrainHalfLengthM(34.2);
     this.addPantograph(new THREE.Vector3(0, 3.86, 8.5), dark);
+  }
+
+  createFreiburgSBahnVehicle(): void {
+    const shell = new THREE.MeshStandardMaterial({ color: 0xf1f2ec, roughness: 0.42, metalness: 0.08 });
+    const bwegtYellow = new THREE.MeshStandardMaterial({ color: 0xf2d21b, roughness: 0.38, metalness: 0.06 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x1f2327, roughness: 0.28, metalness: 0.22 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x95becb, transparent: true, opacity: 0.42, roughness: 0.06, side: THREE.DoubleSide });
+    const interior = new THREE.MeshStandardMaterial({ color: 0xe3e0d6, roughness: 0.88 });
+    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x868b8f, roughness: 0.92 });
+    const seat = new THREE.MeshStandardMaterial({ color: 0x2f3235, roughness: 0.84 });
+    const accentSeat = new THREE.MeshStandardMaterial({ color: 0xf2d21b, roughness: 0.82 });
+    const metal = new THREE.MeshStandardMaterial({ color: 0x9a9fa1, roughness: 0.34, metalness: 0.72 });
+    const displayMaterial = this.context.makeInteriorDisplayMaterial();
+    this.context.setVehicleGlassMaterial(glass);
+
+    const centers = [-18.9, -6.3, 6.3, 18.9];
+    centers.forEach((center, index) => {
+      const car = new THREE.Group();
+      car.name = `Articulated car bwegt regional section ${index + 1}`;
+      car.userData.centerOffsetM = center;
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(2.98, 3.26, 12.15), shell);
+      body.position.y = 2.02;
+      body.castShadow = true;
+      car.add(body);
+      this.context.vehiclePassengerShells.push(body);
+
+      const lowerYellow = new THREE.Mesh(new THREE.BoxGeometry(3.02, 0.32, 12.2), bwegtYellow);
+      lowerYellow.position.y = 0.64;
+      car.add(lowerYellow);
+      this.context.vehiclePassengerShells.push(lowerYellow);
+
+      const roofBand = new THREE.Mesh(new THREE.BoxGeometry(2.88, 0.14, 12.05), dark);
+      roofBand.position.y = 3.46;
+      car.add(roofBand);
+      this.context.vehiclePassengerShells.push(roofBand);
+
+      for (const side of [-1, 1] as const) {
+        const band = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.14, 10.8), dark);
+        band.position.set(side * 1.515, 2.42, 0);
+        car.add(band);
+        this.context.vehicleWindowBands.push(band);
+        for (const z of [-4.55, -3.0, -0.95, 0.95, 3.0, 4.55]) {
+          const window = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.92, 1.22), glass);
+          window.position.set(side * 1.53, 2.42, z);
+          car.add(window);
+        }
+        this.addSlidingVehicleDoor(car, side * 1.53, -1.95, bwegtYellow, glass, dark, 1.72, 2.05);
+        this.addSlidingVehicleDoor(car, side * 1.53, 1.95, bwegtYellow, glass, dark, 1.72, 2.05);
+      }
+
+      if (index === 0 || index === centers.length - 1) {
+        const cabEnd = index === 0 ? -1 : 1;
+        const nose = this.makeCabNose(dark);
+        nose.scale.set(1.16, 1.04, 0.76);
+        nose.position.set(0, 2.02, cabEnd * 6.14);
+        if (cabEnd > 0) nose.rotation.y = Math.PI;
+        car.add(nose);
+        this.context.vehicleCabShells.push(nose);
+
+        const face = new THREE.Mesh(new THREE.BoxGeometry(2.78, 2.52, 0.12), dark);
+        face.position.set(0, 1.94, cabEnd * 6.31);
+        car.add(face);
+        this.context.vehicleCabShells.push(face);
+
+        const windscreen = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.96, 0.06), glass);
+        windscreen.position.set(0, 2.58, cabEnd * 6.39);
+        car.add(windscreen);
+
+        const yellowMask = new THREE.Mesh(new THREE.BoxGeometry(2.86, 0.34, 0.1), bwegtYellow);
+        yellowMask.position.set(0, 0.84, cabEnd * 6.25);
+        car.add(yellowMask);
+
+        const display = new THREE.Mesh(new THREE.PlaneGeometry(1.98, 0.4), new THREE.MeshBasicMaterial({
+          map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 700, height: 128, bg: '#111', fg: '#f2d21b' }),
+          side: THREE.DoubleSide
+        }));
+        display.position.set(0, 3.12, cabEnd * 6.47);
+        if (cabEnd < 0) display.rotation.y = Math.PI;
+        car.add(display);
+      }
+
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(2.92, 0.12, 11.55), floorMaterial);
+      floor.position.y = 1.12;
+      car.add(floor);
+      const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.66, 0.08, 11.35), interior);
+      ceiling.position.y = 3.28;
+      car.add(ceiling);
+      this.addOpaqueTransitInterior(car, 11.35, 1.34, interior, () => [-1.95, 1.95]);
+
+      for (const z of [-4.2, -2.65, 0, 2.65, 4.2]) {
+        for (const [x, material] of [[-0.98, seat], [-0.56, accentSeat], [0.56, accentSeat], [0.98, seat]] as const) {
+          const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.13, 0.5), material);
+          cushion.position.set(x, 1.36, z);
+          car.add(cushion);
+          const back = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.66, 0.1), material);
+          back.position.set(x, 1.7, z - 0.24);
+          car.add(back);
+        }
+      }
+
+      for (const z of [-1.95, 0, 1.95]) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2.0, 8), metal);
+        pole.position.set(0, 2.08, z);
+        car.add(pole);
+      }
+
+      const monitor = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.5), displayMaterial);
+      monitor.position.set(0, 2.92, 0.1);
+      monitor.rotation.y = Math.PI;
+      monitor.renderOrder = 18;
+      car.add(monitor);
+
+      for (const z of [-3.95, 3.95]) {
+        const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.62, 0.4, 1.7), dark);
+        bogie.position.set(0, 0.48, z);
+        car.add(bogie);
+      }
+
+      this.context.trainCars.push(car);
+      this.context.train.add(car);
+    });
+
+    this.context.setTrainHalfLengthM(25.6);
+    this.addPantograph(new THREE.Vector3(0, 3.82, 6.6), dark);
   }
 
   createZackeVehicle(): void {
