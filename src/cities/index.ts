@@ -3,6 +3,8 @@ import { ulmCity } from './ulm';
 import { odessaCity } from './odessa';
 import { zurichCity } from './zurich';
 import { freiburgCity } from './freiburg';
+import { lvivCity } from './lviv';
+import { mexicoCity } from './mexico-city';
 import type { CityCatalog, CityCatalogEntry, CityDefinition } from './types';
 
 // Built-in city definitions keyed by stable city id.
@@ -11,7 +13,9 @@ const registry = new Map<string, CityDefinition>([
   [ulmCity.id, ulmCity],
   [odessaCity.id, odessaCity],
   [zurichCity.id, zurichCity],
-  [freiburgCity.id, freiburgCity]
+  [freiburgCity.id, freiburgCity],
+  [lvivCity.id, lvivCity],
+  [mexicoCity.id, mexicoCity]
 ]);
 
 // Fallback catalog used when public/data/cities.json cannot be loaded.
@@ -57,6 +61,22 @@ const fallbackCatalog: CityCatalog = {
       description: freiburgCity.description,
       manifestFile: freiburgCity.manifestFile,
       defaultTransportMode: freiburgCity.defaultTransportMode
+    },
+    {
+      id: lvivCity.id,
+      name: lvivCity.name,
+      title: lvivCity.title,
+      description: lvivCity.description,
+      manifestFile: lvivCity.manifestFile,
+      defaultTransportMode: lvivCity.defaultTransportMode
+    },
+    {
+      id: mexicoCity.id,
+      name: mexicoCity.name,
+      title: mexicoCity.title,
+      description: mexicoCity.description,
+      manifestFile: mexicoCity.manifestFile,
+      defaultTransportMode: mexicoCity.defaultTransportMode
     }
   ]
 };
@@ -120,4 +140,6 @@ export { ulmCity };
 export { odessaCity };
 export { zurichCity };
 export { freiburgCity };
+export { lvivCity };
+export { mexicoCity };
 export type { CityCatalog, CityCatalogEntry, CityDefinition } from './types';

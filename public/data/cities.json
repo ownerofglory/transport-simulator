@@ -40,6 +40,22 @@
       "description": "Free, non-commercial simulator for Freiburg and the RVF urban network.",
       "manifestFile": "/data/freiburg/route-manifest.json",
       "defaultTransportMode": "tram"
+    },
+    {
+      "id": "lviv",
+      "name": "Lviv",
+      "title": "Lviv Transit Simulator",
+      "description": "Free, non-commercial simulator for Lviv public transport.",
+      "manifestFile": "/data/lviv/route-manifest.json",
+      "defaultTransportMode": "tram"
+    },
+    {
+      "id": "mexico-city",
+      "name": "Mexico City",
+      "title": "Mexico City Transit Simulator",
+      "description": "Free, non-commercial simulator for Mexico City public transport.",
+      "manifestFile": "/data/mexico-city/route-manifest.json",
+      "defaultTransportMode": "metro"
     }
   ]
 }
