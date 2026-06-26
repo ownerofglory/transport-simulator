@@ -9,6 +9,7 @@ import type { Season } from './app/types';
 import type { CityDefinition } from './cities';
 import { LightingController } from './world/LightingController';
 import { CameraController } from './world/CameraController';
+import { buildTransitVehicle } from './vehicles';
 type GeoPoint = { lat: number; lon: number };
 
 const EARTH_M_PER_DEG_LAT = 111_320;
@@ -16,8 +17,6 @@ const TRACK_GAUGE_M = 2.1;
 const TRACK_CENTER_SPACING_M = 4.2;
 const ACTIVE_TRACK_OFFSET_M = -TRACK_CENTER_SPACING_M / 2;
 const OPPOSITE_TRACK_OFFSET_M = TRACK_CENTER_SPACING_M / 2;
-const DOUBLE_FORMATION_LINES = new Set(['U1', 'U6', 'U7', 'U11', 'U12', 'U19']);
-
 export class TransitWorld {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 5000);
@@ -1729,111 +1728,25 @@ export class TransitWorld {
   }
 
   private buildTrain(): void {
-    if (this.city?.id === 'odessa' && this.modeDefinition?.id === 'tram') {
-      this.buildOdessaK1T306Tram();
-      return;
-    }
-    if (this.city?.id === 'ulm' && this.modeDefinition?.id === 'tram') {
-      this.buildUlmAvenioMTram();
-      return;
-    }
-    if (this.vehicleKind === 'bus') {
-      this.buildMercedesBus();
-      return;
-    }
-    if (this.vehicleKind === 's-bahn') {
-      this.buildSbahnTrain();
-      return;
-    }
-    if (this.vehicleKind === 'zacke') {
-      this.buildZackeTrain();
-      return;
-    }
-    if (this.vehicleKind === 'seilbahn') {
-      this.buildSeilbahnCar();
-      return;
-    }
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffdf00, roughness: 0.52, metalness: 0.05 });
-    const blackMat = new THREE.MeshStandardMaterial({ color: 0x20242b, roughness: 0.38 });
-    const glassMat = new THREE.MeshStandardMaterial({
-      color: 0x91c7dd,
-      roughness: 0.08,
-      metalness: 0.02,
-      transparent: true,
-      opacity: 0.58,
-      depthWrite: true,
-      side: THREE.DoubleSide
+    buildTransitVehicle({
+      train: this.train,
+      route: this.route,
+      city: this.city,
+      modeDefinition: this.modeDefinition,
+      trainCars: this.trainCars,
+      vehicleWindowBands: this.vehicleWindowBands,
+      vehicleCabShells: this.vehicleCabShells,
+      vehiclePassengerShells: this.vehiclePassengerShells,
+      vehicleCabDisplays: this.vehicleCabDisplays,
+      vehicleDoorLeaves: this.vehicleDoorLeaves,
+      makeInteriorDisplayMaterial: () => this.makeInteriorDisplayMaterial(),
+      setVehicleGlassMaterial: (material) => {
+        this.vehicleGlassMaterial = material;
+      },
+      setTrainHalfLengthM: (length) => {
+        this.trainHalfLengthM = length;
+      }
     });
-    this.vehicleGlassMaterial = glassMat;
-    const adMat = new THREE.MeshStandardMaterial({ color: 0x1d66ff, roughness: 0.5 });
-    const roofMat = new THREE.MeshStandardMaterial({ color: 0xd7d0bf, roughness: 0.72, metalness: 0.05 });
-    const doorMat = new THREE.MeshStandardMaterial({ color: 0xf6c900, roughness: 0.48 });
-    const interiorWallMat = new THREE.MeshStandardMaterial({ color: 0xd9d5ca, roughness: 0.88 });
-    const rubberMat = new THREE.MeshStandardMaterial({ color: 0x11151b, roughness: 0.8 });
-    const metalMat = new THREE.MeshStandardMaterial({ color: 0x8a8f91, roughness: 0.4, metalness: 0.65 });
-    const interiorDisplayMat = this.makeInteriorDisplayMaterial();
-
-    const doubleFormation = DOUBLE_FORMATION_LINES.has(this.route.line);
-    const carCenters = doubleFormation ? [-29.85, -9.95, 9.95, 29.85] : [-9.95, 9.95];
-    const cabDirections: (-1 | 1)[] = doubleFormation ? [-1, 1, -1, 1] : [-1, 1];
-    this.trainHalfLengthM = doubleFormation ? 40.05 : 20.15;
-    carCenters.forEach((center, index) => {
-      this.trainCars.push(this.addTangoCar(center, cabDirections[index], bodyMat, glassMat, doorMat, blackMat, roofMat, adMat, interiorWallMat, metalMat, interiorDisplayMat));
-    });
-
-    for (const z of doubleFormation ? [-19.9, 19.9] : [0]) {
-      const gangway = new THREE.Mesh(new THREE.BoxGeometry(2.42, 2.48, 1.05), rubberMat);
-      gangway.position.set(0, 1.78, z);
-      gangway.castShadow = true;
-      this.train.add(gangway);
-    }
-
-    if (doubleFormation) {
-      const middleCouplerA = this.makeCoupler();
-      middleCouplerA.position.set(0, 0.25, 0.55);
-      this.train.add(middleCouplerA);
-      const middleCouplerB = this.makeCoupler();
-      middleCouplerB.position.set(0, 0.25, -0.55);
-      middleCouplerB.rotation.y = Math.PI;
-      this.train.add(middleCouplerB);
-    }
-
-    const couplerFront = this.makeCoupler();
-    couplerFront.position.set(0, 0.25, -this.trainHalfLengthM);
-    this.train.add(couplerFront);
-
-    const couplerRear = this.makeCoupler();
-    couplerRear.position.set(0, 0.25, this.trainHalfLengthM);
-    couplerRear.rotation.y = Math.PI;
-    this.train.add(couplerRear);
-
-    const destinationFront = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.55, 0.58),
-      new THREE.MeshBasicMaterial({
-        map: makeLabelTexture(`${this.route.line} ${this.route.destination}`, { width: 512, height: 128, bg: '#111', fg: '#ffd900' }),
-        side: THREE.DoubleSide,
-        polygonOffset: true,
-        polygonOffsetFactor: -4,
-        polygonOffsetUnits: -4
-      })
-    );
-    destinationFront.name = 'Front cab route display';
-    destinationFront.position.set(0, 2.78, -10.2);
-    destinationFront.rotation.y = Math.PI;
-    destinationFront.renderOrder = 20;
-    this.trainCars[0].add(destinationFront);
-
-    const destinationRear = destinationFront.clone();
-    destinationRear.name = 'Rear cab route display';
-    destinationRear.position.set(0, 2.78, 10.2);
-    destinationRear.rotation.y = 0;
-    this.trainCars.at(-1)?.add(destinationRear);
-    this.vehicleCabDisplays.push(destinationFront, destinationRear);
-
-    for (const z of doubleFormation ? [-15.3, 24.5] : [4.6]) {
-      this.addPantograph(new THREE.Vector3(-0.2, 3.75, z), metalMat);
-    }
-
     this.scene.add(this.train);
     this.updateVehicleGlass();
   }

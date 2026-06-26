@@ -2,6 +2,7 @@ import { stuttgartCity } from './stuttgart';
 import { ulmCity } from './ulm';
 import { odessaCity } from './odessa';
 import { zurichCity } from './zurich';
+import { freiburgCity } from './freiburg';
 import type { CityCatalog, CityCatalogEntry, CityDefinition } from './types';
 
 // Built-in city definitions keyed by stable city id.
@@ -9,7 +10,8 @@ const registry = new Map<string, CityDefinition>([
   [stuttgartCity.id, stuttgartCity],
   [ulmCity.id, ulmCity],
   [odessaCity.id, odessaCity],
-  [zurichCity.id, zurichCity]
+  [zurichCity.id, zurichCity],
+  [freiburgCity.id, freiburgCity]
 ]);
 
 // Fallback catalog used when public/data/cities.json cannot be loaded.
@@ -47,6 +49,14 @@ const fallbackCatalog: CityCatalog = {
       description: zurichCity.description,
       manifestFile: zurichCity.manifestFile,
       defaultTransportMode: zurichCity.defaultTransportMode
+    },
+    {
+      id: freiburgCity.id,
+      name: freiburgCity.name,
+      title: freiburgCity.title,
+      description: freiburgCity.description,
+      manifestFile: freiburgCity.manifestFile,
+      defaultTransportMode: freiburgCity.defaultTransportMode
     }
   ]
 };
@@ -109,4 +119,5 @@ export { stuttgartCity };
 export { ulmCity };
 export { odessaCity };
 export { zurichCity };
+export { freiburgCity };
 export type { CityCatalog, CityCatalogEntry, CityDefinition } from './types';

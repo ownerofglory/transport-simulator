@@ -32,6 +32,14 @@
       "description": "Free, non-commercial simulator for VBZ and Zürich-area public transport.",
       "manifestFile": "/data/zurich/route-manifest.json",
       "defaultTransportMode": "tram"
+    },
+    {
+      "id": "freiburg",
+      "name": "Freiburg",
+      "title": "Freiburg Transit Simulator",
+      "description": "Free, non-commercial simulator for Freiburg and the RVF urban network.",
+      "manifestFile": "/data/freiburg/route-manifest.json",
+      "defaultTransportMode": "tram"
     }
   ]
 }
