@@ -52,10 +52,10 @@ export const odessaCity: CityDefinition = {
 
   // Fallback manifest keeps the city available if generated route manifest loading fails.
   routeManifestFallback: {
-    generatedAt: '2026-06-22T00:00:00.000Z',
-    sourceUrl: 'https://www.oget.od.ua/',
-    license: 'Routing/dimensions derived for simulator use from public Odesa line information.',
-    attribution: 'Based on public Odesmiskelektrotrans and Odesa public transport line information.',
+    generatedAt: '2026-06-27T10:12:11.975Z',
+    sourceUrl: 'https://gw.x24.digital/api/od-all/gtfs/v1/download/static',
+    license: 'CC BY via official Odesa GTFS od-all feed.',
+    attribution: 'Contains Odesa route data derived from the official Odessa od-all GTFS feed.',
     modes: [
       {
         mode: 'tram',
@@ -66,14 +66,14 @@ export const odessaCity: CityDefinition = {
       {
         mode: 'trolleybus',
         file: '/data/odessa/routes-trolleybus.json',
-        routeCount: 4, // trolleybus lines 7 and 10, both directions
-        lines: ['7', '10']
+        routeCount: 20,
+        lines: ['2', '3', '7', '8', '8тр', '9', '9тр', '10', '12', '17тр']
       },
       {
         mode: 'bus',
         file: '/data/odessa/routes-bus.json',
-        routeCount: 2, // bus line 117, both directions
-        lines: ['117']
+        routeCount: 90,
+        lines: ['6Е', '7', '11', '16Е', '18', '26', '104', '105', '105А', '110', '111', '115', '121', '127', '128', '146', '148', '149', '150', '165', '168', '171', '175', '185 ч/з Костанді', '190', '191', '198', '201', '202', '203', '208', '214', '220А', '221', '232А', '233', '237', '240', '242', '250', '280', '288', 'С2', 'С6', 'С10']
       }
     ]
   },
@@ -83,13 +83,13 @@ export const odessaCity: CityDefinition = {
 
   // Preferred exact default route id for tram mode.
   defaultRouteIdByMode: {
-    tram: '1655942'
+    tram: '1661588'
   },
 
   // Preferred initial line per transport mode.
   defaultLineByMode: {
     tram: '28',
     trolleybus: '7',
-    bus: '117'
+    bus: '104'
   }
 };

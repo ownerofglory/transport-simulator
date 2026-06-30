@@ -42,13 +42,13 @@ export const ulmCity: CityDefinition = {
 
   // Fallback manifest keeps the app usable if the generated manifest fetch fails.
   routeManifestFallback: {
-    generatedAt: '2026-06-22T00:00:00.000Z',
-    sourceUrl: 'https://www.swu.de/privatkunden/produkte-leistungen/mobilitaet/',
-    license: 'Routing/dimensions derived for simulator use from public SWU line information.',
-    attribution: 'Based on public SWU Ulm/Neu-Ulm line information.',
+    generatedAt: '2026-06-27T10:12:11.971Z',
+    sourceUrl: 'https://www.nvbw.de/fileadmin/user_upload/service/open_data/fahrplandaten_mit_liniennetz/ding.zip',
+    license: 'Derived from the official DING GTFS feed for simulator use.',
+    attribution: 'Contains DING/SWU route data derived from the official DING GTFS feed.',
     modes: [
-      { mode: 'tram', file: '/data/ulm/routes-tram.json', routeCount: 4, lines: ['1', '2'] }, // two tram lines, both directions
-      { mode: 'bus', file: '/data/ulm/routes-bus.json', routeCount: 2, lines: ['5'] } // bus line 5, both directions
+      { mode: 'tram', file: '/data/ulm/routes-tram.json', routeCount: 12, lines: ['1', '2', 'E'] },
+      { mode: 'bus', file: '/data/ulm/routes-bus.json', routeCount: 86, lines: ['4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', 'E', 'MS9', 'MS14', 'N1', 'N2', 'N3', 'N4', 'N7', 'N8', 'SEV2'] }
     ]
   },
 
