@@ -17,6 +17,8 @@ type CameraUpdateInput = {
 /** Controls chase, passenger, and cab camera placement for the active vehicle. */
 export class CameraController {
   private mode: CameraMode = 'chase';
+  private zoomLevel = 1;
+  private projectionDirty = true;
 
   // -1/1 are side-look inputs; 0 means looking forward.
   private lookDirection: -1 | 0 | 1 = 0;
@@ -48,8 +50,22 @@ export class CameraController {
     this.lookDirection = leftHeld === rightHeld ? 0 : leftHeld ? 1 : -1;
   }
 
+  /** Adjusts the perspective zoom used by all camera modes. */
+  adjustZoom(delta: number): void {
+    const nextZoom = THREE.MathUtils.clamp(this.zoomLevel + delta, 0.7, 2.4);
+    if (Math.abs(nextZoom - this.zoomLevel) < 0.0001) return;
+    this.zoomLevel = nextZoom;
+    this.projectionDirty = true;
+  }
+
   /** Updates camera position, target, up-vector, and side-look yaw each frame. */
   update(input: CameraUpdateInput): void {
+    if (this.projectionDirty) {
+      this.camera.zoom = this.zoomLevel;
+      this.camera.updateProjectionMatrix();
+      this.projectionDirty = false;
+    }
+
     // Horizontal route normal used for passenger offsets and forward-looking bias.
     const normal = new THREE.Vector3(input.tangent.z, 0, -input.tangent.x).normalize();
 

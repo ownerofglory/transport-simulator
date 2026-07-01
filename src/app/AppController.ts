@@ -27,6 +27,8 @@ const TERMINAL_TURNAROUND_MS = 4000;
 export class AppController {
   private static readonly TOUCH_LOOK_DEADZONE_PX = 24;
   private static readonly TOUCH_LOOK_MAX_VERTICAL_DRIFT_PX = 64;
+  private static readonly WHEEL_ZOOM_SENSITIVITY = 0.0012;
+  private static readonly PINCH_ZOOM_SENSITIVITY = 0.004;
 
   private readonly hud = new HudView(document.body);
   private readonly simulator = new SimulatorClient();
@@ -51,6 +53,7 @@ export class AppController {
   private activeLookTouchId: number | null = null;
   private touchLookStartX = 0;
   private touchLookStartY = 0;
+  private pinchDistancePx: number | null = null;
   private selectedCameraMode: CameraMode = 'chase';
 
   // Shared animation/simulator loop; callbacks keep controller state as the single owner.
@@ -80,6 +83,7 @@ export class AppController {
     this.bindHud();
     this.bindKeyboard();
     this.bindTouchLook();
+    this.bindZoomInput();
   }
 
   /** Bootstraps catalog, initial routes, WASM simulator, and the render loop. */
@@ -205,6 +209,12 @@ export class AppController {
   /** Lets mobile users look left/right with a horizontal swipe on the 3D viewport. */
   private bindTouchLook(): void {
     this.appEl.addEventListener('touchstart', (event) => {
+      if (event.touches.length === 2) {
+        this.clearLookTouch();
+        this.pinchDistancePx = this.touchDistance(event.touches[0], event.touches[1]);
+        return;
+      }
+
       if (event.touches.length !== 1) return;
 
       const touch = event.touches[0];
@@ -216,6 +226,21 @@ export class AppController {
     }, { passive: true });
 
     this.appEl.addEventListener('touchmove', (event) => {
+      if (event.touches.length === 2) {
+        const [firstTouch, secondTouch] = [event.touches[0], event.touches[1]];
+        if (!firstTouch || !secondTouch) return;
+
+        const distancePx = this.touchDistance(firstTouch, secondTouch);
+        if (this.pinchDistancePx != null) {
+          const deltaPx = distancePx - this.pinchDistancePx;
+          this.world?.adjustCameraZoom(deltaPx * AppController.PINCH_ZOOM_SENSITIVITY);
+        }
+        this.pinchDistancePx = distancePx;
+        this.clearLookTouch();
+        event.preventDefault();
+        return;
+      }
+
       if (this.activeLookTouchId == null) return;
 
       const touch = Array.from(event.touches).find((entry) => entry.identifier === this.activeLookTouchId);
@@ -240,9 +265,10 @@ export class AppController {
         this.state.lookRightHeld = shouldLookRight;
         this.setLookInput();
       }
-    }, { passive: true });
+    }, { passive: false });
 
     const releaseTouch = (event: TouchEvent) => {
+      if (event.touches.length < 2) this.pinchDistancePx = null;
       if (this.activeLookTouchId == null) return;
 
       const changed = Array.from(event.changedTouches).some((touch) => touch.identifier === this.activeLookTouchId);
@@ -253,6 +279,14 @@ export class AppController {
 
     this.appEl.addEventListener('touchend', releaseTouch, { passive: true });
     this.appEl.addEventListener('touchcancel', releaseTouch, { passive: true });
+  }
+
+  /** Lets desktop users zoom with the mouse wheel and mobile users pinch to zoom. */
+  private bindZoomInput(): void {
+    this.appEl.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      this.world?.adjustCameraZoom(-event.deltaY * AppController.WHEEL_ZOOM_SENSITIVITY);
+    }, { passive: false });
   }
 
   /** Switches active city, loads its manifest, and selects its default transport mode. */
@@ -449,6 +483,13 @@ export class AppController {
     this.state.lookLeftHeld = false;
     this.state.lookRightHeld = false;
     this.setLookInput();
+  }
+
+  private touchDistance(firstTouch: Touch, secondTouch: Touch): number {
+    return Math.hypot(
+      secondTouch.clientX - firstTouch.clientX,
+      secondTouch.clientY - firstTouch.clientY
+    );
   }
 
   /** Finds the best same-line route going back from terminal to origin. */

@@ -183,6 +183,10 @@ export class TransitWorld {
     this.cameraController.setLookInput(leftHeld, rightHeld);
   }
 
+  adjustCameraZoom(delta: number): void {
+    this.cameraController.adjustZoom(delta);
+  }
+
   private updateVehicleGlass(): void {
     const glassMaterial = this.vehicle?.glassMaterial;
     if (!glassMaterial) return;
