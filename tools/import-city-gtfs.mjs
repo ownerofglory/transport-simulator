@@ -67,6 +67,24 @@ const presets = {
         matchRoute: (route) => route.route_type === '3' && !/тр/i.test(route.route_short_name || '')
       }
     ]
+  },
+  'baden-wuerttemberg-rail': {
+    generatedAt: new Date().toISOString(),
+    sourceUrl: 'https://www.nvbw.de/fileadmin/user_upload/service/open_data/fahrplandaten_mit_liniennetz/bwgesamt.zip',
+    license: 'Derived from the official NVBW Baden-Württemberg GTFS feed for simulator use.',
+    attribution: 'Contains Baden-Württemberg train route data derived from the official NVBW GTFS feed.',
+    modes: [
+      {
+        mode: 'rail',
+        file: 'routes-rail-network.json',
+        speedLimitMps: 33.3,
+        maxPoints: 140,
+        defaultAgency: 'bwegt / regional rail',
+        defaultColor: '#f2d21b',
+        groupKey: (trip) => `${trip.mode}:${trip.routeShortName}:${trip.directionId}`,
+        matchRoute: (route) => route.route_type === '2'
+      }
+    ]
   }
 };
 
@@ -245,7 +263,8 @@ await readZipCsv('stop_times.txt', (stopTime) => {
 
 const bestTrips = new Map();
 for (const trip of tripCandidates) {
-  const key = `${trip.mode}:${trip.routeShortName}:${trip.directionId}:${trip.destination}`;
+  const modeConfig = preset.modes.find((mode) => mode.mode === trip.mode);
+  const key = modeConfig?.groupKey?.(trip) ?? `${trip.mode}:${trip.routeShortName}:${trip.directionId}:${trip.destination}`;
   const current = bestTrips.get(key);
   if (!current || trip.stopCount > current.stopCount) bestTrips.set(key, trip);
 }

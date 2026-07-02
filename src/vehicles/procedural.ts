@@ -28,7 +28,8 @@ class ProceduralTransitVehicleFactory {
     else if (cityId === 'ulm' && modeId === 'tram') this.createUlmTramVehicle();
     else if (cityId === 'zurich' && modeId === 'tram') this.createZurichTramVehicle();
     else if (cityId === 'freiburg' && modeId === 'tram') this.createFreiburgTramVehicle();
-    else if (cityId === 'freiburg' && modeId === 's-bahn') this.createFreiburgSBahnVehicle();
+    else if (cityId === 'freiburg' && modeId === 's-bahn') this.createBwegtRegionalRailVehicle();
+    else if (cityId === 'baden-wuerttemberg-rail' && modeId === 'rail') this.createBwegtRegionalRailVehicle();
     else if (vehicleKind === 'bus') this.createBusVehicle();
     else if (vehicleKind === 's-bahn') this.createSBahnVehicle();
     else if (vehicleKind === 'zacke') this.createZackeVehicle();
@@ -245,7 +246,7 @@ class ProceduralTransitVehicleFactory {
     return this.createVehicleInstance();
   }
 
-  createFreiburgSBahnVehicle(): VehicleInstance {
+  createBwegtRegionalRailVehicle(): VehicleInstance {
     const shell = new THREE.MeshStandardMaterial({ color: 0xf1f2ec, roughness: 0.42, metalness: 0.08 });
     const bwegtYellow = new THREE.MeshStandardMaterial({ color: 0xf2d21b, roughness: 0.38, metalness: 0.06 });
     const dark = new THREE.MeshStandardMaterial({ color: 0x1f2327, roughness: 0.28, metalness: 0.22 });
@@ -261,7 +262,7 @@ class ProceduralTransitVehicleFactory {
     const centers = [-18.9, -6.3, 6.3, 18.9];
     centers.forEach((center, index) => {
       const car = new THREE.Group();
-      car.name = `Articulated car bwegt regional section ${index + 1}`;
+      car.name = `Articulated car bwegt regional train section ${index + 1}`;
       car.userData.centerOffsetM = center;
 
       const body = new THREE.Mesh(new THREE.BoxGeometry(2.98, 3.26, 12.15), shell);

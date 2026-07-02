@@ -9,6 +9,7 @@ const terrainZoom = 13;
 const vectorZoom = 14;
 const terrainUrl = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
 const vectorMetadataUrl = 'https://tiles.openfreemap.org/planet';
+const fetchRetries = 4;
 const earthMPerDegLat = 111_320;
 const terrainTiles = new Map();
 const transitTiles = new Map();
@@ -18,7 +19,7 @@ const feed = JSON.parse(readFileSync(inputPath, 'utf8'));
 if (!Array.isArray(feed.routes)) {
   throw new Error(`Route feed ${inputPath} does not contain a routes array.`);
 }
-const vectorMetadata = await fetch(vectorMetadataUrl).then((response) => {
+const vectorMetadata = await fetchJsonWithRetry(vectorMetadataUrl).then((response) => {
   if (!response.ok) throw new Error(`OpenFreeMap metadata request failed: ${response.status}`);
   return response.json();
 });
@@ -98,7 +99,7 @@ function loadTerrainTile(x, y) {
   const key = `${terrainZoom}/${x}/${y}`;
   if (!terrainTiles.has(key)) {
     const url = terrainUrl.replace('{z}', terrainZoom).replace('{x}', x).replace('{y}', y);
-    terrainTiles.set(key, fetch(url)
+    terrainTiles.set(key, fetchWithRetry(url)
       .then((response) => {
         if (!response.ok) throw new Error(`Terrain tile ${key} failed: ${response.status}`);
         return response.arrayBuffer();
@@ -112,7 +113,7 @@ function loadTransitTile(x, y) {
   const key = `${vectorZoom}/${x}/${y}`;
   if (!transitTiles.has(key)) {
     const url = vectorTemplate.replace('{z}', vectorZoom).replace('{x}', x).replace('{y}', y);
-    transitTiles.set(key, fetch(url)
+    transitTiles.set(key, fetchWithRetry(url)
       .then((response) => {
         if (!response.ok) throw new Error(`Vector tile ${key} failed: ${response.status}`);
         return response.arrayBuffer();
@@ -164,6 +165,24 @@ function pointSegmentDistance(point, a, b) {
   const vz = bz - az;
   const t = Math.max(0, Math.min(1, -(ax * vx + az * vz) / (vx * vx + vz * vz || 1)));
   return Math.hypot(ax + vx * t, az + vz * t);
+}
+
+async function fetchJsonWithRetry(url) {
+  return fetchWithRetry(url, { headers: { accept: 'application/json' } });
+}
+
+async function fetchWithRetry(url, init) {
+  let lastError;
+  for (let attempt = 0; attempt <= fetchRetries; attempt++) {
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= fetchRetries) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+    }
+  }
+  throw lastError;
 }
 
 function smoothProfile(values, radius) {

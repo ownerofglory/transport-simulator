@@ -56,6 +56,14 @@
       "description": "Free, non-commercial simulator for Mexico City public transport.",
       "manifestFile": "/data/mexico-city/route-manifest.json",
       "defaultTransportMode": "metro"
+    },
+    {
+      "id": "baden-wuerttemberg-rail",
+      "name": "Baden-Württemberg Rail",
+      "title": "Baden-Württemberg Rail Simulator",
+      "description": "Free, non-commercial simulator for regional and inter-regional train routes across Baden-Württemberg.",
+      "manifestFile": "/data/baden-wuerttemberg-rail/route-manifest.json",
+      "defaultTransportMode": "rail"
     }
   ]
 }
