@@ -326,12 +326,14 @@ export class TransitWorld {
 
   private get activeLaneOffsetM(): number {
     if (this.guidewayKind === 'bus') return -1.65;
+    if (this.guidewayKind === 'schwebebahn') return -1.45;
     if (this.guidewayKind === 'zacke' || this.guidewayKind === 'seilbahn' || this.guidewayKind === 'ferry') return 0;
     return this.guidewayKind === 's-bahn' ? -2.35 : ACTIVE_TRACK_OFFSET_M;
   }
 
   private get oppositeLaneOffsetM(): number {
     if (this.guidewayKind === 'bus') return 1.65;
+    if (this.guidewayKind === 'schwebebahn') return 1.45;
     if (this.guidewayKind === 'zacke' || this.guidewayKind === 'seilbahn' || this.guidewayKind === 'ferry') return 0;
     return this.guidewayKind === 's-bahn' ? 2.35 : OPPOSITE_TRACK_OFFSET_M;
   }
@@ -468,6 +470,10 @@ export class TransitWorld {
       this.buildFerryRoutePath();
       return;
     }
+    if (this.guidewayKind === 'schwebebahn') {
+      this.buildSchwebebahnGuideway();
+      return;
+    }
     if (this.guidewayKind === 'zacke' || this.guidewayKind === 'seilbahn') {
       this.buildMountainRailwayTrack();
       return;
@@ -548,6 +554,70 @@ export class TransitWorld {
       cable.name = 'Funicular haul cable';
       this.scene.add(cable);
     }
+  }
+
+  private buildSchwebebahnGuideway(): void {
+    const steel = new THREE.MeshStandardMaterial({ color: 0x7b858c, roughness: 0.42, metalness: 0.65 });
+    const darkSteel = new THREE.MeshStandardMaterial({ color: 0x4c565d, roughness: 0.46, metalness: 0.55 });
+    const deck = new THREE.MeshStandardMaterial({ color: 0x9aa1a5, roughness: 0.56, metalness: 0.32 });
+
+    for (const offset of [this.activeLaneOffsetM, this.oppositeLaneOffsetM]) {
+      const beam = new THREE.Mesh(this.makeRouteStrip(offset, 0.8, 0, 1, 420, 2.55), steel);
+      beam.name = 'Schwebebahn running beam';
+      beam.castShadow = true;
+      this.scene.add(beam);
+
+      const rail = new THREE.Mesh(this.makeRouteStrip(offset, 0.16, 0, 1, 420, 2.84), darkSteel);
+      rail.name = 'Schwebebahn upper guide rail';
+      this.scene.add(rail);
+    }
+
+    const maintenanceWalkway = new THREE.Mesh(this.makeRouteStrip(0, 4.2, 0, 1, 360, 2.2), deck);
+    maintenanceWalkway.name = 'Schwebebahn maintenance deck';
+    maintenanceWalkway.receiveShadow = true;
+    this.scene.add(maintenanceWalkway);
+
+    const supportCount = THREE.MathUtils.clamp(Math.ceil(this.route.routeLengthM / 18), 32, 1200);
+    const columns = new THREE.InstancedMesh(new THREE.BoxGeometry(0.38, 1, 0.38), steel, supportCount * 2);
+    const crossheads = new THREE.InstancedMesh(new THREE.BoxGeometry(3.9, 0.28, 0.7), darkSteel, supportCount);
+    const matrix = new THREE.Matrix4();
+    const rotation = new THREE.Quaternion();
+    const identity = new THREE.Vector3(1, 1, 1);
+    const columnScale = new THREE.Vector3(1, 1, 1);
+
+    for (let index = 0; index < supportCount; index++) {
+      const t = index / Math.max(1, supportCount - 1);
+      const center = this.curve.getPointAt(t);
+      const tangent = this.curve.getTangentAt(t).normalize();
+      const yaw = Math.atan2(tangent.x, tangent.z);
+      const groundY = this.surfaceHeightAt(t);
+      const columnHeight = Math.max(4.5, center.y - groundY + 2.5);
+      rotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+
+      for (const [columnIndex, offset] of [this.activeLaneOffsetM, this.oppositeLaneOffsetM].entries()) {
+        const position = center.clone().add(this.normalAt(t).multiplyScalar(offset));
+        position.y = groundY + columnHeight / 2;
+        columnScale.set(1, columnHeight, 1);
+        matrix.compose(position, rotation, columnScale);
+        columns.setMatrixAt(index * 2 + columnIndex, matrix);
+      }
+
+      const crossheadPosition = center.clone().add(new THREE.Vector3(0, 2.48, 0));
+      matrix.compose(crossheadPosition, rotation, identity);
+      crossheads.setMatrixAt(index, matrix);
+    }
+
+    columns.instanceMatrix.needsUpdate = true;
+    columns.castShadow = true;
+    columns.receiveShadow = true;
+    columns.name = 'Schwebebahn support columns';
+    this.scene.add(columns);
+
+    crossheads.instanceMatrix.needsUpdate = true;
+    crossheads.castShadow = true;
+    crossheads.receiveShadow = true;
+    crossheads.name = 'Schwebebahn support crossheads';
+    this.scene.add(crossheads);
   }
 
   private buildBusRouteStreet(): void {
@@ -643,7 +713,7 @@ export class TransitWorld {
   }
 
   private buildTunnels(): void {
-    if (this.guidewayKind === 'bus' || this.guidewayKind === 'ferry') return;
+    if (this.guidewayKind === 'bus' || this.guidewayKind === 'ferry' || this.guidewayKind === 'schwebebahn') return;
     const mask = this.route.tunnelMask;
     if (!mask || !mask.some(Boolean)) return;
     const liningMaterial = new THREE.MeshStandardMaterial({
@@ -685,6 +755,10 @@ export class TransitWorld {
     }
     if (this.guidewayKind === 'ferry') {
       this.buildFerryStops();
+      return;
+    }
+    if (this.guidewayKind === 'schwebebahn') {
+      this.buildSchwebebahnStations();
       return;
     }
     if (this.guidewayKind === 's-bahn') {
@@ -974,6 +1048,98 @@ export class TransitWorld {
       group.add(sign);
       this.stationMarkers.push(sign);
       this.scene.add(group);
+    }
+  }
+
+  private buildSchwebebahnStations(): void {
+    const platformMaterial = new THREE.MeshStandardMaterial({ color: 0xc8c5bb, roughness: 0.94 });
+    const edgeMaterial = new THREE.MeshStandardMaterial({ color: 0x777c7e, roughness: 0.88 });
+    const steel = new THREE.MeshStandardMaterial({ color: 0x5f6b73, roughness: 0.44, metalness: 0.58 });
+    const blue = new THREE.MeshStandardMaterial({ color: 0x245d85, roughness: 0.5, metalness: 0.24 });
+    const glass = new THREE.MeshStandardMaterial({
+      color: 0xb6d8e4,
+      transparent: true,
+      opacity: 0.32,
+      roughness: 0.08,
+      side: THREE.DoubleSide
+    });
+
+    for (const station of this.route.stations) {
+      const t = THREE.MathUtils.clamp(station.distanceM / this.route.routeLengthM, 0, 1);
+      const halfLengthM = 18;
+      const startT = THREE.MathUtils.clamp((station.distanceM - halfLengthM) / this.route.routeLengthM, 0, 1);
+      const endT = THREE.MathUtils.clamp((station.distanceM + halfLengthM) / this.route.routeLengthM, 0, 1);
+      const center = this.curve.getPointAt(t);
+      const tangent = this.curve.getTangentAt(t).normalize();
+      const yaw = Math.atan2(tangent.x, tangent.z);
+
+      const platform = new THREE.Mesh(this.makeRouteStrip(0, 4.9, startT, endT, 42, -1.38), platformMaterial);
+      platform.name = `Schwebebahn island platform ${station.name}`;
+      platform.receiveShadow = true;
+      this.scene.add(platform);
+
+      for (const edgeOffset of [-1.48, 1.48]) {
+        const edge = new THREE.Mesh(this.makeRouteStrip(edgeOffset, 0.18, startT, endT, 44, -1.31), edgeMaterial);
+        edge.name = `Schwebebahn platform edge ${station.name}`;
+        this.scene.add(edge);
+      }
+
+      const stationGroup = new THREE.Group();
+      stationGroup.name = `Schwebebahn station hall ${station.name}`;
+      stationGroup.position.copy(center);
+      stationGroup.rotation.y = yaw;
+      this.scene.add(stationGroup);
+
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.22, 19.5), steel);
+      roof.position.set(0, 0.95, 0);
+      roof.castShadow = true;
+      stationGroup.add(roof);
+      const ridge = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.24, 19.7), blue);
+      ridge.position.set(0, 1.12, 0);
+      stationGroup.add(ridge);
+
+      for (const x of [-2.45, 2.45]) {
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.55, 17.6), glass);
+        wall.position.set(x, -0.22, 0);
+        stationGroup.add(wall);
+      }
+      for (const z of [-7.8, 0, 7.8]) {
+        for (const x of [-2.5, 2.5]) {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.8, 0.16), steel);
+          post.position.set(x, -0.2, z);
+          post.castShadow = true;
+          stationGroup.add(post);
+        }
+      }
+
+      const overheadBeam = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.2, 0.55), steel);
+      overheadBeam.position.set(0, 2.15, 0);
+      stationGroup.add(overheadBeam);
+
+      const signTexture = makeLabelTexture(`60  ${station.name}`, {
+        width: 1024,
+        height: 180,
+        bg: '#174a73',
+        fg: '#ffffff'
+      });
+      for (const z of [-6.4, 6.4]) {
+        const sign = new THREE.Mesh(
+          new THREE.PlaneGeometry(4.8, 0.9),
+          new THREE.MeshBasicMaterial({ map: signTexture, side: THREE.DoubleSide })
+        );
+        sign.position.set(0, 0.2, z);
+        sign.rotation.y = Math.PI / 2;
+        stationGroup.add(sign);
+        this.stationMarkers.push(sign);
+      }
+
+      const dfi = new THREE.Mesh(
+        new THREE.PlaneGeometry(3.6, 0.62),
+        new THREE.MeshBasicMaterial({ map: makeLabelTexture(`60  ${this.route.destination}`, { width: 768, height: 140, bg: '#111820', fg: '#ffb300' }), side: THREE.DoubleSide })
+      );
+      dfi.position.set(0, 0.02, -8.3);
+      dfi.rotation.y = Math.PI;
+      stationGroup.add(dfi);
     }
   }
 

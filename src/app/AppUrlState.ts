@@ -17,7 +17,7 @@ export type AppUrlState = {
 const CAMERA_MODES = new Set<CameraMode>(['chase', 'passenger', 'cab']);
 const RIDE_MODES = new Set<Mode>(['ride', 'driver']);
 const SEASONS = new Set<Season>(['spring', 'summer', 'autumn', 'winter']);
-const TRANSPORT_MODES = new Set<TransportMode>(['stadtbahn', 'tram', 'bus', 's-bahn', 'zacke', 'seilbahn', 'ferry', 'rail', 'trolleybus']);
+const TRANSPORT_MODES = new Set<TransportMode>(['stadtbahn', 'tram', 'bus', 's-bahn', 'zacke', 'seilbahn', 'ferry', 'rail', 'trolleybus', 'schwebebahn']);
 
 export function readUrlState(): Partial<AppUrlState> {
   const params = new URLSearchParams(window.location.search);

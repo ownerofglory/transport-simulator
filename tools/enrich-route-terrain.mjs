@@ -31,16 +31,19 @@ for (const route of feed.routes) {
   const routeDistances = cumulativeDistances(geoPoints);
   const surfaceAbsolute = await Promise.all(geoPoints.map(sampleTerrain));
   const surfaceSmoothed = smoothProfile(surfaceAbsolute, 2);
+  const suspendedGuideway = route.transportMode === 'schwebebahn';
   const transitFeaturesByTile = new Map();
 
-  for (const point of geoPoints) {
-    const tile = geoToTile(point, vectorZoom);
-    // Load the 3x3 neighbourhood so features just outside a geoPoint's tile are found.
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        const key = `${tile.x + dx}/${tile.y + dy}`;
-        if (!transitFeaturesByTile.has(key)) {
-          transitFeaturesByTile.set(key, await loadTransitTile(tile.x + dx, tile.y + dy));
+  if (!suspendedGuideway) {
+    for (const point of geoPoints) {
+      const tile = geoToTile(point, vectorZoom);
+      // Load the 3x3 neighbourhood so features just outside a geoPoint's tile are found.
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const key = `${tile.x + dx}/${tile.y + dy}`;
+          if (!transitFeaturesByTile.has(key)) {
+            transitFeaturesByTile.set(key, await loadTransitTile(tile.x + dx, tile.y + dy));
+          }
         }
       }
     }
@@ -58,8 +61,10 @@ for (const route of feed.routes) {
   removeShortRuns(bridgeMask, 2);
 
   const tunnelDepths = depthProfile(tunnelMask, routeDistances, 10, 140);
-  const trackAbsolute = surfaceSmoothed.map((height, index) => height - tunnelDepths[index]);
-  flattenBridgeRanges(trackAbsolute, surfaceSmoothed, bridgeMask);
+  const trackAbsolute = suspendedGuideway
+    ? surfaceSmoothed.map((height) => height + 6.2) // Schwebebahn cars travel several meters above the river/street corridor.
+    : surfaceSmoothed.map((height, index) => height - tunnelDepths[index]);
+  if (!suspendedGuideway) flattenBridgeRanges(trackAbsolute, surfaceSmoothed, bridgeMask);
   const datum = trackAbsolute[0];
 
   route.elevationDatumM = round(datum);

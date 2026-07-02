@@ -7,6 +7,7 @@ import { lvivCity } from './lviv';
 import { mexicoCity } from './mexico-city';
 import { bodoCity } from './bodo';
 import { badenWuerttembergRailCity } from './baden-wuerttemberg-rail';
+import { wuppertalCity } from './wuppertal';
 import type { CityCatalog, CityCatalogEntry, CityDefinition } from './types';
 
 // Built-in city definitions keyed by stable city id.
@@ -19,7 +20,8 @@ const registry = new Map<string, CityDefinition>([
   [lvivCity.id, lvivCity],
   [mexicoCity.id, mexicoCity],
   [bodoCity.id, bodoCity],
-  [badenWuerttembergRailCity.id, badenWuerttembergRailCity]
+  [badenWuerttembergRailCity.id, badenWuerttembergRailCity],
+  [wuppertalCity.id, wuppertalCity]
 ]);
 
 // Fallback catalog used when public/data/cities.json cannot be loaded.
@@ -90,6 +92,14 @@ const fallbackCatalog: CityCatalog = {
       manifestFile: badenWuerttembergRailCity.manifestFile,
       defaultTransportMode: badenWuerttembergRailCity.defaultTransportMode
     },
+    {
+      id: wuppertalCity.id,
+      name: wuppertalCity.name,
+      title: wuppertalCity.title,
+      description: wuppertalCity.description,
+      manifestFile: wuppertalCity.manifestFile,
+      defaultTransportMode: wuppertalCity.defaultTransportMode
+    },
   ]
 };
 
@@ -156,4 +166,5 @@ export { lvivCity };
 export { mexicoCity };
 export { bodoCity };
 export { badenWuerttembergRailCity };
+export { wuppertalCity };
 export type { CityCatalog, CityCatalogEntry, CityDefinition } from './types';

@@ -89,14 +89,24 @@ export class CameraController {
             ? midCar // middle tram section avoids front cab obstruction; falls back if fewer than 3 cars.
             : input.trainCars[0]; // bus has one body group.
 
+        const customCameraLocal = passengerCar.userData.passengerCameraLocal as [number, number, number] | undefined;
+        const customLookAtLocal = passengerCar.userData.passengerLookAtLocal as [number, number, number] | undefined;
         const localZ = input.interiorCameraProfile === 's-bahn'
           ? -2 // S-Bahn passenger seat position within selected car.
           : input.interiorCameraProfile === 'tram'
             ? -0.6 // tram interior camera near articulated center section.
             : -4.4; // bus passenger camera further back from the driver area.
 
-        camPos = passengerCar.localToWorld(new THREE.Vector3(0.16, 2.3, localZ)); // slight side offset, eye height.
-        lookAt = passengerCar.localToWorld(new THREE.Vector3(0, 2.25, input.interiorCameraProfile === 'tram' ? 26 : 70)); // forward interior look target.
+        camPos = passengerCar.localToWorld(new THREE.Vector3(
+          customCameraLocal?.[0] ?? 0.16,
+          customCameraLocal?.[1] ?? 2.3,
+          customCameraLocal?.[2] ?? localZ
+        ));
+        lookAt = passengerCar.localToWorld(new THREE.Vector3(
+          customLookAtLocal?.[0] ?? 0,
+          customLookAtLocal?.[1] ?? 2.25,
+          customLookAtLocal?.[2] ?? (input.interiorCameraProfile === 'tram' ? 26 : 70)
+        ));
 
         cameraUp = new THREE.Vector3(0, 1, 0)
           .applyQuaternion(passengerCar.getWorldQuaternion(new THREE.Quaternion()))

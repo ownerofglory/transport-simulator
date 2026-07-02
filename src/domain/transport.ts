@@ -2,10 +2,10 @@
 export type TransportMode = string;
 
 // Vehicle renderer family used by TransitWorld.
-export type VehicleKind = 'stadtbahn' | 'bus' | 's-bahn' | 'zacke' | 'seilbahn' | 'ferry';
+export type VehicleKind = 'stadtbahn' | 'bus' | 's-bahn' | 'zacke' | 'seilbahn' | 'ferry' | 'schwebebahn';
 
 // Guideway/track behavior used for route rendering and lane offsets.
-export type GuidewayKind = 'stadtbahn' | 'bus' | 's-bahn' | 'zacke' | 'seilbahn' | 'ferry';
+export type GuidewayKind = 'stadtbahn' | 'bus' | 's-bahn' | 'zacke' | 'seilbahn' | 'ferry' | 'schwebebahn';
 
 // Interior camera placement profile; not always one-to-one with vehicle kind.
 export type InteriorCameraProfile = 'rail' | 'bus' | 's-bahn' | 'tram';

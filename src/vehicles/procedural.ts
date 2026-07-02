@@ -33,6 +33,7 @@ class ProceduralTransitVehicleFactory {
     else if (vehicleKind === 'bus') this.createBusVehicle();
     else if (vehicleKind === 's-bahn') this.createSBahnVehicle();
     else if (vehicleKind === 'zacke') this.createZackeVehicle();
+    else if (vehicleKind === 'schwebebahn') this.createSchwebebahnVehicle();
     else if (vehicleKind === 'seilbahn') this.createSeilbahnVehicle();
     else if (vehicleKind === 'ferry') this.createFerryVehicle();
     else this.createStadtbahnVehicle();
@@ -412,6 +413,134 @@ class ProceduralTransitVehicleFactory {
     this.cars.push(car);
     this.root.add(car);
     this.addPantograph(new THREE.Vector3(0, 3.55, 0), dark);
+    return this.createVehicleInstance();
+  }
+
+  createSchwebebahnVehicle(): VehicleInstance {
+    const shell = new THREE.MeshStandardMaterial({ color: 0xeaf3f6, roughness: 0.34, metalness: 0.08 });
+    const accent = new THREE.MeshStandardMaterial({ color: 0x61c7d9, roughness: 0.32, metalness: 0.06 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x26323a, roughness: 0.32 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0xaed6e2, transparent: true, opacity: 0.42, roughness: 0.06, side: THREE.DoubleSide });
+    const interior = new THREE.MeshStandardMaterial({ color: 0xe6e5dc, roughness: 0.9 });
+    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x8d9499, roughness: 0.94 });
+    const seat = new THREE.MeshStandardMaterial({ color: 0x2f6d8b, roughness: 0.84 });
+    const metal = new THREE.MeshStandardMaterial({ color: 0x9aa0a3, roughness: 0.36, metalness: 0.72 });
+    const displayMaterial = this.context.makeInteriorDisplayMaterial();
+    this.glassMaterial = glass;
+
+    const centers = [-8.8, 8.8];
+    centers.forEach((center, index) => {
+      const car = new THREE.Group();
+      car.name = `Suspended car GTW 15 section ${index + 1}`;
+      car.userData.centerOffsetM = center;
+      car.userData.passengerCameraLocal = [0.12, 1.98, -4.9];
+      car.userData.passengerLookAtLocal = [0, 1.9, 6.8];
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(2.65, 2.55, 15.9), shell);
+      body.position.y = 1.52;
+      body.castShadow = true;
+      car.add(body);
+      this.passengerShells.push(body);
+
+      const accentBand = new THREE.Mesh(new THREE.BoxGeometry(2.72, 0.28, 16.0), accent);
+      accentBand.position.y = 0.55;
+      car.add(accentBand);
+      this.passengerShells.push(accentBand);
+
+      const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.22, 15.7), dark);
+      skirt.position.y = 0.32;
+      car.add(skirt);
+      this.passengerShells.push(skirt);
+
+      const hangerFrame = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.26, 6.2), dark);
+      hangerFrame.position.set(0, 3.05, 0);
+      car.add(hangerFrame);
+      for (const z of [-2.6, 2.6]) {
+        const hanger = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.1, 0.14), metal);
+        hanger.position.set(0, 2.12, z);
+        car.add(hanger);
+      }
+      const bogie = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.26, 4.4), dark);
+      bogie.position.set(0, 4.15, 0);
+      car.add(bogie);
+
+      for (const side of [-1, 1]) {
+        const band = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.05, 14.2), dark);
+        band.position.set(side * 1.36, 1.95, 0);
+        car.add(band);
+        this.windowBands.push(band);
+        for (const z of [-5.8, -3.9, -1.3, 1.3, 3.9, 5.8]) {
+          const window = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.88, 1.25), glass);
+          window.position.set(side * 1.39, 1.95, z);
+          car.add(window);
+        }
+        this.addSlidingVehicleDoor(car, side * 1.39, -2.6, accent, glass, dark, 1.38, 1.9);
+        this.addSlidingVehicleDoor(car, side * 1.39, 2.6, accent, glass, dark, 1.38, 1.9);
+      }
+
+      const windscreen = new THREE.Mesh(new THREE.BoxGeometry(2.1, 1.0, 0.08), glass);
+      windscreen.position.set(0, 1.95, 8.02);
+      car.add(windscreen);
+      const rearWindow = windscreen.clone();
+      rearWindow.position.z = -8.02;
+      car.add(rearWindow);
+
+      const nose = new THREE.Mesh(new THREE.BoxGeometry(2.28, 2.28, 0.18), accent);
+      nose.position.set(0, 1.5, 8.1);
+      car.add(nose);
+      this.cabShells.push(nose);
+      const tail = nose.clone();
+      tail.position.z = -8.1;
+      car.add(tail);
+      this.cabShells.push(tail);
+
+      const frontDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.72, 0.38), new THREE.MeshBasicMaterial({
+        map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 640, height: 128, bg: '#111', fg: '#ffffff' }),
+        side: THREE.DoubleSide
+      }));
+      frontDisplay.position.set(0, 2.48, 8.18);
+      car.add(frontDisplay);
+      const rearDisplay = frontDisplay.clone();
+      rearDisplay.position.z = -8.18;
+      rearDisplay.rotation.y = Math.PI;
+      car.add(rearDisplay);
+
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.12, 15.2), floorMaterial);
+      floor.position.y = 0.72;
+      car.add(floor);
+      const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.36, 0.08, 15.0), interior);
+      ceiling.position.y = 2.72;
+      car.add(ceiling);
+      this.addOpaqueTransitInterior(car, 15.0, 1.18, interior, () => [-2.6, 2.6]);
+
+      for (const z of [-5.6, -4.0, -1.3, 1.3, 4.0, 5.6]) {
+        for (const x of [-0.85, 0.85]) {
+          const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.12, 0.58), seat);
+          cushion.position.set(x, 1.05, z);
+          car.add(cushion);
+          const back = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.62, 0.11), seat);
+          back.position.set(x, 1.36, z - 0.26);
+          car.add(back);
+        }
+      }
+
+      for (const z of [-2.6, 0, 2.6]) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.9, 8), metal);
+        pole.position.set(0, 1.82, z);
+        car.add(pole);
+      }
+
+      const monitor = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.48), displayMaterial);
+      monitor.position.set(0, 2.46, 5.1);
+      monitor.rotation.y = Math.PI;
+      monitor.renderOrder = 18;
+      car.add(monitor);
+
+      this.cars.push(car);
+      this.root.add(car);
+    });
+
+    this.trainHalfLengthM = 17.4;
     return this.createVehicleInstance();
   }
 

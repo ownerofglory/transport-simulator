@@ -7,7 +7,7 @@ import type {
 } from './VehicleBlueprintConfig';
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
-const VALID_KINDS: VehicleBlueprintKind[] = ['stadtbahn', 'bus', 's-bahn', 'zacke', 'seilbahn', 'ferry', 'tram'];
+const VALID_KINDS: VehicleBlueprintKind[] = ['stadtbahn', 'bus', 's-bahn', 'zacke', 'seilbahn', 'ferry', 'tram', 'schwebebahn'];
 
 // Extreme-value caps prevent malformed uploaded configs from producing broken/degenerate geometry.
 const MAX_LENGTH_M = 120;

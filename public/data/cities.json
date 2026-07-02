@@ -64,6 +64,14 @@
       "description": "Free, non-commercial simulator for regional and inter-regional train routes across Baden-Württemberg.",
       "manifestFile": "/data/baden-wuerttemberg-rail/route-manifest.json",
       "defaultTransportMode": "rail"
+    },
+    {
+      "id": "wuppertal",
+      "name": "Wuppertal",
+      "title": "Wuppertal Schwebebahn Simulator",
+      "description": "Free, non-commercial simulator for the Wuppertaler Schwebebahn suspended railway.",
+      "manifestFile": "/data/wuppertal/route-manifest.json",
+      "defaultTransportMode": "schwebebahn"
     }
   ]
 }
