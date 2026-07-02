@@ -1,0 +1,102 @@
+{
+  "id": "generic-modern-tram",
+  "kind": "tram",
+  "displayName": "Generic modern tram",
+  "dimensions": {
+    "lengthM": 32,
+    "widthM": 2.4,
+    "heightM": 3.4,
+    "floorHeightM": 0.98
+  },
+  "materials": {
+    "body": { "color": "#f2f2f2", "roughness": 0.42, "metalness": 0.08 },
+    "accent": { "color": "#d71920", "roughness": 0.4 },
+    "glass": { "color": "#9bc8d8", "opacity": 0.42, "transparent": true },
+    "dark": { "color": "#14191f", "roughness": 0.25 },
+    "roof": { "color": "#c7cdd2", "roughness": 0.5 },
+    "interior": { "color": "#e1e5e8", "roughness": 0.86 },
+    "floor": { "color": "#6f767b", "roughness": 0.92 },
+    "seat": { "color": "#1f5f87", "roughness": 0.88 },
+    "metal": { "color": "#9aa1a5", "roughness": 0.34, "metalness": 0.72 }
+  },
+  "sections": [
+    { "center": -10, "length": 7, "cab": "front" },
+    { "center": 0, "length": 6, "cab": null },
+    { "center": 10, "length": 7, "cab": "rear" }
+  ],
+  "doors": [
+    { "side": "both", "section": 0, "z": 1.8 },
+    { "side": "both", "section": 1, "z": -1.5 },
+    { "side": "both", "section": 1, "z": 1.5 },
+    { "side": "both", "section": 2, "z": -1.8 }
+  ],
+  "gangways": [
+    { "z": -5, "widthM": 2.18, "heightM": 2.18, "lengthM": 0.72, "material": "dark" },
+    { "z": 5, "widthM": 2.18, "heightM": 2.18, "lengthM": 0.72, "material": "dark" }
+  ],
+  "bogies": [
+    { "z": -8.2, "widthM": 2.05, "lengthM": 1.42, "material": "dark" },
+    { "z": 0, "widthM": 2.05, "lengthM": 1.42, "material": "dark" },
+    { "z": 8.2, "widthM": 2.05, "lengthM": 1.42, "material": "dark" }
+  ],
+  "pantographs": [
+    { "x": 0, "y": 3.55, "z": 1.3, "material": "metal" }
+  ],
+  "roofEquipment": [
+    {
+      "type": "hvac",
+      "x": 0,
+      "y": 3.3,
+      "z": -0.4,
+      "widthM": 1.54,
+      "heightM": 0.2,
+      "lengthM": 6.8,
+      "material": "roof"
+    }
+  ],
+  "destinationDisplays": [
+    {
+      "section": 0,
+      "position": [0, 3.02, -3.72],
+      "rotationY": 3.14159,
+      "widthM": 1.44,
+      "heightM": 0.32,
+      "background": "#101216",
+      "foreground": "#ffb300",
+      "text": "route-destination"
+    },
+    {
+      "section": 2,
+      "position": [0, 3.02, 3.72],
+      "rotationY": 0,
+      "widthM": 1.44,
+      "heightM": 0.32,
+      "background": "#101216",
+      "foreground": "#ffb300",
+      "text": "route-destination"
+    }
+  ],
+  "interior": {
+    "enabled": true,
+    "seatMaterial": "seat",
+    "floorMaterial": "floor",
+    "wallMaterial": "interior",
+    "poleMaterial": "metal",
+    "autoSeats": true,
+    "autoPoles": true,
+    "autoPassengerShell": true
+  },
+  "cameraAnchors": {
+    "passenger": {
+      "section": 1,
+      "position": [0.15, 2.25, 3.5],
+      "lookAt": [0, 2.2, -8]
+    },
+    "cab": {
+      "section": 0,
+      "position": [0, 2.25, -3.4],
+      "lookAt": [0, 2.1, -20]
+    },
+    "chaseTargetOffsetM": 18
+  }
+}

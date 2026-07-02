@@ -21,6 +21,7 @@ export type TransportModeDefinition = {
   interiorCameraProfile: InteriorCameraProfile;
   passengerOffsetM?: number; // route-forward offset for fallback passenger camera placement
   lineAccentColor?: string; // CSS/canvas color used for vehicle displays and route accents
+  vehicleDesignId?: string; // optional explicit vehicle registry id, overrides vehicleFamily/vehicleKind resolution
 };
 
 // Default Stuttgart Stadtbahn behavior used when older route data has no transportMode.

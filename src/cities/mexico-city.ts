@@ -21,7 +21,10 @@ const mexicoCityTransportModes: TransportModeDefinition[] = [
     guidewayKind: 'stadtbahn',
     interiorCameraProfile: 'tram',
     passengerOffsetM: 3.0,
-    lineAccentColor: '#1b8f74'
+    lineAccentColor: '#1b8f74',
+    // Previously fell through to the generic Stuttgart Tango builder; routed to
+    // the declarative blueprint vehicle system as the first non-critical pilot.
+    vehicleDesignId: 'generic-modern-tram'
   },
   {
     id: 'rail',

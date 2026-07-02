@@ -37,6 +37,9 @@ export type CityDefinition = CityCatalogEntry & {
   // Optional correction for generated local route coordinates.
   mirrorRouteX?: boolean;
 
+  // Optional city-wide vehicle registry id override; lower priority than route/mode overrides.
+  vehicleDesignId?: string;
+
   // Fallback data keeps the app usable when generated city files fail to load.
   routeManifestFallback: RouteFeedManifest;
   demoRoutesFallback: DemoRoute[];

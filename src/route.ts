@@ -23,6 +23,7 @@ export type DemoRoute = SimulatorConfig & {
   tunnelMask?: boolean[]; // per-shape/segment tunnel classification
   bridgeMask?: boolean[]; // per-shape/segment bridge classification
   tunnelRanges?: { startM: number; endM: number }[]; // route-distance tunnel ranges in meters
+  vehicleDesignId?: string; // optional explicit vehicle registry id, overrides mode/family/kind resolution
 };
 
 // Complete route feed generated from GTFS or fallback/demo data.

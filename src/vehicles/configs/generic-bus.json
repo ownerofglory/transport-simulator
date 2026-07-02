@@ -1,0 +1,64 @@
+{
+  "id": "generic-bus",
+  "kind": "bus",
+  "displayName": "Generic city bus",
+  "dimensions": {
+    "lengthM": 12.2,
+    "widthM": 2.55,
+    "heightM": 3.0,
+    "floorHeightM": 0.92
+  },
+  "materials": {
+    "body": { "color": "#ffdf00", "roughness": 0.48, "metalness": 0.04 },
+    "accent": { "color": "#151a1d", "roughness": 0.36 },
+    "glass": { "color": "#9bd2e1", "opacity": 0.38, "transparent": true },
+    "dark": { "color": "#151a1d", "roughness": 0.36 },
+    "roof": { "color": "#151a1d", "roughness": 0.4 },
+    "interior": { "color": "#d8d4c8", "roughness": 0.88 },
+    "floor": { "color": "#d8d4c8", "roughness": 0.9 },
+    "seat": { "color": "#315f77", "roughness": 0.88 },
+    "metal": { "color": "#8b9293", "roughness": 0.38, "metalness": 0.65 }
+  },
+  "sections": [
+    { "center": 0, "length": 12.1, "cab": "front" }
+  ],
+  "doors": [
+    { "side": "left", "section": 0, "z": -3.6 },
+    { "side": "left", "section": 0, "z": 1.6 }
+  ],
+  "destinationDisplays": [
+    {
+      "section": 0,
+      "position": [0, 2.6, -6.14],
+      "rotationY": 3.14159,
+      "widthM": 1.95,
+      "heightM": 0.42,
+      "background": "#111111",
+      "foreground": "#ffb900",
+      "text": "route-destination"
+    }
+  ],
+  "interior": {
+    "enabled": true,
+    "seatMaterial": "seat",
+    "floorMaterial": "floor",
+    "wallMaterial": "interior",
+    "poleMaterial": "metal",
+    "autoSeats": true,
+    "autoPoles": true,
+    "autoPassengerShell": true
+  },
+  "cameraAnchors": {
+    "passenger": {
+      "section": 0,
+      "position": [0.5, 1.85, 1.0],
+      "lookAt": [0, 1.8, -8]
+    },
+    "cab": {
+      "section": 0,
+      "position": [0, 1.9, -4.6],
+      "lookAt": [0, 1.7, -20]
+    },
+    "chaseTargetOffsetM": 10
+  }
+}

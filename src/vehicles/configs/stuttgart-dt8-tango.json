@@ -1,0 +1,79 @@
+{
+  "id": "stuttgart-dt8-tango",
+  "kind": "stadtbahn",
+  "displayName": "SSB DT8 / Stadler Tango (blueprint approximation)",
+  "dimensions": {
+    "lengthM": 17.75,
+    "widthM": 2.65,
+    "heightM": 3.34,
+    "floorHeightM": 1.0
+  },
+  "materials": {
+    "body": { "color": "#ffdf00", "roughness": 0.52, "metalness": 0.05 },
+    "accent": { "color": "#f6c900", "roughness": 0.48 },
+    "glass": { "color": "#91c7dd", "opacity": 0.58, "transparent": true, "roughness": 0.08 },
+    "dark": { "color": "#20242b", "roughness": 0.38 },
+    "roof": { "color": "#d7d0bf", "roughness": 0.72, "metalness": 0.05 },
+    "interior": { "color": "#d9d5ca", "roughness": 0.88 },
+    "floor": { "color": "#d7d0bf", "roughness": 0.72 },
+    "seat": { "color": "#416b80", "roughness": 0.9 },
+    "metal": { "color": "#8a8f91", "roughness": 0.4, "metalness": 0.65 }
+  },
+  "sections": [
+    { "center": -9.95, "length": 17.75, "cab": "front" },
+    { "center": 9.95, "length": 17.75, "cab": "rear" }
+  ],
+  "doors": [
+    { "side": "both", "section": 0, "z": -5.55 },
+    { "side": "both", "section": 0, "z": 3.15 },
+    { "side": "both", "section": 1, "z": -3.15 },
+    { "side": "both", "section": 1, "z": 5.55 }
+  ],
+  "gangways": [
+    { "z": 0, "widthM": 2.42, "heightM": 2.48, "lengthM": 1.05, "material": "dark" }
+  ],
+  "bogies": [
+    { "z": -15.75, "widthM": 2.25, "lengthM": 1.85, "material": "dark" },
+    { "z": -4.15, "widthM": 2.25, "lengthM": 1.85, "material": "dark" },
+    { "z": 4.15, "widthM": 2.25, "lengthM": 1.85, "material": "dark" },
+    { "z": 15.75, "widthM": 2.25, "lengthM": 1.85, "material": "dark" }
+  ],
+  "pantographs": [
+    { "x": -0.2, "y": 3.75, "z": 4.6, "material": "metal" }
+  ],
+  "roofEquipment": [
+    { "type": "hvac", "x": 0, "y": 3.57, "z": -9.95, "widthM": 1.72, "heightM": 0.24, "lengthM": 2.25, "material": "roof" },
+    { "type": "hvac", "x": 0, "y": 3.57, "z": 0, "widthM": 1.72, "heightM": 0.24, "lengthM": 2.25, "material": "roof" },
+    { "type": "hvac", "x": 0, "y": 3.57, "z": 9.95, "widthM": 1.72, "heightM": 0.24, "lengthM": 2.25, "material": "roof" }
+  ],
+  "destinationDisplays": [],
+  "interior": {
+    "enabled": true,
+    "seatMaterial": "seat",
+    "floorMaterial": "floor",
+    "wallMaterial": "interior",
+    "poleMaterial": "metal",
+    "autoSeats": true,
+    "autoPoles": true,
+    "autoPassengerShell": true
+  },
+  "formation": {
+    "doubleFormationLines": ["U1", "U6", "U7", "U11", "U12", "U19"],
+    "singleHalfLengthM": 20.15,
+    "doubleHalfLengthM": 40.05,
+    "duplicateSetOffsetM": 39.8
+  },
+  "cameraAnchors": {
+    "passenger": {
+      "section": 0,
+      "position": [0.15, 2.25, 3.5],
+      "lookAt": [0, 2.2, -8]
+    },
+    "cab": {
+      "section": 0,
+      "position": [0, 2.25, -8.5],
+      "lookAt": [0, 2.1, -24]
+    },
+    "chaseTargetOffsetM": 22
+  }
+}
