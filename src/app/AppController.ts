@@ -39,6 +39,11 @@ export class AppController {
   private readonly miniMapEl = document.createElement('div');
   private readonly routeDiagram: TransitRouteDiagram;
   private readonly miniMap: VehicleMiniMap;
+  private readonly photoOverlay = document.createElement('div');
+  private readonly photoLabel = document.createElement('div');
+  private readonly photoExitButton = document.createElement('button');
+  private readonly photoCycleButton = document.createElement('button');
+  private readonly photoShotButton = document.createElement('button');
 
   private readonly state: AppState = createInitialAppState(demoRoute);
 
@@ -55,6 +60,7 @@ export class AppController {
   private touchLookStartY = 0;
   private pinchDistancePx: number | null = null;
   private selectedCameraMode: CameraMode = 'chase';
+  private photoModeActive = false;
 
   // Shared animation/simulator loop; callbacks keep controller state as the single owner.
   private readonly loop = new SimulatorLoop({
@@ -80,10 +86,19 @@ export class AppController {
     document.body.appendChild(this.miniMapEl);
     this.miniMap = new VehicleMiniMap(this.miniMapEl);
 
+    this.photoOverlay.className = 'photo-overlay';
+    this.photoLabel.className = 'label';
+    this.photoExitButton.textContent = 'Exit';
+    this.photoCycleButton.textContent = 'Angle';
+    this.photoShotButton.textContent = 'Screenshot';
+    this.photoOverlay.append(this.photoExitButton, this.photoLabel, this.photoCycleButton, this.photoShotButton);
+    document.body.appendChild(this.photoOverlay);
+
     this.bindHud();
     this.bindKeyboard();
     this.bindTouchLook();
     this.bindZoomInput();
+    this.bindPhotoOverlay();
   }
 
   /** Bootstraps catalog, initial routes, WASM simulator, and the render loop. */
@@ -155,6 +170,12 @@ export class AppController {
     });
 
     this.hud.onCamera(() => {
+      if (this.photoModeActive && this.world) {
+        this.world.cycleCinematicPreset();
+        this.refreshPhotoOverlay();
+        this.renderCurrentFrame();
+        return;
+      }
       this.selectedCameraMode = (this.world?.cycleCamera() as CameraMode | undefined) ?? this.selectedCameraMode;
       this.updateUrlState();
 
@@ -166,6 +187,7 @@ export class AppController {
       }
     });
 
+    this.hud.onPhoto(() => void this.togglePhotoMode());
     this.hud.onReset(() => this.startSelectedRide());
 
     this.hud.onDriveInput((kind, held) => {
@@ -178,6 +200,16 @@ export class AppController {
   /** Binds keyboard driving and interior-look controls. */
   private bindKeyboard(): void {
     window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && this.photoModeActive) {
+        event.preventDefault();
+        void this.togglePhotoMode(false);
+        return;
+      }
+      if ((event.key === 'p' || event.key === 'P') && !event.repeat) {
+        event.preventDefault();
+        void this.togglePhotoMode();
+        return;
+      }
       if (event.repeat) return;
 
       if (event.key === 'w' || event.key === 'ArrowUp') this.state.throttleHeld = true;
@@ -198,6 +230,17 @@ export class AppController {
       this.setDriveInput();
       this.setLookInput();
     });
+  }
+
+  private bindPhotoOverlay(): void {
+    this.photoExitButton.addEventListener('click', () => void this.togglePhotoMode(false));
+    this.photoCycleButton.addEventListener('click', () => {
+      if (!this.world) return;
+      this.world.cycleCinematicPreset();
+      this.refreshPhotoOverlay();
+      this.renderCurrentFrame();
+    });
+    this.photoShotButton.addEventListener('click', () => void this.exportScreenshot());
   }
 
   /** Lets mobile users look left/right with a horizontal swipe on the 3D viewport. */
@@ -417,6 +460,8 @@ export class AppController {
   /** Starts or restarts the currently selected ride from current app state. */
   private startSelectedRide(): void {
     this.rebuildWorld(this.state.selectedRoute);
+    this.photoModeActive = false;
+    document.body.classList.remove('photo-mode');
     this.state.paused = false;
     this.hud.setPause(false);
     this.updateFromState(this.simulator.init(this.routeConfig(this.state.selectedRoute)));
@@ -441,6 +486,46 @@ export class AppController {
     this.miniMap.update(simState.distanceM);
     this.hud.updateSimulatorState(simState);
     this.routeDiagram.update(simState);
+  }
+
+  private async togglePhotoMode(force?: boolean): Promise<void> {
+    if (!this.world) return;
+    const shouldEnable = force ?? !this.photoModeActive;
+    if (shouldEnable === this.photoModeActive) return;
+    this.photoModeActive = shouldEnable;
+    const result = this.world.toggleCinematicMode();
+    document.body.classList.toggle('photo-mode', result.active);
+    this.refreshPhotoOverlay();
+    this.renderCurrentFrame();
+  }
+
+  private refreshPhotoOverlay(): void {
+    if (!this.world) return;
+    this.photoLabel.textContent = this.world.currentCinematicPresetLabel();
+  }
+
+  private renderCurrentFrame(): void {
+    const simState = this.loop.currentState();
+    if (!simState || !this.world) return;
+    this.world.updateTrain(simState.distanceM, simState.doorsOpen, 1 / 60, simState.nextStation);
+    this.world.render();
+  }
+
+  private async exportScreenshot(): Promise<void> {
+    if (!this.world) return;
+    this.renderCurrentFrame();
+    document.body.classList.add('photo-capture');
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+    const blob = await new Promise<Blob | null>((resolve) => this.world?.renderer.domElement.toBlob(resolve, 'image/png'));
+    document.body.classList.remove('photo-capture');
+    if (!blob) return;
+    const link = document.createElement('a');
+    const preset = this.world.currentCinematicPreset().replaceAll('-', '_');
+    const safeLine = this.state.selectedRoute.line.replace(/[^\w-]+/g, '_');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${this.currentCity.id}_${safeLine}_${preset}.png`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   }
 
   /** Updates public attribution and data-source notice for the current ride. */

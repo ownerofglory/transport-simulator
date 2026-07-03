@@ -12,16 +12,31 @@ import { CameraController, type CameraMode } from './world/CameraController';
 import { buildTransitVehicle } from './vehicles';
 import type { VehicleInstance } from './vehicles/types';
 type GeoPoint = { lat: number; lon: number };
+export type CinematicPreset =
+  | 'platform-fly-by'
+  | 'front-tracking-shot'
+  | 'side-tracking-shot'
+  | 'high-drone-shot'
+  | 'cab-approach'
+  | 'station-departure';
 
 const EARTH_M_PER_DEG_LAT = 111_320;
 const TRACK_GAUGE_M = 2.1;
 const TRACK_CENTER_SPACING_M = 4.2;
 const ACTIVE_TRACK_OFFSET_M = -TRACK_CENTER_SPACING_M / 2;
 const OPPOSITE_TRACK_OFFSET_M = TRACK_CENTER_SPACING_M / 2;
+const CINEMATIC_PRESETS: Array<{ id: CinematicPreset; label: string }> = [
+  { id: 'platform-fly-by', label: 'Platform fly-by' },
+  { id: 'front-tracking-shot', label: 'Front tracking shot' },
+  { id: 'side-tracking-shot', label: 'Side tracking shot' },
+  { id: 'high-drone-shot', label: 'High drone shot' },
+  { id: 'cab-approach', label: 'Cab approach' },
+  { id: 'station-departure', label: 'Station departure' }
+];
 export class TransitWorld {
   readonly scene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 5000);
-  readonly renderer = new THREE.WebGLRenderer({ antialias: true });
+  readonly renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   private train = new THREE.Group();
   private vehicle: VehicleInstance | null = null;
   readonly curve: THREE.CatmullRomCurve3;
@@ -55,6 +70,8 @@ export class TransitWorld {
   private readonly lighting = new LightingController(this.scene, this.renderer, this.hemi, this.sun, this.visibilityFill);
   private readonly cameraController = new CameraController(this.camera);
   private currentSeason: Season = 'summer';
+  private cinematicActive = false;
+  private cinematicPresetIndex = 0;
   private readonly onResizeBound = () => this.onResize();
 
   constructor(
@@ -187,11 +204,34 @@ export class TransitWorld {
     this.cameraController.adjustZoom(delta);
   }
 
+  toggleCinematicMode(): { active: boolean; label: string } {
+    this.cinematicActive = !this.cinematicActive;
+    this.updateVehicleGlass();
+    return { active: this.cinematicActive, label: this.currentCinematicPresetLabel() };
+  }
+
+  cinematicModeActive(): boolean {
+    return this.cinematicActive;
+  }
+
+  cycleCinematicPreset(): { preset: CinematicPreset; label: string } {
+    this.cinematicPresetIndex = (this.cinematicPresetIndex + 1) % CINEMATIC_PRESETS.length;
+    return { preset: this.currentCinematicPreset(), label: this.currentCinematicPresetLabel() };
+  }
+
+  currentCinematicPreset(): CinematicPreset {
+    return CINEMATIC_PRESETS[this.cinematicPresetIndex]?.id ?? 'platform-fly-by';
+  }
+
+  currentCinematicPresetLabel(): string {
+    return CINEMATIC_PRESETS[this.cinematicPresetIndex]?.label ?? 'Platform fly-by';
+  }
+
   private updateVehicleGlass(): void {
     const glassMaterial = this.vehicle?.glassMaterial;
     if (!glassMaterial) return;
     const mode = this.cameraController.currentMode();
-    const interiorView = mode === 'passenger' || mode === 'cab';
+    const interiorView = !this.cinematicActive && (mode === 'passenger' || mode === 'cab');
     const cabView = mode === 'cab';
     glassMaterial.opacity = interiorView ? 0.1 : 0.58;
     glassMaterial.depthWrite = !interiorView;
@@ -233,6 +273,7 @@ export class TransitWorld {
       train: this.train,
       trainCars: this.vehicle?.cars ?? []
     });
+    if (this.cinematicActive) this.updateCinematicCamera(distanceM, position, tangent);
   }
 
   private updateDoors(open: boolean, deltaSeconds: number): void {
@@ -340,6 +381,94 @@ export class TransitWorld {
 
   private get railGaugeM(): number {
     return this.guidewayKind === 's-bahn' ? 1.435 : TRACK_GAUGE_M;
+  }
+
+  private updateCinematicCamera(distanceM: number, trainPosition: THREE.Vector3, tangent: THREE.Vector3): void {
+    const routeT = THREE.MathUtils.clamp(distanceM / this.route.routeLengthM, 0, 1);
+    const normal = this.normalAt(routeT);
+    const halfLength = this.vehicle?.trainHalfLengthM ?? 20.15;
+    const { previous, next } = this.nearestStations(distanceM);
+    let cameraPosition = this.camera.position.clone();
+    let lookAt = trainPosition.clone().add(new THREE.Vector3(0, 2.5, 0));
+
+    switch (this.currentCinematicPreset()) {
+      case 'platform-fly-by': {
+        const stationDistanceM = next?.distanceM ?? Math.min(this.route.routeLengthM, distanceM + 120);
+        const anchor = this.routePointAtDistance(stationDistanceM, this.activeLaneOffsetM);
+        const anchorTangent = this.routeTangentAtDistance(stationDistanceM);
+        const anchorNormal = new THREE.Vector3(anchorTangent.z, 0, -anchorTangent.x).normalize();
+        cameraPosition = anchor
+          .add(anchorNormal.multiplyScalar(12))
+          .add(anchorTangent.multiplyScalar(-14))
+          .add(new THREE.Vector3(0, 3.2, 0));
+        break;
+      }
+      case 'front-tracking-shot':
+        cameraPosition = trainPosition.clone()
+          .add(tangent.clone().multiplyScalar(halfLength + 22))
+          .add(normal.clone().multiplyScalar(1.8))
+          .add(new THREE.Vector3(0, 4.8, 0));
+        lookAt = trainPosition.clone().add(tangent.clone().multiplyScalar(halfLength * 0.2)).add(new THREE.Vector3(0, 2.5, 0));
+        break;
+      case 'side-tracking-shot':
+        cameraPosition = trainPosition.clone()
+          .add(normal.clone().multiplyScalar(14))
+          .add(tangent.clone().multiplyScalar(-3.5))
+          .add(new THREE.Vector3(0, 5.4, 0));
+        break;
+      case 'high-drone-shot':
+        cameraPosition = trainPosition.clone()
+          .add(normal.clone().multiplyScalar(10))
+          .add(tangent.clone().multiplyScalar(-16))
+          .add(new THREE.Vector3(0, 52, 0));
+        lookAt = trainPosition.clone().add(new THREE.Vector3(0, 3.5, 0));
+        break;
+      case 'cab-approach':
+        cameraPosition = trainPosition.clone()
+          .add(tangent.clone().multiplyScalar(halfLength + 34))
+          .add(normal.clone().multiplyScalar(0.8))
+          .add(new THREE.Vector3(0, 3.4, 0));
+        lookAt = trainPosition.clone().add(tangent.clone().multiplyScalar(halfLength * 0.3)).add(new THREE.Vector3(0, 2.6, 0));
+        break;
+      case 'station-departure': {
+        const stationDistanceM = previous?.distanceM ?? Math.max(0, distanceM - 90);
+        const anchor = this.routePointAtDistance(stationDistanceM, this.activeLaneOffsetM);
+        const anchorTangent = this.routeTangentAtDistance(stationDistanceM);
+        const anchorNormal = new THREE.Vector3(anchorTangent.z, 0, -anchorTangent.x).normalize();
+        cameraPosition = anchor
+          .add(anchorNormal.multiplyScalar(12))
+          .add(anchorTangent.multiplyScalar(-26))
+          .add(new THREE.Vector3(0, 6.4, 0));
+        break;
+      }
+    }
+
+    this.camera.up.lerp(new THREE.Vector3(0, 1, 0), 0.4).normalize();
+    this.camera.position.lerp(cameraPosition, 0.11);
+    this.camera.lookAt(lookAt);
+  }
+
+  private routePointAtDistance(distanceM: number, laneOffsetM = 0): THREE.Vector3 {
+    const t = THREE.MathUtils.clamp(distanceM / this.route.routeLengthM, 0, 1);
+    return this.curve.getPointAt(t).add(this.normalAt(t).multiplyScalar(laneOffsetM));
+  }
+
+  private routeTangentAtDistance(distanceM: number): THREE.Vector3 {
+    const t = THREE.MathUtils.clamp(distanceM / this.route.routeLengthM, 0, 1);
+    return this.curve.getTangentAt(t).normalize();
+  }
+
+  private nearestStations(distanceM: number): { previous: { distanceM: number } | undefined; next: { distanceM: number } | undefined } {
+    let previous: { distanceM: number } | undefined;
+    let next: { distanceM: number } | undefined;
+    for (const station of this.route.stations) {
+      if (station.distanceM <= distanceM) previous = station;
+      if (station.distanceM > distanceM) {
+        next = station;
+        break;
+      }
+    }
+    return { previous, next };
   }
 
   private buildGround(): void {

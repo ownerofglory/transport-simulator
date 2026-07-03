@@ -345,6 +345,46 @@ select:hover {
   z-index: 10;
 }
 
+.photo-overlay {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(8, 12, 18, 0.72);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.3);
+  transform: translateX(-50%);
+  z-index: 6;
+}
+
+.photo-overlay .label {
+  min-width: 170px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+
+body.photo-mode .photo-overlay {
+  display: flex;
+}
+
+body.photo-mode .hud,
+body.photo-mode .right-rail,
+body.photo-mode .notice,
+body.photo-mode .minimap {
+  display: none !important;
+}
+
+body.photo-capture .photo-overlay {
+  display: none !important;
+}
+
 @media (max-width: 760px) {
   .hud {
     top: 8px;
@@ -398,6 +438,21 @@ select:hover {
     bottom: 112px;
     width: 176px;
     height: 132px;
+  }
+
+  .photo-overlay {
+    bottom: 10px;
+    width: calc(100vw - 20px);
+    box-sizing: border-box;
+    justify-content: center;
+  }
+
+  .photo-overlay .label {
+    min-width: 0;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 

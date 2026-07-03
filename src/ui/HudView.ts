@@ -17,6 +17,7 @@ export class HudView {
   private readonly timeSelect: HTMLSelectElement;
   private readonly pauseButton: HTMLButtonElement;
   private readonly cameraButton: HTMLButtonElement;
+  private readonly photoButton: HTMLButtonElement;
   private readonly resetButton: HTMLButtonElement;
   private readonly menuButton: HTMLButtonElement;
   private readonly titleEl: HTMLHeadingElement;
@@ -69,7 +70,7 @@ export class HudView {
           <div class="card driver-stat"><div class="label">Schedule</div><div class="value" data-field="schedule">-</div></div>
         </div>
         <div class="controls">
-          <button data-action="pause">Pause</button><button data-action="camera">Camera</button><button data-action="reset">Restart</button>
+          <button data-action="pause">Pause</button><button data-action="camera">Camera</button><button data-action="photo">Photo</button><button data-action="reset">Restart</button>
         </div>
         <div class="driver-controls" data-panel="driver">
           <button data-drive="throttle">Throttle</button><button data-drive="brake">Brake</button>
@@ -91,6 +92,7 @@ export class HudView {
     this.timeSelect = this.root.querySelector('[data-action="time"]') as HTMLSelectElement;
     this.pauseButton = this.root.querySelector('[data-action="pause"]') as HTMLButtonElement;
     this.cameraButton = this.root.querySelector('[data-action="camera"]') as HTMLButtonElement;
+    this.photoButton = this.root.querySelector('[data-action="photo"]') as HTMLButtonElement;
     this.resetButton = this.root.querySelector('[data-action="reset"]') as HTMLButtonElement;
     this.menuButton = this.root.querySelector('[data-action="menu"]') as HTMLButtonElement;
     this.titleEl = this.root.querySelector('.hud-header h1') as HTMLHeadingElement;
@@ -250,6 +252,10 @@ export class HudView {
 
   onReset(handler: () => void): void {
     this.resetButton.addEventListener('click', handler);
+  }
+
+  onPhoto(handler: () => void): void {
+    this.photoButton.addEventListener('click', handler);
   }
 
   onDriveInput(handler: (kind: 'throttle' | 'brake', held: boolean) => void): void {
