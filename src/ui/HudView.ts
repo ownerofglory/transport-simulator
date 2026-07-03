@@ -2,7 +2,7 @@ import type { TransportMode, TransportModeDefinition } from '../domain/transport
 import type { CityDefinition } from '../cities';
 import type { DemoRoute } from '../route';
 import type { SimulatorState } from '../simulator/simulator-types';
-import type { Mode, Season } from '../app/types';
+import type { Mode } from '../app/types';
 
 export class HudView {
   readonly root: HTMLDivElement;
@@ -14,7 +14,6 @@ export class HudView {
   private readonly citySelect: HTMLSelectElement;
   private readonly transportTabsEl: HTMLDivElement;
   private readonly modeSelect: HTMLSelectElement;
-  private readonly seasonSelect: HTMLSelectElement;
   private readonly timeSelect: HTMLSelectElement;
   private readonly pauseButton: HTMLButtonElement;
   private readonly cameraButton: HTMLButtonElement;
@@ -55,10 +54,6 @@ export class HudView {
             <option value="ride">Ride</option>
             <option value="driver">Drive</option>
           </select>
-          <select data-action="season" aria-label="Season">
-            <option value="spring">Spring</option><option value="summer" selected>Summer</option>
-            <option value="autumn">Autumn</option><option value="winter">Winter</option>
-          </select>
           <select data-action="time" aria-label="Time of day">
             <option value="auto" selected>Local time (auto)</option>
             <option value="6">06:00 · Dawn</option><option value="9">09:00 · Morning</option>
@@ -93,7 +88,6 @@ export class HudView {
     this.citySelect = this.root.querySelector('[data-action="city"]') as HTMLSelectElement;
     this.transportTabsEl = this.root.querySelector('.transport-tabs') as HTMLDivElement;
     this.modeSelect = this.root.querySelector('[data-action="mode"]') as HTMLSelectElement;
-    this.seasonSelect = this.root.querySelector('[data-action="season"]') as HTMLSelectElement;
     this.timeSelect = this.root.querySelector('[data-action="time"]') as HTMLSelectElement;
     this.pauseButton = this.root.querySelector('[data-action="pause"]') as HTMLButtonElement;
     this.cameraButton = this.root.querySelector('[data-action="camera"]') as HTMLButtonElement;
@@ -186,10 +180,6 @@ export class HudView {
     this.modeSelect.value = mode;
   }
 
-  setSeason(season: Season): void {
-    this.seasonSelect.value = season;
-  }
-
   setTime(time: 'auto' | number): void {
     this.timeSelect.value = String(time);
   }
@@ -241,10 +231,6 @@ export class HudView {
 
   onModeChange(handler: (mode: Mode) => void): void {
     this.modeSelect.addEventListener('change', (event) => handler((event.target as HTMLSelectElement).value as Mode));
-  }
-
-  onSeasonChange(handler: (season: Season) => void): void {
-    this.seasonSelect.addEventListener('change', (event) => handler((event.target as HTMLSelectElement).value as Season));
   }
 
   onTimeChange(handler: (time: 'auto' | number) => void): void {

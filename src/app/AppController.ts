@@ -142,12 +142,6 @@ export class AppController {
       this.startSelectedRide();
     });
 
-    this.hud.onSeasonChange((season) => {
-      this.state.selectedSeason = season;
-      this.world?.setSeason(season);
-      this.updateUrlState();
-    });
-
     this.hud.onTimeChange((time) => {
       this.state.selectedTime = time;
       this.world?.setTimeOfDay(time === 'auto' ? this.currentLocalHour() : time);
@@ -377,7 +371,6 @@ export class AppController {
     this.hud.setRoutes(this.availableRoutes(), this.state.selectedRoute.id);
     this.hud.setStations(this.state.selectedRoute, this.state.selectedStartStation);
     this.hud.setMode(this.state.selectedMode);
-    this.hud.setSeason(this.state.selectedSeason);
     this.hud.setTime(this.state.selectedTime);
     this.hud.setPause(this.state.paused);
   }
