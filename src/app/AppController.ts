@@ -8,17 +8,13 @@ import { createInitialAppState, type AppState } from './AppState';
 import { readUrlState, writeUrlState } from './AppUrlState';
 import { RouteRepository } from './RouteRepository';
 import { SimulatorRuntime, type RouteSession } from './SimulatorRuntime';
+import { InputController } from './InputController';
 import { HudView } from '../ui/HudView';
 import type { SimulatorState } from '../simulator/simulator-types';
 import type { CameraMode } from '../world/CameraController';
 
 /** Coordinates HUD, city/route loading, simulator runtime, and input. */
 export class AppController {
-  private static readonly TOUCH_LOOK_DEADZONE_PX = 24;
-  private static readonly TOUCH_LOOK_MAX_VERTICAL_DRIFT_PX = 64;
-  private static readonly WHEEL_ZOOM_SENSITIVITY = 0.0012;
-  private static readonly PINCH_ZOOM_SENSITIVITY = 0.004;
-
   private readonly hud = new HudView(document.body);
 
   // Right-side UI rail contains route diagram; minimap is mounted separately.
@@ -40,13 +36,12 @@ export class AppController {
 
   private cityCatalog: CityDefinition[] = [stuttgartCity];
   private currentCity: CityDefinition = stuttgartCity;
-  private activeLookTouchId: number | null = null;
-  private touchLookStartX = 0;
-  private touchLookStartY = 0;
-  private pinchDistancePx: number | null = null;
 
   // Owns the world, simulator client, render loop, and route lifecycle.
   private readonly runtime: SimulatorRuntime;
+
+  // Owns raw keyboard/touch/pointer listeners, emitting semantic input events.
+  private readonly input: InputController;
 
   constructor(private readonly appEl: HTMLDivElement) {
     this.runtime = new SimulatorRuntime(appEl, {
@@ -57,6 +52,19 @@ export class AppController {
       onDiscreteState: (state) => this.onDiscreteState(state),
       onWorldReady: (world, route) => this.onWorldReady(world, route),
       onTerminalTurnaround: () => this.startOppositeRide()
+    });
+
+    this.input = new InputController(appEl, {
+      setThrottle: (held) => { this.state.throttleHeld = held; this.setDriveInput(); },
+      setBrake: (held) => { this.state.brakeHeld = held; this.setDriveInput(); },
+      setLook: (left, right) => {
+        this.state.lookLeftHeld = left;
+        this.state.lookRightHeld = right;
+        this.setLookInput();
+      },
+      zoom: (delta) => this.runtime.adjustZoom(delta),
+      togglePhotoMode: () => void this.togglePhotoMode(),
+      exitPhotoMode: () => void this.togglePhotoMode(false)
     });
 
     this.rightRail.className = 'right-rail';
@@ -79,9 +87,6 @@ export class AppController {
     document.body.appendChild(this.photoOverlay);
 
     this.bindHud();
-    this.bindKeyboard();
-    this.bindTouchLook();
-    this.bindZoomInput();
     this.bindPhotoOverlay();
   }
 
@@ -177,41 +182,6 @@ export class AppController {
     });
   }
 
-  /** Binds keyboard driving and interior-look controls. */
-  private bindKeyboard(): void {
-    window.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && this.state.photoModeActive) {
-        event.preventDefault();
-        void this.togglePhotoMode(false);
-        return;
-      }
-      if ((event.key === 'p' || event.key === 'P') && !event.repeat) {
-        event.preventDefault();
-        void this.togglePhotoMode();
-        return;
-      }
-      if (event.repeat) return;
-
-      if (event.key === 'w' || event.key === 'ArrowUp') this.state.throttleHeld = true;
-      if (event.key === 's' || event.key === 'ArrowDown') this.state.brakeHeld = true;
-      if (event.key === 'ArrowLeft') this.state.lookLeftHeld = true;
-      if (event.key === 'ArrowRight') this.state.lookRightHeld = true;
-
-      this.setDriveInput();
-      this.setLookInput();
-    });
-
-    window.addEventListener('keyup', (event) => {
-      if (event.key === 'w' || event.key === 'ArrowUp') this.state.throttleHeld = false;
-      if (event.key === 's' || event.key === 'ArrowDown') this.state.brakeHeld = false;
-      if (event.key === 'ArrowLeft') this.state.lookLeftHeld = false;
-      if (event.key === 'ArrowRight') this.state.lookRightHeld = false;
-
-      this.setDriveInput();
-      this.setLookInput();
-    });
-  }
-
   private bindPhotoOverlay(): void {
     this.photoExitButton.addEventListener('click', () => void this.togglePhotoMode(false));
     this.photoCycleButton.addEventListener('click', () => {
@@ -221,89 +191,6 @@ export class AppController {
       this.runtime.renderFrame();
     });
     this.photoShotButton.addEventListener('click', () => void this.exportScreenshot());
-  }
-
-  /** Lets mobile users look left/right with a horizontal swipe on the 3D viewport. */
-  private bindTouchLook(): void {
-    this.appEl.addEventListener('touchstart', (event) => {
-      if (event.touches.length === 2) {
-        this.clearLookTouch();
-        this.pinchDistancePx = this.touchDistance(event.touches[0], event.touches[1]);
-        return;
-      }
-
-      if (event.touches.length !== 1) return;
-
-      const touch = event.touches[0];
-      if (!touch) return;
-
-      this.activeLookTouchId = touch.identifier;
-      this.touchLookStartX = touch.clientX;
-      this.touchLookStartY = touch.clientY;
-    }, { passive: true });
-
-    this.appEl.addEventListener('touchmove', (event) => {
-      if (event.touches.length === 2) {
-        const [firstTouch, secondTouch] = [event.touches[0], event.touches[1]];
-        if (!firstTouch || !secondTouch) return;
-
-        const distancePx = this.touchDistance(firstTouch, secondTouch);
-        if (this.pinchDistancePx != null) {
-          const deltaPx = distancePx - this.pinchDistancePx;
-          this.runtime.adjustZoom(deltaPx * AppController.PINCH_ZOOM_SENSITIVITY);
-        }
-        this.pinchDistancePx = distancePx;
-        this.clearLookTouch();
-        event.preventDefault();
-        return;
-      }
-
-      if (this.activeLookTouchId == null) return;
-
-      const touch = Array.from(event.touches).find((entry) => entry.identifier === this.activeLookTouchId);
-      if (!touch) return;
-
-      const deltaX = touch.clientX - this.touchLookStartX;
-      const deltaY = touch.clientY - this.touchLookStartY;
-
-      if (Math.abs(deltaY) > AppController.TOUCH_LOOK_MAX_VERTICAL_DRIFT_PX) {
-        this.clearLookTouch();
-        return;
-      }
-
-      const shouldLookLeft = deltaX > AppController.TOUCH_LOOK_DEADZONE_PX;
-      const shouldLookRight = deltaX < -AppController.TOUCH_LOOK_DEADZONE_PX;
-
-      if (
-        this.state.lookLeftHeld !== shouldLookLeft
-        || this.state.lookRightHeld !== shouldLookRight
-      ) {
-        this.state.lookLeftHeld = shouldLookLeft;
-        this.state.lookRightHeld = shouldLookRight;
-        this.setLookInput();
-      }
-    }, { passive: false });
-
-    const releaseTouch = (event: TouchEvent) => {
-      if (event.touches.length < 2) this.pinchDistancePx = null;
-      if (this.activeLookTouchId == null) return;
-
-      const changed = Array.from(event.changedTouches).some((touch) => touch.identifier === this.activeLookTouchId);
-      if (!changed) return;
-
-      this.clearLookTouch();
-    };
-
-    this.appEl.addEventListener('touchend', releaseTouch, { passive: true });
-    this.appEl.addEventListener('touchcancel', releaseTouch, { passive: true });
-  }
-
-  /** Lets desktop users zoom with the mouse wheel and mobile users pinch to zoom. */
-  private bindZoomInput(): void {
-    this.appEl.addEventListener('wheel', (event) => {
-      event.preventDefault();
-      this.runtime.adjustZoom(-event.deltaY * AppController.WHEEL_ZOOM_SENSITIVITY);
-    }, { passive: false });
   }
 
   /** Switches active city, loads its manifest, and selects its default transport mode. */
@@ -504,24 +391,6 @@ export class AppController {
   /** Sends current cab/passenger look state to the world camera controller. */
   private setLookInput(): void {
     this.runtime.setInteriorLook(this.state.lookLeftHeld, this.state.lookRightHeld);
-  }
-
-  /** Clears any active touch look gesture and recenters the camera view. */
-  private clearLookTouch(): void {
-    this.activeLookTouchId = null;
-
-    if (!this.state.lookLeftHeld && !this.state.lookRightHeld) return;
-
-    this.state.lookLeftHeld = false;
-    this.state.lookRightHeld = false;
-    this.setLookInput();
-  }
-
-  private touchDistance(firstTouch: Touch, secondTouch: Touch): number {
-    return Math.hypot(
-      secondTouch.clientX - firstTouch.clientX,
-      secondTouch.clientY - firstTouch.clientY
-    );
   }
 
   /** Finds the best same-line route going back from terminal to origin. */
