@@ -48,6 +48,9 @@ export class SimulatorRuntime {
   private readonly loop: SimulatorLoop;
   private activeWorld: TransitWorld | null = null;
   private session: RouteSession | null = null;
+  // Route the current world geometry was built for; lets non-geometry changes
+  // (start station, ride mode, restart) skip the expensive world rebuild.
+  private builtRouteId: string | null = null;
 
   constructor(
     private readonly appEl: HTMLElement,
@@ -92,25 +95,34 @@ export class SimulatorRuntime {
     return this.initSimulator(session);
   }
 
-  /** Applies a new start station (currently a full rebuild + init). */
+  /**
+   * Applies a new start station by re-initializing the simulator and letting
+   * the next frame reposition the train. The world (terrain, OSM scenery,
+   * stations, vehicle) is preserved because the route geometry is unchanged.
+   */
   setStartStation(session: RouteSession): SimulatorState {
-    this.session = session;
-    this.buildWorld(session);
-    return this.initSimulator(session);
+    return this.reinitPreservingWorld(session);
   }
 
-  /** Applies a new ride/driver mode (currently a full rebuild + init). */
+  /**
+   * Applies a new ride/driver mode by re-initializing the simulator only; the
+   * world does not depend on ride mode, so its geometry is preserved.
+   */
   setRideMode(session: RouteSession): SimulatorState {
-    this.session = session;
-    this.buildWorld(session);
-    return this.initSimulator(session);
+    return this.reinitPreservingWorld(session);
   }
 
-  /** Restarts the current ride (currently a full rebuild + init). */
+  /**
+   * Restarts the current ride. When the route geometry is unchanged this only
+   * resets the simulator session and keeps the existing world.
+   */
   resetSimulation(session: RouteSession): SimulatorState {
     this.session = session;
-    this.buildWorld(session);
-    return this.initSimulator(session);
+    if (this.needsWorldRebuild(session)) {
+      this.buildWorld(session);
+      return this.initSimulator(session);
+    }
+    return this.applyDiscrete(this.simulator.reset());
   }
 
   /** Pauses or resumes simulator stepping. */
@@ -162,6 +174,19 @@ export class SimulatorRuntime {
     this.activeWorld?.dispose();
     this.activeWorld = null;
     this.session = null;
+    this.builtRouteId = null;
+  }
+
+  /** True when the world must be rebuilt because route geometry changed (or none exists). */
+  private needsWorldRebuild(session: RouteSession): boolean {
+    return !this.activeWorld || this.builtRouteId !== session.route.id;
+  }
+
+  /** Re-inits the simulator, rebuilding the world only if route geometry changed. */
+  private reinitPreservingWorld(session: RouteSession): SimulatorState {
+    this.session = session;
+    if (this.needsWorldRebuild(session)) this.buildWorld(session);
+    return this.initSimulator(session);
   }
 
   private handleFrame(state: SimulatorState, dt: number): void {
@@ -196,6 +221,7 @@ export class SimulatorRuntime {
     world.setTimeOfDay(this.resolvedHour());
 
     this.activeWorld = world;
+    this.builtRouteId = session.route.id;
     this.deps.onWorldReady(world, session.route);
   }
 
