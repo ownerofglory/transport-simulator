@@ -43,7 +43,7 @@ export class AppController {
   private readonly photoCycleButton = document.createElement('button');
   private readonly photoShotButton = document.createElement('button');
 
-  private readonly state: AppState = createInitialAppState(demoRoute);
+  private readonly state: AppState = createInitialAppState(demoRoute.id);
 
   // Owns city manifests, lazy per-city/mode route loading, caching, and attribution.
   private readonly routes = new RouteRepository();
@@ -55,8 +55,6 @@ export class AppController {
   private touchLookStartX = 0;
   private touchLookStartY = 0;
   private pinchDistancePx: number | null = null;
-  private selectedCameraMode: CameraMode = 'chase';
-  private photoModeActive = false;
 
   // Shared animation/simulator loop; callbacks keep controller state as the single owner.
   private readonly loop = new SimulatorLoop({
@@ -108,7 +106,7 @@ export class AppController {
     this.state.selectedSeason = urlState.season ?? this.state.selectedSeason;
     this.state.selectedTime = urlState.time ?? this.state.selectedTime;
     this.state.selectedMode = urlState.rideMode ?? this.state.selectedMode;
-    this.selectedCameraMode = urlState.cameraMode ?? this.selectedCameraMode;
+    this.state.selectedCameraMode = urlState.cameraMode ?? this.state.selectedCameraMode;
 
     this.currentCity = this.cityCatalog.find((city) => city.id === (urlState.city ?? this.state.selectedCityId)) ?? this.cityCatalog[0] ?? stuttgartCity;
     this.state.selectedCityId = this.currentCity.id;
@@ -137,7 +135,8 @@ export class AppController {
     this.hud.onTransportModeChange(async (mode) => this.selectTransportMode(mode));
 
     this.hud.onRouteChange((routeId) => {
-      this.state.selectedRoute = this.availableRoutes().find((route) => route.id === routeId) ?? this.availableRoutes()[0] ?? demoRoute;
+      const route = this.availableRoutes().find((entry) => entry.id === routeId) ?? this.availableRoutes()[0] ?? demoRoute;
+      this.state.selectedRouteId = route.id;
       this.state.selectedStartStation = 0;
       this.syncRouteSelectors();
       this.startSelectedRide();
@@ -166,13 +165,13 @@ export class AppController {
     });
 
     this.hud.onCamera(() => {
-      if (this.photoModeActive && this.world) {
+      if (this.state.photoModeActive && this.world) {
         this.world.cycleCinematicPreset();
         this.refreshPhotoOverlay();
         this.renderCurrentFrame();
         return;
       }
-      this.selectedCameraMode = (this.world?.cycleCamera() as CameraMode | undefined) ?? this.selectedCameraMode;
+      this.state.selectedCameraMode = (this.world?.cycleCamera() as CameraMode | undefined) ?? this.state.selectedCameraMode;
       this.updateUrlState();
 
       const state = this.loop.currentState();
@@ -196,7 +195,7 @@ export class AppController {
   /** Binds keyboard driving and interior-look controls. */
   private bindKeyboard(): void {
     window.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && this.photoModeActive) {
+      if (event.key === 'Escape' && this.state.photoModeActive) {
         event.preventDefault();
         void this.togglePhotoMode(false);
         return;
@@ -361,13 +360,14 @@ export class AppController {
     const defaultRouteId = this.currentCity.defaultRouteIdByMode?.[mode];
     const defaultLine = this.currentCity.defaultLineByMode[mode];
 
-    this.state.selectedRoute = routes.find((route) => route.id === preferredRouteId)
+    const selectedRoute = routes.find((route) => route.id === preferredRouteId)
       ?? routes.find((route) => route.id === defaultRouteId)
       ?? routes.find((route) => route.line === defaultLine)
       ?? routes[0];
+    this.state.selectedRouteId = selectedRoute.id;
 
     const requestedStationIndex = preferredStartStationIndex ?? 0;
-    this.state.selectedStartStation = Math.max(0, Math.min(this.state.selectedRoute.stations.length - 1, requestedStationIndex));
+    this.state.selectedStartStation = Math.max(0, Math.min(selectedRoute.stations.length - 1, requestedStationIndex));
     this.syncRouteSelectors();
 
     if (restart) this.startSelectedRide();
@@ -388,14 +388,21 @@ export class AppController {
     return this.routes.routesFor(this.currentCity.id, mode);
   }
 
+  /** Resolves the current DemoRoute from state's route id via the repository. */
+  private currentRoute(): DemoRoute {
+    return this.routes.resolveRoute(this.currentCity.id, this.state.selectedTransportMode, this.state.selectedRouteId)
+      ?? this.availableRoutes()[0]
+      ?? demoRoute;
+  }
+
   /** Pushes current controller state into all HUD selectors. */
   private syncRouteSelectors(): void {
     this.hud.setCity(this.currentCity);
     this.hud.setTransportModes(this.currentCity.transportModes, this.state.selectedTransportMode);
     this.updateAvailableModes();
     this.hud.setTransportMode(this.state.selectedTransportMode);
-    this.hud.setRoutes(this.availableRoutes(), this.state.selectedRoute.id);
-    this.hud.setStations(this.state.selectedRoute, this.state.selectedStartStation);
+    this.hud.setRoutes(this.availableRoutes(), this.state.selectedRouteId);
+    this.hud.setStations(this.currentRoute(), this.state.selectedStartStation);
     this.hud.setMode(this.state.selectedMode);
     this.hud.setTime(this.state.selectedTime);
     this.hud.setPause(this.state.paused);
@@ -428,7 +435,7 @@ export class AppController {
     );
 
     this.world.mount(this.appEl);
-    this.world.setCameraMode(this.selectedCameraMode);
+    this.world.setCameraMode(this.state.selectedCameraMode);
     this.world.setInteriorLookInput(this.state.lookLeftHeld, this.state.lookRightHeld);
     this.world.setSeason(this.state.selectedSeason);
     this.world.setTimeOfDay(this.state.selectedTime === 'auto' ? this.currentLocalHour() : this.state.selectedTime);
@@ -442,12 +449,13 @@ export class AppController {
 
   /** Starts or restarts the currently selected ride from current app state. */
   private startSelectedRide(): void {
-    this.rebuildWorld(this.state.selectedRoute);
-    this.photoModeActive = false;
+    const route = this.currentRoute();
+    this.rebuildWorld(route);
+    this.state.photoModeActive = false;
     document.body.classList.remove('photo-mode');
     this.state.paused = false;
     this.hud.setPause(false);
-    this.updateFromState(this.simulator.init(this.routeConfig(this.state.selectedRoute)));
+    this.updateFromState(this.simulator.init(this.routeConfig(route)));
     this.updateNotice();
     this.hud.hideLoading();
     this.updateUrlState();
@@ -473,9 +481,9 @@ export class AppController {
 
   private async togglePhotoMode(force?: boolean): Promise<void> {
     if (!this.world) return;
-    const shouldEnable = force ?? !this.photoModeActive;
-    if (shouldEnable === this.photoModeActive) return;
-    this.photoModeActive = shouldEnable;
+    const shouldEnable = force ?? !this.state.photoModeActive;
+    if (shouldEnable === this.state.photoModeActive) return;
+    this.state.photoModeActive = shouldEnable;
     const result = this.world.toggleCinematicMode();
     document.body.classList.toggle('photo-mode', result.active);
     this.refreshPhotoOverlay();
@@ -504,7 +512,7 @@ export class AppController {
     if (!blob) return;
     const link = document.createElement('a');
     const preset = this.world.currentCinematicPreset().replaceAll('-', '_');
-    const safeLine = this.state.selectedRoute.line.replace(/[^\w-]+/g, '_');
+    const safeLine = this.currentRoute().line.replace(/[^\w-]+/g, '_');
     link.href = URL.createObjectURL(blob);
     link.download = `${this.currentCity.id}_${safeLine}_${preset}.png`;
     link.click();
@@ -513,7 +521,7 @@ export class AppController {
 
   /** Updates public attribution and data-source notice for the current ride. */
   private updateNotice(): void {
-    const route = this.state.selectedRoute;
+    const route = this.currentRoute();
 
     this.hud.updateNotice(
       `${this.currentCity.shortLabel} · ${transportModeLabel(routeMode(route), this.currentCity.transportModes)} · ${route.agency ?? this.currentCity.noticeNetworkName} · ${route.description} ${this.currentCity.freeRideNotice} Source: ${route.source ?? 'demo route'}. ${this.routes.attribution} Vector 3D scenery: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. Relief: Mapzen Terrain Tiles on AWS Open Data.`
@@ -580,10 +588,10 @@ export class AppController {
 
   /** Starts the opposite-direction route after terminal turnaround, if one is known. */
   private startOppositeRide(): void {
-    const opposite = this.findOppositeRoute(this.state.selectedRoute);
+    const opposite = this.findOppositeRoute(this.currentRoute());
     if (!opposite) return;
 
-    this.state.selectedRoute = opposite;
+    this.state.selectedRouteId = opposite.id;
     this.state.selectedStartStation = 0;
     this.syncRouteSelectors();
     this.startSelectedRide();
@@ -609,6 +617,6 @@ export class AppController {
   }
 
   private updateUrlState(): void {
-    writeUrlState(this.state, this.selectedCameraMode);
+    writeUrlState(this.state);
   }
 }

@@ -60,17 +60,17 @@ export function readUrlState(): Partial<AppUrlState> {
   return state;
 }
 
-export function writeUrlState(state: AppState, cameraMode: CameraMode = 'chase'): void {
+export function writeUrlState(state: AppState): void {
   const params = new URLSearchParams(window.location.search);
 
   params.set('city', state.selectedCityId);
   params.set('transport', state.selectedTransportMode);
-  params.set('route', state.selectedRoute.id);
+  params.set('route', state.selectedRouteId);
   params.set('station', String(state.selectedStartStation));
   params.set('view', state.selectedMode);
   params.set('season', state.selectedSeason);
   params.set('time', state.selectedTime === 'auto' ? 'auto' : String(state.selectedTime));
-  params.set('camera', cameraMode);
+  params.set('camera', state.selectedCameraMode);
 
   const query = params.toString();
   const nextUrl = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`;
