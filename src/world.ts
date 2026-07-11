@@ -860,23 +860,35 @@ export class TransitWorld {
     const portalMaterial = new THREE.MeshStandardMaterial({ color: 0x555957, roughness: 0.88 });
     const lightMaterial = new THREE.MeshBasicMaterial({ color: 0xffedbd });
 
+    // Wide bore so the chase camera stays inside the lining on curves.
+    const boreRadiusM = 8.2;
+    const lastPointIndex = this.route.controlPoints.length - 1;
     for (const [start, end] of this.maskRanges(mask)) {
       if (end - start < 1) continue;
-      const points = this.route.controlPoints.slice(Math.max(0, start - 1), Math.min(this.route.controlPoints.length, end + 2))
-        .map(([x, y, z]) => new THREE.Vector3(x, y + 0.4, z));
-      const tunnelCurve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.36);
-      const segments = Math.max(12, (end - start) * 4);
-      const lining = new THREE.Mesh(new THREE.TubeGeometry(tunnelCurve, segments, 6.2, 14, false), liningMaterial);
+      // Sample the actual route spline instead of re-smoothing raw control
+      // points: a separately smoothed tube drifts off the track on tight
+      // bends, pushing one wall into the train and camera.
+      const startT = Math.max(0, start - 1) / lastPointIndex;
+      const endT = Math.min(lastPointIndex, end + 1) / lastPointIndex;
+      const sampleCount = Math.max(16, (end - start) * 6);
+      const points: THREE.Vector3[] = [];
+      for (let i = 0; i <= sampleCount; i++) {
+        const t = startT + ((endT - startT) * i) / sampleCount;
+        points.push(this.curve.getPoint(t).add(new THREE.Vector3(0, 1.2, 0)));
+      }
+      const tunnelCurve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
+      const segments = Math.max(24, (end - start) * 6);
+      const lining = new THREE.Mesh(new THREE.TubeGeometry(tunnelCurve, segments, boreRadiusM, 18, false), liningMaterial);
       lining.name = 'OSM tunnel lining';
       this.scene.add(lining);
 
-      const lightPoints = tunnelCurve.getSpacedPoints(Math.max(4, end - start)).map((point) => point.add(new THREE.Vector3(0, 4.6, 0)));
+      const lightPoints = tunnelCurve.getSpacedPoints(Math.max(4, end - start)).map((point) => point.add(new THREE.Vector3(0, 5.8, 0)));
       const lightCurve = new THREE.CatmullRomCurve3(lightPoints);
       this.scene.add(new THREE.Mesh(new THREE.TubeGeometry(lightCurve, segments, 0.075, 5), lightMaterial));
 
       for (const t of [0, 1]) {
         const tangent = tunnelCurve.getTangentAt(t).normalize();
-        const portal = new THREE.Mesh(new THREE.TorusGeometry(6.2, 0.42, 8, 24), portalMaterial);
+        const portal = new THREE.Mesh(new THREE.TorusGeometry(boreRadiusM, 0.5, 8, 24), portalMaterial);
         portal.position.copy(tunnelCurve.getPointAt(t));
         portal.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
         this.scene.add(portal);
