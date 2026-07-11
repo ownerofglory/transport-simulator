@@ -29,7 +29,7 @@ const stuttgartTransportModes: TransportModeDefinition[] = [
     id: 's-bahn',
     label: 'S-Bahn',
     available: true,
-    vehicleFamily: 'DB class 423',
+    vehicleFamily: 'DB class 430',
     vehicleKind: 's-bahn',
     guidewayKind: 's-bahn',
     interiorCameraProfile: 's-bahn',

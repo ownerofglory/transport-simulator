@@ -54,12 +54,17 @@ export class LightingController {
     this.apply();
   }
 
+  /** 0 at night, 1 at full daylight; used e.g. to switch vehicle lamps. */
+  daylightFactor(): number {
+    return THREE.MathUtils.smoothstep(Math.sin(((this.timeOfDayHour - 6) / 12) * Math.PI), 0, 1);
+  }
+
   /** Recomputes lighting, sky, fog, and exposure from season/time state. */
   private apply(): void {
     const hour = this.timeOfDayHour;
 
     // Daylight rises after 06:00, peaks around noon, and falls by 18:00.
-    const daylight = THREE.MathUtils.smoothstep(Math.sin(((hour - 6) / 12) * Math.PI), 0, 1);
+    const daylight = this.daylightFactor();
 
     // Warm tint around 06:00 and 18:00, fading over about two hours.
     const dawnDusk = Math.max(0, 1 - Math.abs(hour - 6) / 2, 1 - Math.abs(hour - 18) / 2);

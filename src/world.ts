@@ -178,6 +178,13 @@ export class TransitWorld {
 
   setTimeOfDay(hour: number): void {
     this.lighting.setTimeOfDay(hour);
+    this.updateVehicleExteriorLights();
+  }
+
+  // Head/tail lamps come on in low light (night, dawn, dusk). Opposing trains
+  // share the player train's lamp materials via clone(), so they follow along.
+  private updateVehicleExteriorLights(): void {
+    this.vehicle?.setExteriorLightsOn?.(this.lighting.daylightFactor() < 0.45);
   }
 
   cycleCamera(): CameraMode {
@@ -2162,6 +2169,7 @@ export class TransitWorld {
     this.train = this.vehicle.root;
     this.scene.add(this.vehicle.root);
     this.updateVehicleGlass();
+    this.updateVehicleExteriorLights();
   }
 
   private buildOpposingTraffic(): void {
@@ -2170,6 +2178,13 @@ export class TransitWorld {
     for (let index = 0; index < trainCount; index++) {
       const root = this.train.clone(true);
       root.name = `Opposing service ${index + 1}`;
+      // Beam lights stay exclusive to the player train: cloned spotlights would
+      // keep aiming at the original train's target and add per-fragment cost.
+      const clonedLights: THREE.Object3D[] = [];
+      root.traverse((object) => {
+        if ((object as THREE.Light).isLight || object.name.startsWith('Exterior lamp')) clonedLights.push(object);
+      });
+      for (const light of clonedLights) light.parent?.remove(light);
       const cars = root.children.filter((child): child is THREE.Group => child instanceof THREE.Group && child.name.startsWith('Articulated car'));
       this.opposingTrains.push({
         root,
