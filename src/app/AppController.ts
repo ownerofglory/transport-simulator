@@ -9,6 +9,7 @@ import { readUrlState, writeUrlState } from './AppUrlState';
 import { RouteRepository } from './RouteRepository';
 import { SimulatorRuntime, type RouteSession } from './SimulatorRuntime';
 import { InputController } from './InputController';
+import { PhotoModeController } from './PhotoModeController';
 import { HudView } from '../ui/HudView';
 import type { SimulatorState } from '../simulator/simulator-types';
 import type { CameraMode } from '../world/CameraController';
@@ -23,11 +24,6 @@ export class AppController {
   private readonly miniMapEl = document.createElement('div');
   private readonly routeDiagram: TransitRouteDiagram;
   private readonly miniMap: VehicleMiniMap;
-  private readonly photoOverlay = document.createElement('div');
-  private readonly photoLabel = document.createElement('div');
-  private readonly photoExitButton = document.createElement('button');
-  private readonly photoCycleButton = document.createElement('button');
-  private readonly photoShotButton = document.createElement('button');
 
   private readonly state: AppState = createInitialAppState(demoRoute.id);
 
@@ -42,6 +38,9 @@ export class AppController {
 
   // Owns raw keyboard/touch/pointer listeners, emitting semantic input events.
   private readonly input: InputController;
+
+  // Owns the photo-mode overlay, cinematic preset controls, and screenshots.
+  private readonly photo: PhotoModeController;
 
   constructor(private readonly appEl: HTMLDivElement) {
     this.runtime = new SimulatorRuntime(appEl, {
@@ -63,8 +62,16 @@ export class AppController {
         this.setLookInput();
       },
       zoom: (delta) => this.runtime.adjustZoom(delta),
-      togglePhotoMode: () => void this.togglePhotoMode(),
-      exitPhotoMode: () => void this.togglePhotoMode(false)
+      togglePhotoMode: () => this.photo.toggle(),
+      exitPhotoMode: () => this.photo.exit()
+    });
+
+    this.photo = new PhotoModeController(document.body, {
+      getWorld: () => this.runtime.world,
+      renderFrame: () => this.runtime.renderFrame(),
+      isActive: () => this.state.photoModeActive,
+      setActive: (active) => { this.state.photoModeActive = active; },
+      getScreenshotContext: () => ({ cityId: this.currentCity.id, line: this.currentRoute().line })
     });
 
     this.rightRail.className = 'right-rail';
@@ -78,16 +85,7 @@ export class AppController {
     document.body.appendChild(this.miniMapEl);
     this.miniMap = new VehicleMiniMap(this.miniMapEl);
 
-    this.photoOverlay.className = 'photo-overlay';
-    this.photoLabel.className = 'label';
-    this.photoExitButton.textContent = 'Exit';
-    this.photoCycleButton.textContent = 'Angle';
-    this.photoShotButton.textContent = 'Screenshot';
-    this.photoOverlay.append(this.photoExitButton, this.photoLabel, this.photoCycleButton, this.photoShotButton);
-    document.body.appendChild(this.photoOverlay);
-
     this.bindHud();
-    this.bindPhotoOverlay();
   }
 
   /** Bootstraps catalog, initial routes, WASM simulator, and the render loop. */
@@ -160,10 +158,8 @@ export class AppController {
     });
 
     this.hud.onCamera(() => {
-      if (this.state.photoModeActive && this.runtime.world) {
-        this.runtime.world.cycleCinematicPreset();
-        this.refreshPhotoOverlay();
-        this.runtime.renderFrame();
+      if (this.photo.isActive()) {
+        this.photo.cyclePreset();
         return;
       }
       this.state.selectedCameraMode = (this.runtime.cycleCamera() as CameraMode | undefined) ?? this.state.selectedCameraMode;
@@ -172,7 +168,7 @@ export class AppController {
       this.runtime.renderFrame();
     });
 
-    this.hud.onPhoto(() => void this.togglePhotoMode());
+    this.hud.onPhoto(() => this.photo.toggle());
     this.hud.onReset(() => this.restartRide((session) => this.runtime.resetSimulation(session)));
 
     this.hud.onDriveInput((kind, held) => {
@@ -180,17 +176,6 @@ export class AppController {
       if (kind === 'brake') this.state.brakeHeld = held;
       this.setDriveInput();
     });
-  }
-
-  private bindPhotoOverlay(): void {
-    this.photoExitButton.addEventListener('click', () => void this.togglePhotoMode(false));
-    this.photoCycleButton.addEventListener('click', () => {
-      if (!this.runtime.world) return;
-      this.runtime.world.cycleCinematicPreset();
-      this.refreshPhotoOverlay();
-      this.runtime.renderFrame();
-    });
-    this.photoShotButton.addEventListener('click', () => void this.exportScreenshot());
   }
 
   /** Switches active city, loads its manifest, and selects its default transport mode. */
@@ -302,8 +287,7 @@ export class AppController {
 
   /** Shared ride (re)start housekeeping around a specific runtime action. */
   private restartRide(action: (session: RouteSession) => void): void {
-    this.state.photoModeActive = false;
-    document.body.classList.remove('photo-mode');
+    this.photo.reset();
     this.state.paused = false;
     this.hud.setPause(false);
     action(this.buildSession());
@@ -331,42 +315,6 @@ export class AppController {
     this.miniMap.update(simState.distanceM);
     this.hud.updateSimulatorState(simState);
     this.routeDiagram.update(simState);
-  }
-
-  private async togglePhotoMode(force?: boolean): Promise<void> {
-    const world = this.runtime.world;
-    if (!world) return;
-    const shouldEnable = force ?? !this.state.photoModeActive;
-    if (shouldEnable === this.state.photoModeActive) return;
-    this.state.photoModeActive = shouldEnable;
-    const result = world.toggleCinematicMode();
-    document.body.classList.toggle('photo-mode', result.active);
-    this.refreshPhotoOverlay();
-    this.runtime.renderFrame();
-  }
-
-  private refreshPhotoOverlay(): void {
-    const world = this.runtime.world;
-    if (!world) return;
-    this.photoLabel.textContent = world.currentCinematicPresetLabel();
-  }
-
-  private async exportScreenshot(): Promise<void> {
-    const world = this.runtime.world;
-    if (!world) return;
-    this.runtime.renderFrame();
-    document.body.classList.add('photo-capture');
-    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
-    const blob = await new Promise<Blob | null>((resolve) => world.renderer.domElement.toBlob(resolve, 'image/png'));
-    document.body.classList.remove('photo-capture');
-    if (!blob) return;
-    const link = document.createElement('a');
-    const preset = world.currentCinematicPreset().replaceAll('-', '_');
-    const safeLine = this.currentRoute().line.replace(/[^\w-]+/g, '_');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${this.currentCity.id}_${safeLine}_${preset}.png`;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   }
 
   /** Updates public attribution and data-source notice for the current ride. */
