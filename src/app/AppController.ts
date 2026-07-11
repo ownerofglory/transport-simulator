@@ -3,17 +3,15 @@ import { TransitRouteDiagram } from '../route-diagram';
 import {
   createRouteCurve,
   demoRoute,
-  loadRouteManifest,
-  loadRoutesForMode,
   routeMode,
-  type DemoRoute,
-  type RouteFeedManifest
+  type DemoRoute
 } from '../route';
 import { loadCityCatalog, resolveCities, stuttgartCity, type CityDefinition } from '../cities';
 import { resolveTransportModeDefinition, transportModeLabel, type TransportMode } from '../domain/transport';
 import { TransitWorld } from '../world';
 import { createInitialAppState, type AppState } from './AppState';
 import { readUrlState, writeUrlState } from './AppUrlState';
+import { RouteRepository } from './RouteRepository';
 import { SimulatorLoop } from './SimulatorLoop';
 import { HudView } from '../ui/HudView';
 import { SimulatorClient } from '../simulator/SimulatorClient';
@@ -47,14 +45,12 @@ export class AppController {
 
   private readonly state: AppState = createInitialAppState(demoRoute);
 
-  // Routes are loaded lazily per city+mode so switching cities does not load everything.
-  private readonly routesByCityMode = new Map<string, DemoRoute[]>();
+  // Owns city manifests, lazy per-city/mode route loading, caching, and attribution.
+  private readonly routes = new RouteRepository();
 
   private world: TransitWorld | null = null;
   private cityCatalog: CityDefinition[] = [stuttgartCity];
   private currentCity: CityDefinition = stuttgartCity;
-  private manifest: RouteFeedManifest | null = null;
-  private gtfsAttribution = 'VVS GTFS route package has not loaded yet.';
   private activeLookTouchId: number | null = null;
   private touchLookStartX = 0;
   private touchLookStartY = 0;
@@ -342,8 +338,7 @@ export class AppController {
   /** Loads one city's route manifest and updates mode availability. */
   private async loadManifestForCity(city: CityDefinition): Promise<void> {
     this.hud.showLoading(`Loading ${city.name} route manifest...`);
-    this.manifest = await loadRouteManifest(city.manifestFile, city.routeManifestFallback);
-    this.gtfsAttribution = this.manifest.attribution;
+    await this.routes.loadManifest(city);
     this.updateAvailableModes();
   }
 
@@ -354,7 +349,7 @@ export class AppController {
     preferredRouteId?: string,
     preferredStartStationIndex?: number
   ): Promise<void> {
-    if (!this.manifest) return;
+    if (!this.routes.manifestForCity(this.currentCity.id)) return;
 
     await this.ensureModeLoaded(mode);
 
@@ -379,30 +374,18 @@ export class AppController {
     else this.updateUrlState();
   }
 
-  /** Loads route packages for a city/mode once and stores them in the local cache. */
+  /** Loads route packages for a city/mode once via the repository cache. */
   private async ensureModeLoaded(mode: TransportMode): Promise<void> {
-    if (!this.manifest) return;
+    if (this.routes.hasRoutes(this.currentCity.id, mode)) return;
 
-    const cacheKey = `${this.currentCity.id}:${mode}`;
-    if (this.routesByCityMode.has(cacheKey)) return;
-
-    this.hud.showLoading(`Loading ${this.currentCity.name} ${transportModeLabel(mode, this.currentCity.transportModes)} routes...`);
-
-    const loaded = await loadRoutesForMode(
-      mode,
-      this.manifest,
-      this.currentCity.demoRoutesFallback,
-      this.currentCity.routeManifestFallback.attribution
-    );
-
-    this.gtfsAttribution = loaded.attribution;
-    this.routesByCityMode.set(cacheKey, loaded.routes);
+    this.hud.showLoading(this.routes.routesLoadingLabel(this.currentCity, mode));
+    await this.routes.loadRoutes(this.currentCity, mode);
     this.hud.hideLoading();
   }
 
   /** Returns routes already loaded for the selected city and given/current mode. */
   private availableRoutes(mode = this.state.selectedTransportMode): DemoRoute[] {
-    return this.routesByCityMode.get(`${this.currentCity.id}:${mode}`) ?? [];
+    return this.routes.routesFor(this.currentCity.id, mode);
   }
 
   /** Pushes current controller state into all HUD selectors. */
@@ -533,7 +516,7 @@ export class AppController {
     const route = this.state.selectedRoute;
 
     this.hud.updateNotice(
-      `${this.currentCity.shortLabel} · ${transportModeLabel(routeMode(route), this.currentCity.transportModes)} · ${route.agency ?? this.currentCity.noticeNetworkName} · ${route.description} ${this.currentCity.freeRideNotice} Source: ${route.source ?? 'demo route'}. ${this.gtfsAttribution} Vector 3D scenery: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. Relief: Mapzen Terrain Tiles on AWS Open Data.`
+      `${this.currentCity.shortLabel} · ${transportModeLabel(routeMode(route), this.currentCity.transportModes)} · ${route.agency ?? this.currentCity.noticeNetworkName} · ${route.description} ${this.currentCity.freeRideNotice} Source: ${route.source ?? 'demo route'}. ${this.routes.attribution} Vector 3D scenery: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. Relief: Mapzen Terrain Tiles on AWS Open Data.`
     );
   }
 
@@ -614,7 +597,7 @@ export class AppController {
 
   /** Enables/disables transport tabs based on the loaded manifest. */
   private updateAvailableModes(): void {
-    const modes = this.manifest?.modes.map((mode) => mode.mode) ?? [this.currentCity.defaultTransportMode];
+    const modes = this.routes.availableModes(this.currentCity);
     this.hud.setAvailableTransportModes(modes, this.state.selectedTransportMode);
   }
 
