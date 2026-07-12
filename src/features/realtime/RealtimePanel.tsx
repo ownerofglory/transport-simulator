@@ -1,9 +1,9 @@
 import { useContext, useState } from 'react';
 import { useAppState } from '../../app/useAppState';
 import { SimulatorCommandsContext } from '../simulation/useSimulatorRuntime';
-import { Modal } from './Modal';
 import { JourneySearchModal } from './JourneySearchModal';
 import { StopSearchModal } from './StopSearchModal';
+import { DeparturesModal } from './DeparturesModal';
 import type { EndpointValue } from './LocationField';
 
 type RealtimeModal = 'journey' | 'stop' | 'departures' | null;
@@ -61,11 +61,7 @@ export function RealtimePanel() {
 
       {modal === 'journey' && <JourneySearchModal onClose={() => setModal(null)} />}
       {modal === 'stop' && <StopSearchModal onClose={() => setModal(null)} onOpenDepartures={openDepartures} />}
-      {modal === 'departures' && (
-        <Modal title="Departures" subtitle={departuresStation?.name ?? 'Live station board'} onClose={() => setModal(null)}>
-          <div className="rt-placeholder">Departures coming up.</div>
-        </Modal>
-      )}
+      {modal === 'departures' && <DeparturesModal onClose={() => setModal(null)} initialStation={departuresStation} />}
     </>
   );
 }
