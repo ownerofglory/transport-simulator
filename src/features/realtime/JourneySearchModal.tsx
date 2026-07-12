@@ -4,36 +4,11 @@ import { Modal } from './Modal';
 import { RealtimeMap, type MapPin, type MapPoint } from './RealtimeMap';
 import { LocationField, type EndpointValue } from './LocationField';
 import { searchJourneys } from './api';
-import { buildRealtimeRoute, legModeToTransportMode, type RealtimeStation } from './buildRealtimeRoute';
-import { formatClock, parseTimeMs, secondsBetween } from './time';
+import { buildJourneyRoute, journeyPath, journeyStations } from './journeyRoute';
+import { formatClock, secondsBetween } from './time';
 import type { Journey } from './types';
 
 type Endpoint = EndpointValue | null;
-
-// A stop boundary along a journey, positioned along the straight origin→destination
-// line by its share of the total travel time (the backend gives no leg geometry).
-function journeyStations(journey: Journey, origin: EndpointValue, destination: EndpointValue): RealtimeStation[] {
-  const depMs = parseTimeMs(journey.departureTime) ?? parseTimeMs(journey.legs[0]?.originTime);
-  const arrMs = parseTimeMs(journey.arrivalTime) ?? parseTimeMs(journey.legs.at(-1)?.destinationTime);
-  const total = depMs !== null && arrMs !== null ? Math.max(1, arrMs - depMs) : null;
-
-  const boundaries: { name: string; ms: number | null }[] = [
-    { name: journey.legs[0]?.originName ?? origin.name, ms: parseTimeMs(journey.legs[0]?.originTime) ?? depMs }
-  ];
-  for (const leg of journey.legs) boundaries.push({ name: leg.destinationName ?? destination.name, ms: parseTimeMs(leg.destinationTime) });
-
-  return boundaries.map((b, i) => {
-    const fraction = total && depMs !== null && b.ms !== null
-      ? Math.min(1, Math.max(0, (b.ms - depMs) / total))
-      : i / Math.max(1, boundaries.length - 1);
-    return {
-      name: b.name,
-      lat: origin.lat + (destination.lat - origin.lat) * fraction,
-      lon: origin.lon + (destination.lon - origin.lon) * fraction,
-      scheduledS: total && depMs !== null && b.ms !== null ? Math.round((b.ms - depMs) / 1000) : Math.round(fraction * 600)
-    };
-  });
-}
 
 /** Journey search: pick origin/destination (typed or on the map), list trips, visualize, simulate. */
 export function JourneySearchModal({ onClose }: { onClose: () => void }) {
@@ -62,7 +37,7 @@ export function JourneySearchModal({ onClose }: { onClose: () => void }) {
   }, [origin, destination, stops]);
 
   const path = useMemo<MapPoint[] | null>(
-    () => (selected && origin && destination ? [{ lat: origin.lat, lon: origin.lon }, { lat: destination.lat, lon: destination.lon }] : null),
+    () => (selected && origin && destination ? journeyPath(selected, origin, destination) : null),
     [selected, origin, destination]
   );
 
@@ -96,17 +71,7 @@ export function JourneySearchModal({ onClose }: { onClose: () => void }) {
 
   const simulate = () => {
     if (!selected || !origin || !destination) return;
-    const transit = selected.legs.find((leg) => leg.mode !== 'walk');
-    const route = buildRealtimeRoute({
-      id: `rt-journey-${selected.id}`,
-      line: transit?.line ?? 'Trip',
-      destination: destination.name,
-      description: selected.summary ?? `${origin.name} → ${destination.name}`,
-      transportMode: legModeToTransportMode(transit?.mode ?? 'stadtbahn'),
-      waypoints: [{ lat: origin.lat, lon: origin.lon }, { lat: destination.lat, lon: destination.lon }],
-      stations: journeyStations(selected, origin, destination)
-    });
-    dispatch({ type: 'realtime-route-simulated', route });
+    dispatch({ type: 'realtime-route-simulated', route: buildJourneyRoute(selected, origin, destination) });
     onClose();
   };
 
