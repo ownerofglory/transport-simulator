@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 /** Full-screen dimmed modal shell used by the realtime tools. Escape / backdrop close. */
 export function Modal({
@@ -20,7 +21,9 @@ export function Modal({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
+  // Portal to <body> so the fixed backdrop escapes the HUD's backdrop-filter
+  // containing block and covers the full viewport.
+  return createPortal(
     <div className="rt-modal-backdrop" onClick={onClose}>
       <div className="rt-modal" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="rt-modal-header">
@@ -34,6 +37,7 @@ export function Modal({
         </div>
         <div className="rt-modal-body">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
