@@ -5,6 +5,7 @@ import { SimulatorCommandsContext } from '../features/simulation/useSimulatorRun
 import { SimulatorViewport } from '../features/simulation/SimulatorViewport';
 import { SimulatorSnapshotStore, useSimulatorSnapshot } from '../features/simulation/SimulatorSnapshotStore';
 import { SelectionPanel } from '../features/selection/SelectionPanel';
+import { RealtimePanel } from '../features/realtime/RealtimePanel';
 import { SimulatorHud } from '../features/simulation/SimulatorHud';
 import { DriverControls } from '../features/simulation/DriverControls';
 import { MiniMapPanel } from '../features/minimap/MiniMapPanel';
@@ -35,26 +36,41 @@ export function AppShell() {
   photoActiveRef.current = state.photoModeActive;
 
   const onRuntime = useCallback((next: SimulatorRuntime | null) => setRuntime(next), []);
-  const route = catalog.routes.find((entry) => entry.id === state.selectedRouteId);
-  const session = useMemo<RouteSession | null>(
-    () =>
-      route && catalog.currentCity
-        ? {
-            route,
-            networkRoutes: catalog.routes,
-            city: catalog.currentCity,
-            mode: state.selectedMode,
-            startStationIndex: state.selectedStartStation,
-            season: state.selectedSeason,
-            time: state.selectedTime,
-            cameraMode: state.selectedCameraMode
-          }
-        : null,
-    [route, catalog.routes, catalog.currentCity, state.selectedMode, state.selectedStartStation, state.selectedSeason, state.selectedTime, state.selectedCameraMode]
-  );
+  const catalogRoute = catalog.routes.find((entry) => entry.id === state.selectedRouteId);
+  // Realtime routes are Stuttgart-referenced, so simulate them against the Stuttgart city context.
+  const realtimeCity = state.realtimeRoute ? catalog.cities.find((c) => c.id === 'stuttgart') ?? catalog.currentCity : null;
+  const session = useMemo<RouteSession | null>(() => {
+    if (state.realtimeRoute && realtimeCity) {
+      return {
+        route: state.realtimeRoute,
+        networkRoutes: [state.realtimeRoute],
+        city: realtimeCity,
+        mode: state.selectedMode,
+        startStationIndex: 0,
+        season: state.selectedSeason,
+        time: state.selectedTime,
+        cameraMode: state.selectedCameraMode
+      };
+    }
+    return catalogRoute && catalog.currentCity
+      ? {
+          route: catalogRoute,
+          networkRoutes: catalog.routes,
+          city: catalog.currentCity,
+          mode: state.selectedMode,
+          startStationIndex: state.selectedStartStation,
+          season: state.selectedSeason,
+          time: state.selectedTime,
+          cameraMode: state.selectedCameraMode
+        }
+      : null;
+  }, [state.realtimeRoute, realtimeCity, catalogRoute, catalog.routes, catalog.currentCity, state.selectedMode, state.selectedStartStation, state.selectedSeason, state.selectedTime, state.selectedCameraMode]);
+
+  // The route currently driving the world/HUD: a simulated realtime route wins.
+  const route = session?.route ?? catalogRoute;
 
   // Route/city change rebuilds the world; other changes only re-init the sim.
-  useEffect(() => { if (runtime && session) runtime.loadRoute(session); }, [runtime, route, catalog.currentCity]);
+  useEffect(() => { if (runtime && session) runtime.loadRoute(session); }, [runtime, session?.route, session?.city]);
   useEffect(() => { if (runtime && session) runtime.setStartStation(session); }, [runtime, state.selectedStartStation]);
   useEffect(() => { if (runtime && session) runtime.setRideMode(session); }, [runtime, state.selectedMode]);
   useEffect(() => runtime?.setPaused(state.paused), [runtime, state.paused]);
@@ -108,16 +124,39 @@ export function AppShell() {
             {collapsed ? '+' : '−'}
           </button>
         </div>
+        <div className="hud-tabs">
+          <button
+            className={state.hudTab === 'simulator' ? 'active' : ''}
+            onClick={() => dispatch({ type: 'hud-tab-selected', tab: 'simulator' })}
+          >
+            Simulator
+          </button>
+          <button
+            className={state.hudTab === 'realtime' ? 'active' : ''}
+            onClick={() => dispatch({ type: 'hud-tab-selected', tab: 'realtime' })}
+          >
+            Realtime
+          </button>
+        </div>
         <div className="hud-content">
-          <SelectionPanel catalog={catalog} />
-          <SimulatorHud snapshot={snapshot} />
-          <div className="controls">
-            <button onClick={() => dispatch({ type: 'pause-changed', paused: !state.paused })}>{state.paused ? 'Resume' : 'Pause'}</button>
-            <button onClick={() => { const mode = runtime?.cycleCamera(); if (mode) dispatch({ type: 'camera-selected', cameraMode: mode }); }}>Camera</button>
-            <button onClick={() => dispatch({ type: 'photo-mode-changed', active: true })}>Photo</button>
-            <button onClick={() => session && runtime?.resetSimulation(session)}>Restart</button>
-          </div>
-          <DriverControls dispatch={dispatch} />
+          {state.hudTab === 'realtime' ? (
+            <>
+              <SimulatorHud snapshot={snapshot} />
+              <RealtimePanel />
+            </>
+          ) : (
+            <>
+              <SelectionPanel catalog={catalog} />
+              <SimulatorHud snapshot={snapshot} />
+              <div className="controls">
+                <button onClick={() => dispatch({ type: 'pause-changed', paused: !state.paused })}>{state.paused ? 'Resume' : 'Pause'}</button>
+                <button onClick={() => { const mode = runtime?.cycleCamera(); if (mode) dispatch({ type: 'camera-selected', cameraMode: mode }); }}>Camera</button>
+                <button onClick={() => dispatch({ type: 'photo-mode-changed', active: true })}>Photo</button>
+                <button onClick={() => session && runtime?.resetSimulation(session)}>Restart</button>
+              </div>
+              <DriverControls dispatch={dispatch} />
+            </>
+          )}
         </div>
       </div>
       <div className="right-rail">

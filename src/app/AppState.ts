@@ -1,7 +1,7 @@
 import type { TransportMode } from '../domain/transport';
 import type { CameraMode } from '../world/CameraController';
-import { demoRoute } from '../route';
-import type { Mode, Season } from './types';
+import { demoRoute, type DemoRoute } from '../route';
+import type { HudTab, Mode, Season } from './types';
 
 /**
  * Serializable selection + input state for the app. Routes are referenced by id
@@ -9,6 +9,10 @@ import type { Mode, Season } from './types';
  * to persist (URL/localStorage) without carrying full DemoRoute objects.
  */
 export type AppState = {
+  hudTab: HudTab;
+  // A synthetic route built from live realtime data, simulated in place of a
+  // catalog route when set. Not serialized to the URL.
+  realtimeRoute: DemoRoute | null;
   selectedCityId: string;
   selectedRouteId: string;
   selectedTransportMode: TransportMode;
@@ -27,6 +31,8 @@ export type AppState = {
 
 export function createInitialAppState(routeId: string = demoRoute.id): AppState {
   return {
+    hudTab: 'simulator',
+    realtimeRoute: null,
     selectedCityId: 'stuttgart',
     selectedRouteId: routeId,
     selectedTransportMode: 'stadtbahn',
