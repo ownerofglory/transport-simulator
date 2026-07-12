@@ -673,6 +673,12 @@ body.photo-capture .photo-overlay {
   letter-spacing: 0.06em;
 }
 
+.rt-radius {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
 .rt-list {
   flex: 1;
   min-height: 0;

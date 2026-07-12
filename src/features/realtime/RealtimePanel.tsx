@@ -3,6 +3,8 @@ import { useAppState } from '../../app/useAppState';
 import { SimulatorCommandsContext } from '../simulation/useSimulatorRuntime';
 import { Modal } from './Modal';
 import { JourneySearchModal } from './JourneySearchModal';
+import { StopSearchModal } from './StopSearchModal';
+import type { EndpointValue } from './LocationField';
 
 type RealtimeModal = 'journey' | 'stop' | 'departures' | null;
 
@@ -15,13 +17,20 @@ export function RealtimePanel() {
   const { state, dispatch } = useAppState();
   const commands = useContext(SimulatorCommandsContext);
   const [modal, setModal] = useState<RealtimeModal>(null);
+  // A station handed from stop search into the departures board.
+  const [departuresStation, setDeparturesStation] = useState<EndpointValue | null>(null);
+
+  const openDepartures = (station: EndpointValue | null) => {
+    setDeparturesStation(station);
+    setModal('departures');
+  };
 
   return (
     <>
       <div className="toolbar realtime-tools">
         <button onClick={() => setModal('journey')}>Journey search</button>
         <button onClick={() => setModal('stop')}>Stop search</button>
-        <button onClick={() => setModal('departures')}>Departures</button>
+        <button onClick={() => openDepartures(null)}>Departures</button>
       </div>
 
       <div className="toolbar">
@@ -51,13 +60,9 @@ export function RealtimePanel() {
       </div>
 
       {modal === 'journey' && <JourneySearchModal onClose={() => setModal(null)} />}
-      {modal === 'stop' && (
-        <Modal title="Stop search" subtitle="Stops near a point" onClose={() => setModal(null)}>
-          <div className="rt-placeholder">Stop search coming up.</div>
-        </Modal>
-      )}
+      {modal === 'stop' && <StopSearchModal onClose={() => setModal(null)} onOpenDepartures={openDepartures} />}
       {modal === 'departures' && (
-        <Modal title="Departures" subtitle="Live station board" onClose={() => setModal(null)}>
+        <Modal title="Departures" subtitle={departuresStation?.name ?? 'Live station board'} onClose={() => setModal(null)}>
           <div className="rt-placeholder">Departures coming up.</div>
         </Modal>
       )}
