@@ -81,4 +81,11 @@ export class VehicleMiniMap {
   invalidateSize(): void {
     this.map.invalidateSize();
   }
+
+  /** Tears down the Leaflet map and its DOM/event listeners. */
+  dispose(): void {
+    this.routeLine?.remove();
+    this.marker.remove();
+    this.map.remove();
+  }
 }

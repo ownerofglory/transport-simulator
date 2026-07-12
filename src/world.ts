@@ -354,10 +354,34 @@ export class TransitWorld {
     window.removeEventListener('resize', this.onResizeBound);
     this.osmScene?.dispose();
     this.vehicle?.dispose?.();
+    // Free geometries/materials/textures built by the scene layers so switching
+    // routes does not leak GPU resources.
+    this.disposeSceneGraph();
+    this.opposingLayer = null;
+    this.ground = null;
     this.osmScene = null;
     this.terrain = null;
     this.renderer.domElement.remove();
     this.renderer.dispose();
+  }
+
+  /** Recursively disposes geometries and materials of every mesh in the scene. */
+  private disposeSceneGraph(): void {
+    this.scene.traverse((object) => {
+      const mesh = object as Partial<THREE.Mesh> & { material?: THREE.Material | THREE.Material[] };
+      mesh.geometry?.dispose?.();
+      const material = mesh.material;
+      if (Array.isArray(material)) for (const entry of material) this.disposeMaterial(entry);
+      else if (material) this.disposeMaterial(material);
+    });
+    this.scene.clear();
+  }
+
+  private disposeMaterial(material: THREE.Material): void {
+    for (const value of Object.values(material)) {
+      if (value instanceof THREE.Texture) value.dispose();
+    }
+    material.dispose();
   }
 
   private get vehicleKind(): VehicleKind {

@@ -1,6 +1,28 @@
 // City-specific transport mode id, kept as string so new cities can define custom modes.
 export type TransportMode = string;
 
+// Canonical set of transport-mode ids known across cities. Centralized here so
+// URL parsing and other validators don't each hard-code their own list.
+export const KNOWN_TRANSPORT_MODES = [
+  'stadtbahn',
+  'tram',
+  'bus',
+  's-bahn',
+  'zacke',
+  'seilbahn',
+  'ferry',
+  'rail',
+  'trolleybus',
+  'schwebebahn'
+] as const;
+
+const KNOWN_TRANSPORT_MODE_SET = new Set<string>(KNOWN_TRANSPORT_MODES);
+
+// True when a raw string matches a known transport-mode id.
+export function isKnownTransportMode(value: string): value is TransportMode {
+  return KNOWN_TRANSPORT_MODE_SET.has(value);
+}
+
 // Vehicle renderer family used by TransitWorld.
 export type VehicleKind = 'stadtbahn' | 'bus' | 's-bahn' | 'zacke' | 'seilbahn' | 'ferry' | 'schwebebahn';
 

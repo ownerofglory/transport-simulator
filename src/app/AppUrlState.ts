@@ -1,4 +1,4 @@
-import type { TransportMode } from '../domain/transport';
+import { isKnownTransportMode, type TransportMode } from '../domain/transport';
 import type { CameraMode } from '../world/CameraController';
 import type { AppState } from './AppState';
 import type { Mode, Season } from './types';
@@ -17,7 +17,6 @@ export type AppUrlState = {
 const CAMERA_MODES = new Set<CameraMode>(['chase', 'passenger', 'cab']);
 const RIDE_MODES = new Set<Mode>(['ride', 'driver']);
 const SEASONS = new Set<Season>(['spring', 'summer', 'autumn', 'winter']);
-const TRANSPORT_MODES = new Set<TransportMode>(['stadtbahn', 'tram', 'bus', 's-bahn', 'zacke', 'seilbahn', 'ferry', 'rail', 'trolleybus', 'schwebebahn']);
 
 export function readUrlState(): Partial<AppUrlState> {
   const params = new URLSearchParams(window.location.search);
@@ -27,8 +26,8 @@ export function readUrlState(): Partial<AppUrlState> {
   if (city) state.city = city;
 
   const transportMode = params.get('transport');
-  if (transportMode && TRANSPORT_MODES.has(transportMode as TransportMode)) {
-    state.transportMode = transportMode as TransportMode;
+  if (transportMode && isKnownTransportMode(transportMode)) {
+    state.transportMode = transportMode;
   }
 
   const routeId = params.get('route');
