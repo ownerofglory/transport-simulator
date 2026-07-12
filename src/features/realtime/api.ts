@@ -5,9 +5,12 @@ import type {
   SearchJourneyRequest
 } from './types';
 
-// Base URL of the transit-simulator-backend service. Defaults to same-origin so
-// a reverse proxy can serve both; override with VITE_REALTIME_API_BASE in dev.
-const API_BASE = (import.meta.env.VITE_REALTIME_API_BASE as string | undefined)?.replace(/\/$/, '') ?? '';
+// Base URL of the transit-simulator-backend service. In dev we always call the
+// same origin so requests flow through the Vite proxy (the backend sends no CORS
+// headers); production builds call VITE_REALTIME_API_BASE directly (deploy behind
+// a reverse proxy or enable CORS on the backend).
+const CONFIGURED_BASE = (import.meta.env.VITE_REALTIME_API_BASE as string | undefined)?.replace(/\/$/, '') ?? '';
+const API_BASE = import.meta.env.DEV ? '' : CONFIGURED_BASE;
 const API_ROOT = `${API_BASE}/api/v1`;
 
 // Envelope the backend uses for 4xx errors.
