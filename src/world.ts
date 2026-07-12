@@ -213,7 +213,11 @@ export class TransitWorld {
   }
 
   toggleCinematicMode(): { active: boolean; label: string } {
-    this.cinematicActive = !this.cinematicActive;
+    return this.setCinematicMode(!this.cinematicActive);
+  }
+
+  setCinematicMode(active: boolean): { active: boolean; label: string } {
+    this.cinematicActive = active;
     this.updateVehicleGlass();
     return { active: this.cinematicActive, label: this.currentCinematicPresetLabel() };
   }

@@ -1,173 +1,103 @@
-/** Semantic input events emitted from raw keyboard/touch/pointer handling. */
-export type InputControllerCallbacks = {
-  setThrottle: (held: boolean) => void;
-  setBrake: (held: boolean) => void;
-  setLook: (leftHeld: boolean, rightHeld: boolean) => void;
-  zoom: (delta: number) => void;
-  togglePhotoMode: () => void;
-  exitPhotoMode: () => void;
+export type InputCallbacks = {
+  onThrottle(held: boolean): void;
+  onBrake(held: boolean): void;
+  onLook(left: boolean, right: boolean): void;
+  onZoom(delta: number): void;
+  onPhotoToggle(): void;
+  onPhotoExit(): void;
 };
 
-/**
- * Translates raw keyboard, touch-look, pinch-zoom, and mouse-wheel input into
- * semantic callbacks. Owns its gesture state and all DOM listeners; dispose()
- * removes every listener so the controller can be torn down cleanly.
- */
+/** Owns keyboard, wheel, and touch gestures without coupling them to React or Three.js. */
 export class InputController {
-  private static readonly TOUCH_LOOK_DEADZONE_PX = 24;
-  private static readonly TOUCH_LOOK_MAX_VERTICAL_DRIFT_PX = 64;
-  private static readonly WHEEL_ZOOM_SENSITIVITY = 0.0012;
-  private static readonly PINCH_ZOOM_SENSITIVITY = 0.004;
-
-  // Combined interior-look state shared by keyboard arrows and touch swipe.
-  private lookLeft = false;
-  private lookRight = false;
-
-  private activeLookTouchId: number | null = null;
-  private touchLookStartX = 0;
-  private touchLookStartY = 0;
-  private pinchDistancePx: number | null = null;
-
-  private readonly onKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      this.callbacks.exitPhotoMode();
-      return;
-    }
-    if ((event.key === 'p' || event.key === 'P') && !event.repeat) {
-      event.preventDefault();
-      this.callbacks.togglePhotoMode();
-      return;
-    }
-    if (event.repeat) return;
-    this.applyKey(event.key, true);
-  };
-
-  private readonly onKeyUp = (event: KeyboardEvent): void => {
-    this.applyKey(event.key, false);
-  };
-
-  private readonly onTouchStart = (event: TouchEvent): void => {
-    if (event.touches.length === 2) {
-      this.clearLookTouch();
-      this.pinchDistancePx = this.touchDistance(event.touches[0], event.touches[1]);
-      return;
-    }
-
-    if (event.touches.length !== 1) return;
-
-    const touch = event.touches[0];
-    if (!touch) return;
-
-    this.activeLookTouchId = touch.identifier;
-    this.touchLookStartX = touch.clientX;
-    this.touchLookStartY = touch.clientY;
-  };
-
-  private readonly onTouchMove = (event: TouchEvent): void => {
-    if (event.touches.length === 2) {
-      const [firstTouch, secondTouch] = [event.touches[0], event.touches[1]];
-      if (!firstTouch || !secondTouch) return;
-
-      const distancePx = this.touchDistance(firstTouch, secondTouch);
-      if (this.pinchDistancePx != null) {
-        const deltaPx = distancePx - this.pinchDistancePx;
-        this.callbacks.zoom(deltaPx * InputController.PINCH_ZOOM_SENSITIVITY);
-      }
-      this.pinchDistancePx = distancePx;
-      this.clearLookTouch();
-      event.preventDefault();
-      return;
-    }
-
-    if (this.activeLookTouchId == null) return;
-
-    const touch = Array.from(event.touches).find((entry) => entry.identifier === this.activeLookTouchId);
-    if (!touch) return;
-
-    const deltaX = touch.clientX - this.touchLookStartX;
-    const deltaY = touch.clientY - this.touchLookStartY;
-
-    if (Math.abs(deltaY) > InputController.TOUCH_LOOK_MAX_VERTICAL_DRIFT_PX) {
-      this.clearLookTouch();
-      return;
-    }
-
-    const shouldLookLeft = deltaX > InputController.TOUCH_LOOK_DEADZONE_PX;
-    const shouldLookRight = deltaX < -InputController.TOUCH_LOOK_DEADZONE_PX;
-
-    if (this.lookLeft !== shouldLookLeft || this.lookRight !== shouldLookRight) {
-      this.lookLeft = shouldLookLeft;
-      this.lookRight = shouldLookRight;
-      this.callbacks.setLook(this.lookLeft, this.lookRight);
-    }
-  };
-
-  private readonly onTouchRelease = (event: TouchEvent): void => {
-    if (event.touches.length < 2) this.pinchDistancePx = null;
-    if (this.activeLookTouchId == null) return;
-
-    const changed = Array.from(event.changedTouches).some((touch) => touch.identifier === this.activeLookTouchId);
-    if (!changed) return;
-
-    this.clearLookTouch();
-  };
-
-  private readonly onWheel = (event: WheelEvent): void => {
-    event.preventDefault();
-    this.callbacks.zoom(-event.deltaY * InputController.WHEEL_ZOOM_SENSITIVITY);
-  };
+  private touchId: number | null = null;
+  private startX = 0;
+  private startY = 0;
+  private pinchDistance: number | null = null;
 
   constructor(
-    private readonly appEl: HTMLElement,
-    private readonly callbacks: InputControllerCallbacks
+    private readonly target: HTMLElement,
+    private readonly callbacks: InputCallbacks
   ) {
-    window.addEventListener('keydown', this.onKeyDown);
-    window.addEventListener('keyup', this.onKeyUp);
-    this.appEl.addEventListener('touchstart', this.onTouchStart, { passive: true });
-    this.appEl.addEventListener('touchmove', this.onTouchMove, { passive: false });
-    this.appEl.addEventListener('touchend', this.onTouchRelease, { passive: true });
-    this.appEl.addEventListener('touchcancel', this.onTouchRelease, { passive: true });
-    this.appEl.addEventListener('wheel', this.onWheel, { passive: false });
+    addEventListener('keydown', this.keyDown);
+    addEventListener('keyup', this.keyUp);
+    target.addEventListener('wheel', this.wheel, { passive: false });
+    target.addEventListener('touchstart', this.touchStart, { passive: true });
+    target.addEventListener('touchmove', this.touchMove, { passive: false });
+    target.addEventListener('touchend', this.touchEnd, { passive: true });
+    target.addEventListener('touchcancel', this.touchEnd, { passive: true });
   }
 
-  /** Removes every DOM listener registered by this controller. */
   dispose(): void {
-    window.removeEventListener('keydown', this.onKeyDown);
-    window.removeEventListener('keyup', this.onKeyUp);
-    this.appEl.removeEventListener('touchstart', this.onTouchStart);
-    this.appEl.removeEventListener('touchmove', this.onTouchMove);
-    this.appEl.removeEventListener('touchend', this.onTouchRelease);
-    this.appEl.removeEventListener('touchcancel', this.onTouchRelease);
-    this.appEl.removeEventListener('wheel', this.onWheel);
+    removeEventListener('keydown', this.keyDown);
+    removeEventListener('keyup', this.keyUp);
+    this.target.removeEventListener('wheel', this.wheel);
+    this.target.removeEventListener('touchstart', this.touchStart);
+    this.target.removeEventListener('touchmove', this.touchMove);
+    this.target.removeEventListener('touchend', this.touchEnd);
+    this.target.removeEventListener('touchcancel', this.touchEnd);
   }
 
-  private applyKey(key: string, held: boolean): void {
-    if (key === 'w' || key === 'ArrowUp') this.callbacks.setThrottle(held);
-    else if (key === 's' || key === 'ArrowDown') this.callbacks.setBrake(held);
-    else if (key === 'ArrowLeft') this.setLook(held, this.lookRight);
-    else if (key === 'ArrowRight') this.setLook(this.lookLeft, held);
-  }
+  private keyDown = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') this.callbacks.onPhotoExit();
+    if ((e.key === 'p' || e.key === 'P') && !e.repeat) {
+      e.preventDefault();
+      this.callbacks.onPhotoToggle();
+    }
+    if (e.repeat) return;
+    if (e.key === 'w' || e.key === 'ArrowUp') this.callbacks.onThrottle(true);
+    if (e.key === 's' || e.key === 'ArrowDown') this.callbacks.onBrake(true);
+    if (e.key === 'ArrowLeft') this.callbacks.onLook(true, false);
+    if (e.key === 'ArrowRight') this.callbacks.onLook(false, true);
+  };
 
-  private setLook(leftHeld: boolean, rightHeld: boolean): void {
-    this.lookLeft = leftHeld;
-    this.lookRight = rightHeld;
-    this.callbacks.setLook(this.lookLeft, this.lookRight);
-  }
+  private keyUp = (e: KeyboardEvent): void => {
+    if (e.key === 'w' || e.key === 'ArrowUp') this.callbacks.onThrottle(false);
+    if (e.key === 's' || e.key === 'ArrowDown') this.callbacks.onBrake(false);
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') this.callbacks.onLook(false, false);
+  };
 
-  /** Ends any active look gesture and clears the look state if it was set. */
-  private clearLookTouch(): void {
-    this.activeLookTouchId = null;
-    if (!this.lookLeft && !this.lookRight) return;
-    this.lookLeft = false;
-    this.lookRight = false;
-    this.callbacks.setLook(false, false);
-  }
+  private wheel = (e: WheelEvent): void => {
+    e.preventDefault();
+    this.callbacks.onZoom(-e.deltaY * 0.0012);
+  };
 
-  private touchDistance(firstTouch: Touch, secondTouch: Touch): number {
-    return Math.hypot(
-      secondTouch.clientX - firstTouch.clientX,
-      secondTouch.clientY - firstTouch.clientY
-    );
-  }
+  private touchStart = (e: TouchEvent): void => {
+    if (e.touches.length === 2) {
+      this.pinchDistance = distance(e.touches[0], e.touches[1]);
+      this.touchId = null;
+      return;
+    }
+    const touch = e.touches[0];
+    if (touch) {
+      this.touchId = touch.identifier;
+      this.startX = touch.clientX;
+      this.startY = touch.clientY;
+    }
+  };
+
+  private touchMove = (e: TouchEvent): void => {
+    if (e.touches.length === 2) {
+      const [a, b] = [e.touches[0], e.touches[1]];
+      if (!a || !b) return;
+      const next = distance(a, b);
+      if (this.pinchDistance != null) this.callbacks.onZoom((next - this.pinchDistance) * 0.004);
+      this.pinchDistance = next;
+      e.preventDefault();
+      return;
+    }
+    const touch = Array.from(e.touches).find((entry) => entry.identifier === this.touchId);
+    if (!touch) return;
+    const x = touch.clientX - this.startX;
+    const y = touch.clientY - this.startY;
+    if (Math.abs(y) > 64) return this.callbacks.onLook(false, false);
+    this.callbacks.onLook(x > 24, x < -24);
+  };
+
+  private touchEnd = (): void => {
+    this.touchId = null;
+    this.pinchDistance = null;
+    this.callbacks.onLook(false, false);
+  };
 }
+
+const distance = (a: Touch, b: Touch): number => Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);

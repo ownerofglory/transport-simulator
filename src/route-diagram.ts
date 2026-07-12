@@ -1,6 +1,10 @@
 import type { DemoRoute } from './route';
 import type { SimulatorState } from './simulator/simulator-types';
 
+// The diagram only needs a few live fields; accepting a subset lets the React
+// snapshot drive it without constructing a full SimulatorState.
+export type RouteDiagramProgress = Pick<SimulatorState, 'distanceM' | 'doorsOpen' | 'stationIndex' | 'speedMps'>;
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const STATION_GAP = 34;
 const TOP_PADDING = 26;
@@ -26,6 +30,11 @@ export class TransitRouteDiagram {
     this.title = this.root.querySelector<HTMLElement>('.route-diagram-title')!;
     this.scroll = this.root.querySelector<HTMLElement>('.route-diagram-scroll')!;
     this.svg = this.root.querySelector<SVGSVGElement>('svg')!;
+  }
+
+  /** Clears the diagram DOM; used when the owning React panel unmounts. */
+  dispose(): void {
+    this.root.replaceChildren();
   }
 
   setRoute(route: DemoRoute, networkRoutes: DemoRoute[] = [route]): void {
@@ -84,7 +93,7 @@ export class TransitRouteDiagram {
     this.updateMarker(0);
   }
 
-  update(state: SimulatorState): void {
+  update(state: RouteDiagramProgress): void {
     if (!this.route || !this.vehicleMarker) return;
     const distanceM = Math.max(0, Math.min(this.route.routeLengthM, state.distanceM));
     const markerY = this.distanceY(distanceM);

@@ -1,5 +1,6 @@
 import type { TransportMode } from '../domain/transport';
 import type { CameraMode } from '../world/CameraController';
+import { demoRoute } from '../route';
 import type { Mode, Season } from './types';
 
 /**
@@ -24,7 +25,7 @@ export type AppState = {
   lookRightHeld: boolean;
 };
 
-export function createInitialAppState(routeId: string): AppState {
+export function createInitialAppState(routeId: string = demoRoute.id): AppState {
   return {
     selectedCityId: 'stuttgart',
     selectedRouteId: routeId,

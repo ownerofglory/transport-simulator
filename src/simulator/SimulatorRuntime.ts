@@ -1,0 +1,231 @@
+import { createRouteCurve, routeMode, type DemoRoute } from '../route';
+import type { CityDefinition } from '../cities';
+import { resolveTransportModeDefinition } from '../domain/transport';
+import type { CameraMode } from '../world/CameraController';
+import { TransitWorld } from '../world';
+import { SimulatorClient } from './SimulatorClient';
+import { SimulatorLoop } from '../app/SimulatorLoop';
+import type { Mode, Season } from '../app/types';
+import type { SimulatorSnapshotStore } from '../features/simulation/SimulatorSnapshotStore';
+
+/** Everything needed to (re)build the world and initialize the simulator. */
+export type RouteSession = {
+  route: DemoRoute;
+  networkRoutes: DemoRoute[];
+  city: CityDefinition;
+  mode: Mode;
+  startStationIndex: number;
+  season: Season;
+  time: 'auto' | number;
+  cameraMode: CameraMode;
+};
+
+/** Imperative command surface the React shell drives via effects. */
+export type SimulatorCommands = {
+  loadRoute(session: RouteSession): void;
+  setStartStation(session: RouteSession): void;
+  setRideMode(session: RouteSession): void;
+  resetSimulation(session: RouteSession): void;
+  setPaused(paused: boolean): void;
+  setDriverInput(throttle: number, brake: number): void;
+  setInteriorLook(left: boolean, right: boolean): void;
+  cycleCamera(): CameraMode | undefined;
+  adjustZoom(delta: number): void;
+  setSeason(season: Season): void;
+  setTime(time: 'auto' | number): void;
+  enterPhotoMode(): void;
+  exitPhotoMode(): void;
+  cyclePhotoPreset(): void;
+  exportScreenshot(): Promise<void>;
+};
+
+/**
+ * Owns the Three.js world, the Go/WASM simulator client, and the render loop.
+ * React never touches these — it only issues commands and reads snapshots. The
+ * world is rebuilt only on loadRoute; other changes re-init the simulator.
+ */
+export class SimulatorRuntime implements SimulatorCommands {
+  private readonly simulator = new SimulatorClient();
+  private world: TransitWorld | null = null;
+  private session: RouteSession | null = null;
+  private paused = false;
+  private loaded = false;
+  private disposed = false;
+  private photoLabelHandler: ((label: string) => void) | null = null;
+  private readonly loop: SimulatorLoop;
+
+  constructor(
+    private readonly container: HTMLElement,
+    private readonly snapshots: SimulatorSnapshotStore
+  ) {
+    this.loop = new SimulatorLoop({
+      turnaroundMs: 4000,
+      getPaused: () => this.paused,
+      getSelectedTime: () => this.session?.time ?? 'auto',
+      getCurrentLocalHour: currentLocalHour,
+      step: (dt) => this.simulator.step(dt),
+      onAutoTimeHour: (hour) => this.world?.setTimeOfDay(hour),
+      onState: (state, dt) => {
+        this.world?.updateTrain(state.distanceM, state.doorsOpen, dt, state.nextStation);
+        this.world?.render();
+        this.snapshots.update(state);
+      },
+      onTerminalTurnaround: () => undefined
+    });
+  }
+
+  /** Loads the WASM simulator; starts the loop and inits the pending session. */
+  async load(): Promise<void> {
+    await this.simulator.load();
+    // Guard against React StrictMode's mount→unmount→mount: if this instance was
+    // disposed while the WASM load was in flight, do not start its loop.
+    if (this.disposed) return;
+    this.loaded = true;
+    if (this.session) this.resetSimulation(this.session);
+    this.loop.start();
+  }
+
+  /** Registers a callback for cinematic-preset label changes (photo overlay). */
+  onPhotoLabel(handler: (label: string) => void): void {
+    this.photoLabelHandler = handler;
+  }
+
+  loadRoute(session: RouteSession): void {
+    this.session = session;
+    this.world?.dispose();
+    this.container.replaceChildren();
+    this.world = new TransitWorld(
+      createRouteCurve(session.route),
+      session.route,
+      session.networkRoutes,
+      session.city,
+      resolveTransportModeDefinition(routeMode(session.route), session.city.transportModes)
+    );
+    this.world.mount(this.container);
+    this.applyWorldSettings(session);
+    if (this.loaded) this.resetSimulation(session);
+  }
+
+  setStartStation(session: RouteSession): void {
+    this.session = session;
+    if (this.loaded) this.resetSimulation(session);
+  }
+
+  setRideMode(session: RouteSession): void {
+    this.session = session;
+    if (this.loaded) this.resetSimulation(session);
+  }
+
+  resetSimulation(session: RouteSession): void {
+    this.session = session;
+    this.paused = false;
+    const state = this.simulator.init({
+      line: session.route.line,
+      destination: session.route.destination,
+      speedLimitMps: session.route.speedLimitMps,
+      routeLengthM: session.route.routeLengthM,
+      stations: session.route.stations,
+      mode: session.mode,
+      startStationIndex: session.startStationIndex
+    });
+    this.loop.setState(state);
+    this.snapshots.update(state, true);
+  }
+
+  setPaused(paused: boolean): void {
+    this.paused = paused;
+    if (this.loaded) this.snapshots.update(this.simulator.setPaused(paused), true);
+  }
+
+  setDriverInput(throttle: number, brake: number): void {
+    if (this.loaded && this.session?.mode === 'driver') {
+      this.snapshots.update(this.simulator.setDriverInput(throttle, brake), true);
+    }
+  }
+
+  setInteriorLook(left: boolean, right: boolean): void {
+    this.world?.setInteriorLookInput(left, right);
+  }
+
+  cycleCamera(): CameraMode | undefined {
+    return this.world?.cycleCamera();
+  }
+
+  adjustZoom(delta: number): void {
+    this.world?.adjustCameraZoom(delta);
+  }
+
+  setSeason(season: Season): void {
+    if (this.session) this.session.season = season;
+    this.world?.setSeason(season);
+  }
+
+  setTime(time: 'auto' | number): void {
+    if (this.session) this.session.time = time;
+    this.world?.setTimeOfDay(time === 'auto' ? currentLocalHour() : time);
+  }
+
+  enterPhotoMode(): void {
+    const result = this.world?.setCinematicMode(true);
+    document.body.classList.toggle('photo-mode', !!result?.active);
+    if (result) this.photoLabelHandler?.(result.label);
+    this.renderNow();
+  }
+
+  exitPhotoMode(): void {
+    const result = this.world?.setCinematicMode(false);
+    document.body.classList.remove('photo-mode');
+    if (result) this.photoLabelHandler?.(result.label);
+    this.renderNow();
+  }
+
+  cyclePhotoPreset(): void {
+    const result = this.world?.cycleCinematicPreset();
+    if (result) this.photoLabelHandler?.(result.label);
+    this.renderNow();
+  }
+
+  async exportScreenshot(): Promise<void> {
+    if (!this.world || !this.session) return;
+    this.renderNow();
+    document.body.classList.add('photo-capture');
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const blob = await new Promise<Blob | null>((resolve) => this.world!.renderer.domElement.toBlob(resolve, 'image/png'));
+    document.body.classList.remove('photo-capture');
+    if (!blob) return;
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${this.session.city.id}_${this.session.route.line.replace(/[^\w-]+/g, '_')}_${this.world.currentCinematicPreset().replaceAll('-', '_')}.png`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
+
+  /** Stops the loop and disposes the world; called on viewport unmount. */
+  dispose(): void {
+    this.disposed = true;
+    this.loop.stop();
+    this.loop.setState(null);
+    this.world?.dispose();
+    this.world = null;
+    this.container.replaceChildren();
+    document.body.classList.remove('photo-mode', 'photo-capture');
+  }
+
+  private applyWorldSettings(session: RouteSession): void {
+    this.world?.setCameraMode(session.cameraMode);
+    this.world?.setSeason(session.season);
+    this.world?.setTimeOfDay(session.time === 'auto' ? currentLocalHour() : session.time);
+  }
+
+  private renderNow(): void {
+    const state = this.loop.currentState();
+    if (!state || !this.world) return;
+    this.world.updateTrain(state.distanceM, state.doorsOpen, 1 / 60, state.nextStation);
+    this.world.render();
+  }
+}
+
+const currentLocalHour = (): number => {
+  const now = new Date();
+  return now.getHours() + now.getMinutes() / 60;
+};
