@@ -5,6 +5,7 @@ import { RealtimeMap, type MapPin, type MapPoint } from './RealtimeMap';
 import { LocationField, type EndpointValue } from './LocationField';
 import { searchJourneys } from './api';
 import { buildJourneyRoute, journeyPath, journeyStations } from './journeyRoute';
+import { enrichRouteFromCatalog } from './catalogTerrain';
 import { formatClock, secondsBetween } from './time';
 import type { Journey } from './types';
 
@@ -19,6 +20,7 @@ export function JourneySearchModal({ onClose }: { onClose: () => void }) {
   const [journeys, setJourneys] = useState<Journey[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selected = journeys.find((j) => j.id === selectedId) ?? null;
@@ -69,9 +71,18 @@ export function JourneySearchModal({ onClose }: { onClose: () => void }) {
       .finally(() => setLoading(false));
   };
 
-  const simulate = () => {
+  const simulate = async () => {
     if (!selected || !origin || !destination) return;
-    dispatch({ type: 'realtime-route-simulated', route: buildJourneyRoute(selected, origin, destination) });
+    setPreparing(true);
+    const route = buildJourneyRoute(selected, origin, destination);
+    // Borrow elevation + tunnel data from overlapping catalog routes so the ride
+    // isn't flat; failures just leave the route as-is.
+    try {
+      await enrichRouteFromCatalog(route);
+    } catch {
+      // Keep the un-enriched route.
+    }
+    dispatch({ type: 'realtime-route-simulated', route });
     onClose();
   };
 
@@ -124,8 +135,8 @@ export function JourneySearchModal({ onClose }: { onClose: () => void }) {
             })}
           </div>
           <div className="rt-actions">
-            <button className="primary" onClick={simulate} disabled={!selected}>
-              Simulate this journey
+            <button className="primary" onClick={() => void simulate()} disabled={!selected || preparing}>
+              {preparing ? 'Preparing route…' : 'Simulate this journey'}
             </button>
           </div>
         </div>
