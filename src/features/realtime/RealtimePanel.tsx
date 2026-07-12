@@ -2,6 +2,7 @@ import { useContext, useState } from 'react';
 import { useAppState } from '../../app/useAppState';
 import { SimulatorCommandsContext } from '../simulation/useSimulatorRuntime';
 import { Modal } from './Modal';
+import { JourneySearchModal } from './JourneySearchModal';
 
 type RealtimeModal = 'journey' | 'stop' | 'departures' | null;
 
@@ -49,11 +50,7 @@ export function RealtimePanel() {
         <button onClick={() => dispatch({ type: 'photo-mode-changed', active: true })}>Photo</button>
       </div>
 
-      {modal === 'journey' && (
-        <Modal title="Journey search" subtitle="Live VVS/TRIAS routing" onClose={() => setModal(null)}>
-          <div className="rt-placeholder">Journey search coming up.</div>
-        </Modal>
-      )}
+      {modal === 'journey' && <JourneySearchModal onClose={() => setModal(null)} />}
       {modal === 'stop' && (
         <Modal title="Stop search" subtitle="Stops near a point" onClose={() => setModal(null)}>
           <div className="rt-placeholder">Stop search coming up.</div>
