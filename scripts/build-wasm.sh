@@ -15,5 +15,7 @@ else
   exit 1
 fi
 
-GO111MODULE=on GOCACHE="$GO_BUILD_CACHE" GOOS=js GOARCH=wasm go build -o "$ROOT/public/sim.wasm" "$ROOT/wasm/sim"
+# -trimpath keeps absolute build paths (and the developer's username) out of the
+# committed binary; the embedded source paths become module-relative instead.
+GO111MODULE=on GOCACHE="$GO_BUILD_CACHE" GOOS=js GOARCH=wasm go build -trimpath -o "$ROOT/public/sim.wasm" "$ROOT/wasm/sim"
 echo "Built public/sim.wasm"
