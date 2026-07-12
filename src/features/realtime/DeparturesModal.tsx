@@ -31,9 +31,9 @@ export function DeparturesModal({
     setLoading(true);
     setError(null);
     stationDepartures(station.id, { name: station.name, lat: station.lat, lon: station.lon }, controller.signal)
-      .then((res) => {
-        setDepartures(res.departures);
-        if (res.departures.length === 0) setError('No upcoming departures.');
+      .then((results) => {
+        setDepartures(results);
+        if (results.length === 0) setError('No upcoming departures.');
       })
       .catch((e: unknown) => {
         if (!controller.signal.aborted) setError(e instanceof Error ? e.message : 'Departures request failed.');

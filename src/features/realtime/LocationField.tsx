@@ -48,8 +48,8 @@ export function LocationField({
     const controller = new AbortController();
     const timer = setTimeout(() => {
       void searchLocations(query, controller.signal)
-        .then((res) => {
-          setResults(res.locations.slice(0, 8));
+        .then((locations) => {
+          setResults(locations.slice(0, 8));
           setOpen(true);
         })
         .catch(() => undefined);

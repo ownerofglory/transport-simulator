@@ -20,7 +20,7 @@ function journeyStations(journey: Journey, origin: EndpointValue, destination: E
   const boundaries: { name: string; ms: number | null }[] = [
     { name: journey.legs[0]?.originName ?? origin.name, ms: parseTimeMs(journey.legs[0]?.originTime) ?? depMs }
   ];
-  for (const leg of journey.legs) boundaries.push({ name: leg.destinationName, ms: parseTimeMs(leg.destinationTime) });
+  for (const leg of journey.legs) boundaries.push({ name: leg.destinationName ?? destination.name, ms: parseTimeMs(leg.destinationTime) });
 
   return boundaries.map((b, i) => {
     const fraction = total && depMs !== null && b.ms !== null
@@ -85,10 +85,10 @@ export function JourneySearchModal({ onClose }: { onClose: () => void }) {
       destination: { id: destination.id, name: destination.name, lat: destination.lat, lon: destination.lon },
       destinationId: destination.id
     })
-      .then((res) => {
-        setJourneys(res.journeys);
-        if (res.journeys[0]) setSelectedId(res.journeys[0].id);
-        if (res.journeys.length === 0) setError('No journeys found for these points.');
+      .then((results) => {
+        setJourneys(results);
+        if (results[0]) setSelectedId(results[0].id);
+        if (results.length === 0) setError('No journeys found for these points.');
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Journey search failed.'))
       .finally(() => setLoading(false));

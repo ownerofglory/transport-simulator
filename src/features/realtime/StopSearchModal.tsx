@@ -27,9 +27,9 @@ export function StopSearchModal({
     setError(null);
     setSelectedId(null);
     nearbyLocations(point.lat, point.lon, radius)
-      .then((res) => {
-        setStops(res.locations);
-        if (res.locations.length === 0) setError('No stops found near this point.');
+      .then((locations) => {
+        setStops(locations);
+        if (locations.length === 0) setError('No stops found near this point.');
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Nearby search failed.'))
       .finally(() => setLoading(false));

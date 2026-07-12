@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "gen:api": "swagger-typescript-api generate -p ./api/openapi.yaml -o ./src/features/realtime/generated -n api-types.ts --no-client --enum-style=union --sort-types --clean-output",
     "build": "npm run wasm:build && tsc && vite build",
     "build:client": "tsc && vite build",
     "build:vercel": "test -s public/sim.wasm && test -s public/wasm_exec.js && npm run build:client",
@@ -27,6 +28,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.3",
     "pngjs": "^7.0.0",
+    "swagger-typescript-api": "^13.12.4",
     "typescript": "6.0.3",
     "vite": "8.0.16"
   }

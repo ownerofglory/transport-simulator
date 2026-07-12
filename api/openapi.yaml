@@ -1,0 +1,349 @@
+basePath: /
+definitions:
+  Departure:
+    properties:
+      cancelled:
+        type: boolean
+      countdownMinutes:
+        type: integer
+      destination:
+        type: string
+      estimatedTime:
+        type: string
+      id:
+        type: string
+      line:
+        type: string
+      plannedTime:
+        type: string
+      platform:
+        type: string
+    type: object
+  DeparturesResponse:
+    properties:
+      departures:
+        items:
+          $ref: '#/definitions/Departure'
+        type: array
+      generatedAt:
+        type: string
+    type: object
+  GeoPoint:
+    properties:
+      lat:
+        type: number
+      lon:
+        type: number
+    type: object
+  Journey:
+    properties:
+      arrivalTime:
+        type: string
+      departureTime:
+        type: string
+      distanceM:
+        type: number
+      durationMinutes:
+        type: integer
+      id:
+        type: string
+      interchanges:
+        type: integer
+      legs:
+        items:
+          $ref: '#/definitions/JourneyLeg'
+        type: array
+      messages:
+        items:
+          type: string
+        type: array
+      summary:
+        type: string
+    type: object
+  JourneyLeg:
+    properties:
+      destination:
+        type: string
+      destinationName:
+        type: string
+      destinationTime:
+        type: string
+      durationMinutes:
+        type: integer
+      geometry:
+        items:
+          $ref: '#/definitions/GeoPoint'
+        type: array
+      id:
+        type: string
+      line:
+        type: string
+      messages:
+        items:
+          type: string
+        type: array
+      mode:
+        $ref: '#/definitions/domain.LegMode'
+      originName:
+        type: string
+      originTime:
+        type: string
+      platform:
+        type: string
+      routeDescription:
+        type: string
+      stops:
+        items:
+          $ref: '#/definitions/JourneyStop'
+        type: array
+    type: object
+  JourneyStop:
+    properties:
+      arrivalTime:
+        type: string
+      departureTime:
+        type: string
+      id:
+        type: string
+      lat:
+        type: number
+      lon:
+        type: number
+      name:
+        type: string
+    type: object
+  JourneysResponse:
+    properties:
+      generatedAt:
+        type: string
+      journeys:
+        items:
+          $ref: '#/definitions/Journey'
+        type: array
+    type: object
+  Location:
+    properties:
+      id:
+        type: string
+      lat:
+        type: number
+      lon:
+        type: number
+      name:
+        type: string
+      type:
+        $ref: '#/definitions/domain.LocationType'
+    type: object
+  LocationsResponse:
+    properties:
+      locations:
+        items:
+          $ref: '#/definitions/Location'
+        type: array
+    type: object
+  Place:
+    properties:
+      id:
+        type: string
+      lat:
+        type: number
+      lon:
+        type: number
+      name:
+        type: string
+      type:
+        $ref: '#/definitions/domain.LocationType'
+    type: object
+  SearchJourneyRequest:
+    properties:
+      dateTime:
+        type: string
+      destination:
+        $ref: '#/definitions/Place'
+      destinationId:
+        type: string
+      origin:
+        $ref: '#/definitions/Place'
+      originId:
+        type: string
+      timeMode:
+        type: string
+    type: object
+  domain.LegMode:
+    enum:
+    - walk
+    - stadtbahn
+    - s-bahn
+    - bus
+    type: string
+    x-enum-varnames:
+    - LegModeWalk
+    - LegModeStadtbahn
+    - LegModeSBahn
+    - LegModeBus
+  domain.LocationType:
+    enum:
+    - stop
+    - address
+    - poi
+    - coord
+    type: string
+    x-enum-varnames:
+    - LocationTypeStop
+    - LocationTypeAddress
+    - LocationTypePOI
+    - LocationTypeCoord
+  respond.ErrorEnvelope:
+    properties:
+      error:
+        $ref: '#/definitions/respond.errorBody'
+    type: object
+  respond.errorBody:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: HTTP API for real-time transport searches backed by TRIAS.
+  title: Transit Simulator API
+  version: "1.0"
+paths:
+  /api/v1/health:
+    get:
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Service health
+      tags:
+      - system
+  /api/v1/journeys:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Journey search
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/SearchJourneyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/JourneysResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/respond.ErrorEnvelope'
+      summary: Search journeys
+      tags:
+      - journeys
+  /api/v1/locations:
+    get:
+      parameters:
+      - description: Location search query
+        in: query
+        name: query
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/LocationsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/respond.ErrorEnvelope'
+      summary: Search locations
+      tags:
+      - locations
+  /api/v1/locations/nearby:
+    get:
+      parameters:
+      - description: Latitude
+        in: query
+        name: lat
+        required: true
+        type: number
+      - description: Longitude
+        in: query
+        name: lon
+        required: true
+        type: number
+      - default: 700
+        description: Search radius in metres
+        in: query
+        name: radiusM
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/LocationsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/respond.ErrorEnvelope'
+      summary: Find nearby locations
+      tags:
+      - locations
+  /api/v1/stations/{stationId}/departures:
+    get:
+      parameters:
+      - description: Station identifier
+        in: path
+        name: stationId
+        required: true
+        type: string
+      - description: Station name
+        in: query
+        name: name
+        type: string
+      - description: Latitude
+        in: query
+        name: lat
+        type: number
+      - description: Longitude
+        in: query
+        name: lon
+        type: number
+      - description: RFC3339 timestamp
+        in: query
+        name: at
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/DeparturesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/respond.ErrorEnvelope'
+      summary: Get station departures
+      tags:
+      - departures
+  /version:
+    get:
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get build version
+      tags:
+      - system
+swagger: "2.0"

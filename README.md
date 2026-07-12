@@ -98,6 +98,22 @@ npm run build
 npm run preview
 ```
 
+## Realtime API types
+
+The realtime tools (journey/stop search, departures) call the
+`transit-simulator-backend` TRIAS service. Its TypeScript contracts are
+generated from the backend's OpenAPI spec, checked in at `api/openapi.yaml`.
+After updating that spec, regenerate the types:
+
+```bash
+npm run gen:api
+```
+
+This rewrites `src/features/realtime/generated/api-types.ts` (do not edit it by
+hand). `src/features/realtime/types.ts` renames those wire types to the app's
+vocabulary. Set `VITE_REALTIME_API_BASE` (see `.env.example`) to the backend
+URL; in dev Vite proxies `/api` there to sidestep CORS.
+
 ## Deploy to Vercel
 
 The repository includes the generated Go WebAssembly runtime in `public/`, so Vercel only needs Node.js for its build:
