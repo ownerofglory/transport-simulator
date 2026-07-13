@@ -1,6 +1,7 @@
 import { isKnownTransportMode, type TransportMode } from '../domain/transport';
 import type { CameraMode } from '../world/CameraController';
 import type { AppState } from './AppState';
+import type { EndpointValue } from '../features/realtime/LocationField';
 import type { Mode, Season } from './types';
 
 export type AppUrlState = {
@@ -12,6 +13,7 @@ export type AppUrlState = {
   season: Season;
   time: 'auto' | number;
   cameraMode: CameraMode;
+  realtime?: { origin: EndpointValue; destination: EndpointValue; journeyId: string };
 };
 
 const CAMERA_MODES = new Set<CameraMode>(['chase', 'passenger', 'cab']);
@@ -56,6 +58,20 @@ export function readUrlState(): Partial<AppUrlState> {
   const cameraMode = params.get('camera');
   if (cameraMode && CAMERA_MODES.has(cameraMode as CameraMode)) state.cameraMode = cameraMode as CameraMode;
 
+  const endpoint = (prefix: string): EndpointValue | null => {
+    const name = params.get(`${prefix}n`);
+    const lat = Number.parseFloat(params.get(`${prefix}a`) ?? '');
+    const lon = Number.parseFloat(params.get(`${prefix}o`) ?? '');
+    if (!name || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    return { id: params.get(`${prefix}i`) ?? undefined, name, lat, lon };
+  };
+  if (params.get('rt') === '1') {
+    const origin = endpoint('rfo');
+    const destination = endpoint('rto');
+    const journeyId = params.get('rtj');
+    if (origin && destination && journeyId) state.realtime = { origin, destination, journeyId };
+  }
+
   return state;
 }
 
@@ -70,6 +86,23 @@ export function writeUrlState(state: AppState): void {
   params.set('season', state.selectedSeason);
   params.set('time', state.selectedTime === 'auto' ? 'auto' : String(state.selectedTime));
   params.set('camera', state.selectedCameraMode);
+
+  const realtimeKeys = ['rt', 'rfoi', 'rfon', 'rfoa', 'rfoo', 'rtoi', 'rton', 'rtoa', 'rtoo', 'rtj'];
+  if (state.realtimeJourney) {
+    const writeEndpoint = (prefix: string, endpoint: EndpointValue) => {
+      if (endpoint.id) params.set(`${prefix}i`, endpoint.id);
+      else params.delete(`${prefix}i`);
+      params.set(`${prefix}n`, endpoint.name);
+      params.set(`${prefix}a`, String(endpoint.lat));
+      params.set(`${prefix}o`, String(endpoint.lon));
+    };
+    params.set('rt', '1');
+    params.set('rtj', state.realtimeJourney.journey.id);
+    writeEndpoint('rfo', state.realtimeJourney.origin);
+    writeEndpoint('rto', state.realtimeJourney.destination);
+  } else {
+    realtimeKeys.forEach((key) => params.delete(key));
+  }
 
   const query = params.toString();
   const nextUrl = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`;

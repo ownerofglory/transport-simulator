@@ -7,10 +7,14 @@ import type { SimulatorUiSnapshot } from '../simulation/SimulatorSnapshotStore';
 export function RouteDiagramPanel({
   route,
   routes,
+  activeRoute,
+  journeyLegs,
   snapshot
 }: {
   route?: DemoRoute;
   routes: DemoRoute[];
+  activeRoute?: DemoRoute;
+  journeyLegs?: DemoRoute[];
   snapshot: SimulatorUiSnapshot;
 }) {
   const el = useRef<HTMLElement>(null);
@@ -26,17 +30,24 @@ export function RouteDiagramPanel({
   }, []);
 
   useEffect(() => {
-    if (route) diagram.current?.setRoute(route, routes);
-  }, [route, routes]);
+    if (route) diagram.current?.setRoute(route, routes, journeyLegs);
+  }, [route, routes, journeyLegs]);
 
   useEffect(() => {
+    const activeIndex = activeRoute ? routes.findIndex((candidate) => candidate.id === activeRoute.id) : -1;
+    const distanceOffset = activeIndex > 0
+      ? routes.slice(0, activeIndex).reduce((total, candidate) => total + candidate.routeLengthM, 0)
+      : 0;
+    const stationOffset = activeIndex > 0
+      ? routes.slice(0, activeIndex).reduce((total, candidate) => total + candidate.stations.length, 0)
+      : 0;
     diagram.current?.update({
-      distanceM: snapshot.distanceM,
+      distanceM: snapshot.distanceM + distanceOffset,
       doorsOpen: snapshot.doorsOpen,
-      stationIndex: snapshot.stationIndex,
+      stationIndex: snapshot.stationIndex + stationOffset,
       speedMps: snapshot.speedMps
     });
-  }, [snapshot]);
+  }, [snapshot, activeRoute, routes]);
 
   return <section ref={el} className="route-diagram" />;
 }

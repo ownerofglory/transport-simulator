@@ -5,6 +5,9 @@ import { parseTimeMs } from './time';
 import type { EndpointValue } from './LocationField';
 import type { Journey } from './types';
 
+/** Persisted realtime selection used to restore a journey from the URL. */
+export type RealtimeJourneySimulation = { origin: EndpointValue; destination: EndpointValue; journey: Journey };
+
 // Asserts a wire point has real coordinates while preserving its other fields.
 function isCoord<T extends { lat?: number; lon?: number }>(p: T): p is T & GeoPoint {
   return typeof p.lat === 'number' && typeof p.lon === 'number';
@@ -70,19 +73,70 @@ export function journeyPath(journey: Journey, origin: EndpointValue, destination
   return geometry.length >= 2 ? geometry : [{ lat: origin.lat, lon: origin.lon }, { lat: destination.lat, lon: destination.lon }];
 }
 
-/** Builds a simulator DemoRoute that follows the journey's real geometry and stops. */
-export function buildJourneyRoute(journey: Journey, origin: EndpointValue, destination: EndpointValue): DemoRoute {
-  const transit = journey.legs.find((leg) => leg.mode !== 'walk');
-  const geometry = journeyGeometry(journey);
+/** Stops belonging to one vehicle run, with times relative to that run's departure. */
+function transitLegStations(leg: Journey['legs'][number]): RealtimeStation[] {
+  const departureMs = parseTimeMs(leg.originTime);
+  return (leg.stops ?? []).flatMap((stop) => {
+    if (!isCoord(stop)) return [];
+    const timeMs = parseTimeMs(stop.departureTime ?? stop.arrivalTime);
+    return [{
+      name: stop.name ?? '',
+      lat: stop.lat,
+      lon: stop.lon,
+      scheduledS: departureMs !== null && timeMs !== null ? Math.max(0, Math.round((timeMs - departureMs) / 1000)) : 0
+    }];
+  });
+}
+
+/** Builds the individual vehicle runs in a journey; walking legs are not simulated. */
+export function buildJourneyRoutes(journey: Journey, origin: EndpointValue, destination: EndpointValue): DemoRoute[] {
+  const transitLegs = journey.legs
+    .filter((leg) => leg.mode !== 'walk')
+    .map((transit, index) => ({ transit, index }));
+  const routes = transitLegs.map(({ transit, index }) => {
+  const geometry = transit?.geometry?.filter(isCoord).map((point) => ({ lat: point.lat, lon: point.lon })) ?? [];
   const waypoints = geometry.length >= 2 ? geometry : [{ lat: origin.lat, lon: origin.lon }, { lat: destination.lat, lon: destination.lon }];
+  // A passenger's requested endpoint can be an address or a transfer stop.
+  // Vehicle signs must show the service's advertised direction instead.
+  const lineDestination = transit?.destination ?? transit?.destinationName ?? destination.name;
 
   return buildRealtimeRoute({
-    id: `rt-journey-${journey.id}`,
+    id: `rt-journey-${journey.id}-${transit.id ?? index}`,
     line: transit?.line ?? 'Trip',
+    destination: lineDestination,
+    description: journey.summary ?? `${origin.name} → ${destination.name}`,
+    transportMode: legModeToTransportMode(transit.mode ?? 'stadtbahn'),
+    waypoints,
+    stations: transitLegStations(transit)
+  });
+  });
+  routes.forEach((route, index) => {
+    const current = transitLegs[index].transit;
+    const next = transitLegs[index + 1]?.transit;
+    const arrival = parseTimeMs(current.destinationTime);
+    const departure = next ? parseTimeMs(next.originTime) : null;
+    if (arrival !== null && departure !== null) route.transferAfterS = Math.max(0, Math.round((departure - arrival) / 1000));
+  });
+  return routes;
+}
+
+/**
+ * Builds a sequential realtime journey. The first route is rendered initially;
+ * SimulatorRuntime swaps to the attached later vehicle runs at each transfer.
+ */
+export function buildJourneyRoute(journey: Journey, origin: EndpointValue, destination: EndpointValue): DemoRoute {
+  const legs = buildJourneyRoutes(journey, origin, destination);
+  if (legs[0]) {
+    legs[0].journeyLegs = legs.slice(1);
+    return legs[0];
+  }
+  return buildRealtimeRoute({
+    id: `rt-journey-${journey.id}-walk`,
+    line: 'Walk',
     destination: destination.name,
     description: journey.summary ?? `${origin.name} → ${destination.name}`,
-    transportMode: legModeToTransportMode(transit?.mode ?? 'stadtbahn'),
-    waypoints,
-    stations: journeyStations(journey, origin, destination)
+    transportMode: 'stadtbahn',
+    waypoints: [{ lat: origin.lat, lon: origin.lon }, { lat: destination.lat, lon: destination.lon }],
+    stations: []
   });
 }

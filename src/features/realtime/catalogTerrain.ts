@@ -2,183 +2,135 @@ import { RouteRepository, stuttgartCity } from '../../route-repository';
 import type { DemoRoute } from '../../route';
 import { pointDistance, type GeoPoint } from '../../minimap/route-position';
 
-// Catalog routes carrying terrain/tunnel enrichment. Bus (14 MB) is skipped:
-// it has no tunnels and its elevation is covered well enough by nearby rail.
-const CATALOG_MODES = ['stadtbahn', 's-bahn', 'zacke', 'seilbahn'];
-// Realtime modes that ride guideways and so inherit tunnel depth + tunnel flags.
-const RAIL_LIKE = new Set(['stadtbahn', 's-bahn', 'zacke', 'seilbahn', 'rail', 'tram']);
-// A geoPoint must fall within this distance of a catalog point to borrow its data.
-const MATCH_RADIUS_M = 35;
-// Spatial-hash cell (~55 m of latitude) used to avoid an O(n·m) nearest search.
-const CELL_DEG = 0.0005;
+const EARTH_M_PER_DEG_LAT = 111_320;
+const MAX_ENDPOINT_OFFSET_M = 140;
+const MAX_SHAPE_OFFSET_M = 65;
+const repository = new RouteRepository();
 
-// One catalog point's absolute heights (m) and guideway flags.
-type Sample = { lat: number; lon: number; trackM: number; surfaceM: number; tunnel: boolean; bridge: boolean };
+const round = (value: number) => Math.round(value * 100) / 100;
 
-const cellKey = (lat: number, lon: number) => `${Math.round(lat / CELL_DEG)}:${Math.round(lon / CELL_DEG)}`;
-
-class TerrainIndex {
-  private readonly grid = new Map<string, Sample[]>();
-
-  add(sample: Sample): void {
-    const key = cellKey(sample.lat, sample.lon);
-    const bucket = this.grid.get(key);
-    if (bucket) bucket.push(sample);
-    else this.grid.set(key, [sample]);
-  }
-
-  get size(): number {
-    let n = 0;
-    for (const bucket of this.grid.values()) n += bucket.length;
-    return n;
-  }
-
-  /** Nearest catalog sample within MATCH_RADIUS_M, or null. */
-  nearest(point: GeoPoint): Sample | null {
-    const cLat = Math.round(point.lat / CELL_DEG);
-    const cLon = Math.round(point.lon / CELL_DEG);
-    let best: Sample | null = null;
-    let bestD = MATCH_RADIUS_M;
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        const bucket = this.grid.get(`${cLat + dx}:${cLon + dy}`);
-        if (!bucket) continue;
-        for (const sample of bucket) {
-          const d = pointDistance(point, sample);
-          if (d < bestD) {
-            bestD = d;
-            best = sample;
-          }
-        }
-      }
+function closestIndex(point: GeoPoint, route: DemoRoute): { index: number; distanceM: number } | null {
+  const geo = route.geoPoints;
+  if (!geo?.length) return null;
+  let index = 0;
+  let distanceM = Number.POSITIVE_INFINITY;
+  geo.forEach(([lat, lon], candidateIndex) => {
+    const distance = pointDistance(point, { lat, lon });
+    if (distance < distanceM) {
+      index = candidateIndex;
+      distanceM = distance;
     }
-    return best;
+  });
+  return { index, distanceM };
+}
+
+function normalizedLine(line: string | undefined): string {
+  return (line ?? '').replaceAll(' ', '').toUpperCase();
+}
+
+function routeDistance(points: GeoPoint[]): number {
+  return points.reduce((total, point, index) => index === 0 ? 0 : total + pointDistance(points[index - 1], point), 0);
+}
+
+function maskRanges(mask: boolean[], points: GeoPoint[]): { startM: number; endM: number }[] {
+  const distanceAt = [0];
+  for (let index = 1; index < points.length; index++) {
+    distanceAt.push(distanceAt[index - 1] + pointDistance(points[index - 1], points[index]));
   }
-}
-
-let indexPromise: Promise<TerrainIndex> | null = null;
-
-// Loads the enriched rail catalog once and hashes every point into a grid.
-async function loadIndex(): Promise<TerrainIndex> {
-  const repository = new RouteRepository();
-  const index = new TerrainIndex();
-  for (const mode of CATALOG_MODES) {
-    try {
-      const { routes } = await repository.loadRoutes(stuttgartCity, mode);
-      for (const route of routes) {
-        if (route.elevationDatumM === undefined || !route.geoPoints) continue;
-        const datum = route.elevationDatumM;
-        route.geoPoints.forEach(([lat, lon], k) => {
-          const trackRel = route.controlPoints[k]?.[1] ?? 0;
-          const surfaceRel = route.surfaceHeightsM?.[k] ?? trackRel;
-          index.add({
-            lat,
-            lon,
-            trackM: datum + trackRel,
-            surfaceM: datum + surfaceRel,
-            tunnel: route.tunnelMask?.[k] ?? false,
-            bridge: route.bridgeMask?.[k] ?? false
-          });
-        });
-      }
-    } catch {
-      // A missing/failed mode feed just contributes no samples.
-    }
-  }
-  return index;
-}
-
-function catalogTerrainIndex(): Promise<TerrainIndex> {
-  return (indexPromise ??= loadIndex());
-}
-
-// Linearly fills null gaps from the nearest known anchors so heights stay continuous.
-function fillGaps(values: (number | null)[]): void {
-  const known = values.map((v, i) => (v === null ? -1 : i)).filter((i) => i >= 0);
-  if (known.length === 0) return;
-  for (let i = 0; i < values.length; i++) {
-    if (values[i] !== null) continue;
-    const before = known.filter((k) => k < i).at(-1);
-    const after = known.find((k) => k > i);
-    if (before === undefined) values[i] = values[after!];
-    else if (after === undefined) values[i] = values[before];
-    else {
-      const t = (i - before) / (after - before);
-      values[i] = values[before]! + (values[after]! - values[before]!) * t;
-    }
-  }
-}
-
-// Contiguous true-runs of a per-point mask as route-distance ranges (meters).
-function maskRanges(mask: boolean[], geo: GeoPoint[]): { startM: number; endM: number }[] {
-  const distances = [0];
-  for (let i = 1; i < geo.length; i++) distances.push(distances[i - 1] + pointDistance(geo[i - 1], geo[i]));
   const ranges: { startM: number; endM: number }[] = [];
-  for (let i = 0; i < mask.length; ) {
-    if (!mask[i]) {
-      i++;
-      continue;
-    }
-    const start = i;
-    while (i + 1 < mask.length && mask[i + 1]) i++;
-    ranges.push({ startM: round(distances[start]), endM: round(distances[i]) });
-    i++;
+  for (let index = 0; index < mask.length; index++) {
+    if (!mask[index]) continue;
+    const start = index;
+    while (index + 1 < mask.length && mask[index + 1]) index++;
+    ranges.push({ startM: round(distanceAt[start]), endM: round(distanceAt[index]) });
   }
   return ranges;
 }
 
-const round = (v: number) => Math.round(v * 100) / 100;
+type Match = { route: DemoRoute; start: number; end: number; score: number };
 
 /**
- * Enriches a realtime route in place with elevation and tunnel data borrowed
- * from the nearest enriched catalog routes, so a simulated journey rides real
- * terrain and dips into tunnels instead of running flat. Rail-like modes also
- * inherit the tunnel depression and tunnel/bridge masks; other modes only take
- * ground elevation. Returns true when at least part of the route matched.
+ * Finds a single directed catalog trip for a realtime leg. This deliberately
+ * never combines nearest samples from separate services: that was the cause of
+ * the bumpy profile and false tunnel portals at crossings and parallel tracks.
  */
-export async function enrichRouteFromCatalog(route: DemoRoute): Promise<boolean> {
-  const geo: GeoPoint[] = (route.geoPoints ?? []).map(([lat, lon]) => ({ lat, lon }));
-  if (geo.length < 2) return false;
+async function matchCatalogRoute(route: DemoRoute): Promise<Match | null> {
+  const geometry = route.geoPoints?.map(([lat, lon]) => ({ lat, lon })) ?? [];
+  if (geometry.length < 2 || !route.transportMode) return null;
+  try {
+    const { routes } = await repository.loadRoutes(stuttgartCity, route.transportMode);
+    const sameLine = routes.filter((candidate) => normalizedLine(candidate.line) === normalizedLine(route.line));
+    let best: Match | null = null;
 
-  const index = await catalogTerrainIndex();
-  if (index.size === 0) return false;
+    for (const candidate of sameLine) {
+      if (!candidate.geoPoints?.length || candidate.elevationDatumM === undefined) continue;
+      const start = closestIndex(geometry[0], candidate);
+      const end = closestIndex(geometry.at(-1)!, candidate);
+      if (!start || !end || start.index >= end.index) continue;
+      if (start.distanceM > MAX_ENDPOINT_OFFSET_M || end.distanceM > MAX_ENDPOINT_OFFSET_M) continue;
 
-  const railLike = RAIL_LIKE.has(route.transportMode ?? '');
-  const trackAbs: (number | null)[] = [];
-  const surfaceAbs: (number | null)[] = [];
-  const tunnelMask: boolean[] = [];
-  const bridgeMask: boolean[] = [];
-  let matched = 0;
-
-  for (const point of geo) {
-    const sample = index.nearest(point);
-    if (sample) {
-      matched++;
-      surfaceAbs.push(sample.surfaceM);
-      // Non-rail vehicles ride on the ground; never inherit tunnel depth/flags.
-      trackAbs.push(railLike ? sample.trackM : sample.surfaceM);
-      tunnelMask.push(railLike && sample.tunnel);
-      bridgeMask.push(railLike && sample.bridge);
-    } else {
-      trackAbs.push(null);
-      surfaceAbs.push(null);
-      tunnelMask.push(false);
-      bridgeMask.push(false);
+      // Check a few points across the returned leg, while retaining one ordered
+      // catalog slice instead of performing an independent per-point mapping.
+      let shapeOffsetM = 0;
+      const checks = Math.min(9, geometry.length);
+      for (let sample = 0; sample < checks; sample++) {
+        const point = geometry[Math.round(sample * (geometry.length - 1) / Math.max(1, checks - 1))];
+        shapeOffsetM += closestIndex(point, candidate)?.distanceM ?? Number.POSITIVE_INFINITY;
+      }
+      shapeOffsetM /= checks;
+      if (shapeOffsetM > MAX_SHAPE_OFFSET_M) continue;
+      const score = start.distanceM + end.distanceM + shapeOffsetM * 2;
+      if (!best || score < best.score) best = { route: candidate, start: start.index, end: end.index, score };
     }
+    return best;
+  } catch {
+    return null;
   }
+}
 
-  // Too little overlap to trust — leave the route flat rather than inventing terrain.
-  if (matched < 2) return false;
+/**
+ * Replaces a realtime leg with the matching contiguous enriched catalog shape.
+ * The catalog retains its own terrain, tunnel and bridge data, so tunnel
+ * rendering follows the selected trip rather than a nearby unrelated line.
+ */
+export async function enrichRouteFromTerrain(route: DemoRoute): Promise<boolean> {
+  const match = await matchCatalogRoute(route);
+  if (!match) return false;
 
-  fillGaps(trackAbs);
-  fillGaps(surfaceAbs);
+  const realtimeLengthM = Math.max(1, route.routeLengthM);
+  const source = match.route;
+  const selectedGeo = source.geoPoints!.slice(match.start, match.end + 1).map(([lat, lon]) => ({ lat, lon }));
+  const datum = source.elevationDatumM!;
+  const selectedControl = source.controlPoints.slice(match.start, match.end + 1);
+  const selectedSurface = source.surfaceHeightsM?.slice(match.start, match.end + 1) ?? selectedControl.map((point) => point[1]);
+  const selectedTunnel = source.tunnelMask?.slice(match.start, match.end + 1) ?? selectedControl.map(() => false);
+  const selectedBridge = source.bridgeMask?.slice(match.start, match.end + 1) ?? selectedControl.map(() => false);
+  if (selectedGeo.length < 2 || selectedControl.length !== selectedGeo.length) return false;
 
-  const datum = trackAbs[0] ?? 0;
-  route.elevationDatumM = round(datum);
-  route.surfaceHeightsM = surfaceAbs.map((v) => round((v ?? datum) - datum));
-  route.controlPoints = route.controlPoints.map((p, i) => [p[0], round((trackAbs[i] ?? datum) - datum), p[2]]);
-  route.tunnelMask = tunnelMask;
-  route.bridgeMask = bridgeMask;
-  route.tunnelRanges = maskRanges(tunnelMask, geo);
+  // Rebase the catalog slice onto its own geographic origin, matching the
+  // projection used by buildRealtimeRoute.
+  const origin = selectedGeo[0];
+  const longitudeScale = Math.cos(origin.lat * Math.PI / 180) * EARTH_M_PER_DEG_LAT;
+  const absoluteTrack = selectedControl.map((point) => datum + point[1]);
+  const outputDatum = absoluteTrack[0];
+  route.geoPoints = selectedGeo.map((point): [number, number] => [point.lat, point.lon]);
+  route.controlPoints = selectedGeo.map((point, index): [number, number, number] => [
+    -(point.lon - origin.lon) * longitudeScale,
+    round(absoluteTrack[index] - outputDatum),
+    (point.lat - origin.lat) * EARTH_M_PER_DEG_LAT
+  ]);
+  route.elevationDatumM = round(outputDatum);
+  route.surfaceHeightsM = selectedSurface.map((height) => round(datum + height - outputDatum));
+  route.tunnelMask = selectedTunnel;
+  route.bridgeMask = selectedBridge;
+  route.tunnelRanges = maskRanges(selectedTunnel, selectedGeo);
+  route.routeLengthM = routeDistance(selectedGeo);
+  // The selected catalog trip is the same service corridor; retain the journey
+  // timetable and its existing stop order, but scale distances to its precise
+  // enriched shape length.
+  route.stations = route.stations.map((station) => ({
+    ...station,
+    distanceM: round(station.distanceM / realtimeLengthM * route.routeLengthM)
+  }));
   return true;
 }

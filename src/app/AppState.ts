@@ -1,6 +1,7 @@
 import type { TransportMode } from '../domain/transport';
 import type { CameraMode } from '../world/CameraController';
 import { demoRoute, type DemoRoute } from '../route';
+import type { RealtimeJourneySimulation } from '../features/realtime/journeyRoute';
 import type { HudTab, Mode, Season } from './types';
 
 /**
@@ -11,8 +12,9 @@ import type { HudTab, Mode, Season } from './types';
 export type AppState = {
   hudTab: HudTab;
   // A synthetic route built from live realtime data, simulated in place of a
-  // catalog route when set. Not serialized to the URL.
+  // catalog route when set.
   realtimeRoute: DemoRoute | null;
+  realtimeJourney: RealtimeJourneySimulation | null;
   selectedCityId: string;
   selectedRouteId: string;
   selectedTransportMode: TransportMode;
@@ -33,6 +35,7 @@ export function createInitialAppState(routeId: string = demoRoute.id): AppState 
   return {
     hudTab: 'simulator',
     realtimeRoute: null,
+    realtimeJourney: null,
     selectedCityId: 'stuttgart',
     selectedRouteId: routeId,
     selectedTransportMode: 'stadtbahn',

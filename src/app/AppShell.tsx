@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { routeMode } from '../route';
+import { routeMode, type DemoRoute } from '../route';
 import { transportModeLabel } from '../domain/transport';
 import { SimulatorCommandsContext } from '../features/simulation/useSimulatorRuntime';
 import { SimulatorViewport } from '../features/simulation/SimulatorViewport';
@@ -30,6 +30,7 @@ export function AppShell() {
   const store = useMemo(() => new SimulatorSnapshotStore(), []);
   const snapshot = useSimulatorSnapshot(store);
   const [runtime, setRuntime] = useState<SimulatorRuntime | null>(null);
+  const [activeRealtimeRoute, setActiveRealtimeRoute] = useState<DemoRoute | null>(null);
   const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 760px)').matches);
   const [photoLabel, setPhotoLabel] = useState('Platform fly-by');
   const photoActiveRef = useRef(state.photoModeActive);
@@ -66,8 +67,17 @@ export function AppShell() {
       : null;
   }, [state.realtimeRoute, realtimeCity, catalogRoute, catalog.routes, catalog.currentCity, state.selectedMode, state.selectedStartStation, state.selectedSeason, state.selectedTime, state.selectedCameraMode]);
 
-  // The route currently driving the world/HUD: a simulated realtime route wins.
-  const route = session?.route ?? catalogRoute;
+  // Realtime transfers change the world imperatively, so keep presentation
+  // panels aligned with the currently active journey leg.
+  const route = state.realtimeRoute ? activeRealtimeRoute ?? state.realtimeRoute : session?.route ?? catalogRoute;
+  const realtimeLegs = useMemo(
+    () => state.realtimeRoute ? [state.realtimeRoute, ...(state.realtimeRoute.journeyLegs ?? [])] : [],
+    [state.realtimeRoute]
+  );
+  const journeyDiagramRoute = useMemo(
+    () => realtimeLegs.length > 1 ? combinedJourneyRoute(realtimeLegs) : undefined,
+    [state.realtimeRoute]
+  );
 
   // Route/city change rebuilds the world; other changes only re-init the sim.
   useEffect(() => { if (runtime && session) runtime.loadRoute(session); }, [runtime, session?.route, session?.city]);
@@ -79,6 +89,8 @@ export function AppShell() {
   useEffect(() => runtime?.setSeason(state.selectedSeason), [runtime, state.selectedSeason]);
   useEffect(() => runtime?.setTime(state.selectedTime), [runtime, state.selectedTime]);
   useEffect(() => { runtime?.onPhotoLabel(setPhotoLabel); }, [runtime]);
+  useEffect(() => { runtime?.onActiveRoute(setActiveRealtimeRoute); }, [runtime]);
+  useEffect(() => setActiveRealtimeRoute(state.realtimeRoute), [state.realtimeRoute]);
   useEffect(() => {
     if (!runtime) return;
     if (state.photoModeActive) runtime.enterPhotoMode();
@@ -160,7 +172,7 @@ export function AppShell() {
         </div>
       </div>
       <div className="right-rail">
-        <RouteDiagramPanel route={route} routes={catalog.routes} snapshot={snapshot} />
+        <RouteDiagramPanel route={journeyDiagramRoute ?? route} routes={realtimeLegs.length ? realtimeLegs : catalog.routes} activeRoute={route} journeyLegs={realtimeLegs.length > 1 ? realtimeLegs : undefined} snapshot={snapshot} />
       </div>
       <MiniMapPanel route={route} distanceM={snapshot.distanceM} />
       <div className="notice">{notice}</div>
@@ -174,4 +186,23 @@ export function AppShell() {
       )}
     </SimulatorCommandsContext.Provider>
   );
+}
+
+/** A schematic-only route that keeps every transit leg visible in one panel. */
+function combinedJourneyRoute(legs: DemoRoute[]): DemoRoute {
+  let offsetM = 0;
+  const stations = legs.flatMap((leg) => {
+    const output = leg.stations.map((station) => ({ ...station, distanceM: station.distanceM + offsetM }));
+    offsetM += leg.routeLengthM;
+    return output;
+  });
+  return {
+    ...legs[0],
+    id: `${legs[0].id}-journey-diagram`,
+    line: legs.map((leg) => leg.line).join(' → '),
+    destination: legs.at(-1)?.destination ?? legs[0].destination,
+    description: 'Realtime journey',
+    routeLengthM: offsetM,
+    stations
+  };
 }

@@ -24,6 +24,10 @@ export type DemoRoute = SimulatorConfig & {
   bridgeMask?: boolean[]; // per-shape/segment bridge classification
   tunnelRanges?: { startM: number; endM: number }[]; // route-distance tunnel ranges in meters
   vehicleDesignId?: string; // optional explicit vehicle registry id, overrides mode/family/kind resolution
+  // Realtime-only vehicle runs after this route. The simulator swaps worlds
+  // between them at transfers; generated catalog route files never use this.
+  journeyLegs?: DemoRoute[];
+  transferAfterS?: number; // realtime journey gap before the next vehicle run
 };
 
 // Complete route feed generated from GTFS or fallback/demo data.

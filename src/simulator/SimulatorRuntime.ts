@@ -48,10 +48,13 @@ export class SimulatorRuntime implements SimulatorCommands {
   private readonly simulator = new SimulatorClient();
   private world: TransitWorld | null = null;
   private session: RouteSession | null = null;
+  private journeyLegs: DemoRoute[] = [];
+  private journeyLegIndex = 0;
   private paused = false;
   private loaded = false;
   private disposed = false;
   private photoLabelHandler: ((label: string) => void) | null = null;
+  private activeRouteHandler: ((route: DemoRoute) => void) | null = null;
   private readonly loop: SimulatorLoop;
 
   constructor(
@@ -70,7 +73,7 @@ export class SimulatorRuntime implements SimulatorCommands {
         this.world?.render();
         this.snapshots.update(state);
       },
-      onTerminalTurnaround: () => undefined
+      onTerminalTurnaround: () => this.advanceJourneyLeg()
     });
   }
 
@@ -90,8 +93,22 @@ export class SimulatorRuntime implements SimulatorCommands {
     this.photoLabelHandler = handler;
   }
 
+  /** Registers the route currently shown in the world, including transfers. */
+  onActiveRoute(handler: (route: DemoRoute) => void): void {
+    this.activeRouteHandler = handler;
+    if (this.session) handler(this.session.route);
+  }
+
   loadRoute(session: RouteSession): void {
+    this.journeyLegs = [session.route, ...(session.route.journeyLegs ?? [])];
+    this.journeyLegIndex = 0;
+    this.buildWorld({ ...session, route: this.journeyLegs[0], startStationIndex: 0 });
+    if (this.loaded) this.initializeSimulation(this.session!);
+  }
+
+  private buildWorld(session: RouteSession): void {
     this.session = session;
+    this.activeRouteHandler?.(session.route);
     this.world?.dispose();
     this.container.replaceChildren();
     this.world = new TransitWorld(
@@ -103,7 +120,6 @@ export class SimulatorRuntime implements SimulatorCommands {
     );
     this.world.mount(this.container);
     this.applyWorldSettings(session);
-    if (this.loaded) this.resetSimulation(session);
   }
 
   setStartStation(session: RouteSession): void {
@@ -117,7 +133,22 @@ export class SimulatorRuntime implements SimulatorCommands {
   }
 
   resetSimulation(session: RouteSession): void {
-    this.session = session;
+    const journeyLegs = [session.route, ...(session.route.journeyLegs ?? [])];
+    if (journeyLegs.length > 1) {
+      this.journeyLegs = journeyLegs;
+      this.journeyLegIndex = 0;
+      const firstSession = { ...session, route: journeyLegs[0], startStationIndex: 0 };
+      if (this.session?.route !== journeyLegs[0]) this.buildWorld(firstSession);
+      else this.session = firstSession;
+    } else {
+      this.journeyLegs = [session.route];
+      this.journeyLegIndex = 0;
+      this.session = session;
+    }
+    if (this.session) this.initializeSimulation(this.session);
+  }
+
+  private initializeSimulation(session: RouteSession): void {
     this.paused = false;
     const state = this.simulator.init({
       line: session.route.line,
@@ -130,6 +161,20 @@ export class SimulatorRuntime implements SimulatorCommands {
     });
     this.loop.setState(state);
     this.snapshots.update(state, true);
+  }
+
+  /** Rebuilds the world with the next vehicle type after a journey transfer. */
+  private advanceJourneyLeg(): void {
+    if (!this.session || this.journeyLegIndex >= this.journeyLegs.length - 1) return;
+    this.journeyLegIndex++;
+    const nextSession: RouteSession = {
+      ...this.session,
+      route: this.journeyLegs[this.journeyLegIndex],
+      networkRoutes: [this.journeyLegs[this.journeyLegIndex]],
+      startStationIndex: 0
+    };
+    this.buildWorld(nextSession);
+    this.initializeSimulation(nextSession);
   }
 
   setPaused(paused: boolean): void {

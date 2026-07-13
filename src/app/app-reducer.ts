@@ -8,15 +8,15 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, hudTab: action.tab };
     case 'realtime-route-simulated':
       // Switch to the simulator view so the freshly built route is visible.
-      return { ...state, realtimeRoute: action.route, selectedMode: 'ride', hudTab: 'simulator' };
+      return { ...state, realtimeRoute: action.route, realtimeJourney: action.journey, selectedMode: 'ride', hudTab: 'simulator' };
     case 'city-selected':
       // A manual city change leaves realtime mode and drops any simulated route.
-      return { ...state, selectedCityId: action.cityId, selectedStartStation: 0, realtimeRoute: null };
+      return { ...state, selectedCityId: action.cityId, selectedStartStation: 0, realtimeRoute: null, realtimeJourney: null };
     case 'transport-mode-selected':
       return { ...state, selectedTransportMode: action.mode, selectedStartStation: 0 };
     case 'route-selected':
       // Selecting a catalog line supersedes any simulated realtime route.
-      return { ...state, selectedRouteId: action.routeId, selectedStartStation: 0, realtimeRoute: null };
+      return { ...state, selectedRouteId: action.routeId, selectedStartStation: 0, realtimeRoute: null, realtimeJourney: null };
     case 'start-station-selected':
       return { ...state, selectedStartStation: action.stationIndex };
     case 'ride-mode-selected':

@@ -5,7 +5,7 @@ import { RealtimeMap, type MapPin, type MapPoint } from './RealtimeMap';
 import { LocationField, type EndpointValue } from './LocationField';
 import { searchJourneys } from './api';
 import { buildJourneyRoute, journeyPath, journeyStations } from './journeyRoute';
-import { enrichRouteFromCatalog } from './catalogTerrain';
+import { enrichRouteFromTerrain } from './catalogTerrain';
 import { formatClock, secondsBetween } from './time';
 import type { Journey } from './types';
 
@@ -75,14 +75,14 @@ export function JourneySearchModal({ onClose }: { onClose: () => void }) {
     if (!selected || !origin || !destination) return;
     setPreparing(true);
     const route = buildJourneyRoute(selected, origin, destination);
-    // Borrow elevation + tunnel data from overlapping catalog routes so the ride
-    // isn't flat; failures just leave the route as-is.
+    // Match every vehicle leg independently so transfers keep their own
+    // geometry, terrain profile, tunnel data, and vehicle type.
     try {
-      await enrichRouteFromCatalog(route);
+      await Promise.all([route, ...(route.journeyLegs ?? [])].map((leg) => enrichRouteFromTerrain(leg)));
     } catch {
       // Keep the un-enriched route.
     }
-    dispatch({ type: 'realtime-route-simulated', route });
+    dispatch({ type: 'realtime-route-simulated', route, journey: { origin, destination, journey: selected } });
     onClose();
   };
 
@@ -136,7 +136,7 @@ export function JourneySearchModal({ onClose }: { onClose: () => void }) {
           </div>
           <div className="rt-actions">
             <button className="primary" onClick={() => void simulate()} disabled={!selected || preparing}>
-              {preparing ? 'Preparing route…' : 'Simulate this journey'}
+              {preparing ? 'Preparing journey…' : 'Simulate journey'}
             </button>
           </div>
         </div>

@@ -16,6 +16,7 @@ export class TransitRouteDiagram {
   private readonly scroll: HTMLElement;
   private readonly svg: SVGSVGElement;
   private readonly stationNodes: SVGCircleElement[] = [];
+  private readonly stationXs: number[] = [];
   private vehicleMarker: SVGGElement | null = null;
   private lastAutoScrollAt = 0;
 
@@ -37,10 +38,11 @@ export class TransitRouteDiagram {
     this.root.replaceChildren();
   }
 
-  setRoute(route: DemoRoute, networkRoutes: DemoRoute[] = [route]): void {
+  setRoute(route: DemoRoute, networkRoutes: DemoRoute[] = [route], journeyLegs?: DemoRoute[]): void {
     this.route = route;
     this.stationTransfers = this.computeTransfers(route, networkRoutes);
     this.stationNodes.length = 0;
+    this.stationXs.length = 0;
     this.svg.replaceChildren();
     this.title.textContent = `${route.line}  ·  ${route.stations[0]?.name ?? ''} → ${route.destination}`;
     this.root.style.setProperty('--route-color', route.color ?? '#ffd900');
@@ -49,23 +51,70 @@ export class TransitRouteDiagram {
     this.svg.setAttribute('viewBox', `0 0 390 ${height}`);
     this.svg.setAttribute('height', String(height));
 
-    const line = this.svgElement('line', 'route-diagram-line');
-    line.setAttribute('x1', '30');
-    line.setAttribute('x2', '30');
-    line.setAttribute('y1', String(TOP_PADDING));
-    line.setAttribute('y2', String(height - TOP_PADDING));
-    this.svg.appendChild(line);
+    const legOffsets = journeyLegs?.reduce<number[]>((offsets, leg) => {
+      offsets.push((offsets.at(-1) ?? 0) + leg.stations.length);
+      return offsets;
+    }, [0]);
+    const stationX = (index: number): number => {
+      if (!journeyLegs?.length || !legOffsets) return 30;
+      const legIndex = Math.max(0, legOffsets.findIndex((offset, candidate) => index < offset && candidate > 0));
+      return 30 + (legIndex % 3) * 104;
+    };
+    if (journeyLegs?.length && legOffsets) {
+      const colors = ['#ffd900', '#62c9ff', '#f28b6b', '#9ee493'];
+      journeyLegs.forEach((leg, legIndex) => {
+        const start = legOffsets[legIndex];
+        const end = legOffsets[legIndex + 1] - 1;
+        const x = stationX(start);
+        const segment = this.svgElement('line', 'route-diagram-line');
+        segment.setAttribute('x1', String(x));
+        segment.setAttribute('x2', String(x));
+        segment.setAttribute('y1', String(this.stationY(start)));
+        segment.setAttribute('y2', String(this.stationY(end)));
+        segment.setAttribute('stroke', colors[legIndex % colors.length]);
+        this.svg.appendChild(segment);
+
+        const label = this.svgElement('text', 'route-station-transfer');
+        label.setAttribute('x', String(x + 12));
+        label.setAttribute('y', String(Math.max(15, this.stationY(start) - 12)));
+        label.textContent = `${leg.line} → ${leg.destination}`;
+        this.svg.appendChild(label);
+        if (legIndex >= journeyLegs.length - 1) return;
+        const nextStart = legOffsets[legIndex + 1];
+        const connector = this.svgElement('line', 'route-diagram-line');
+        connector.setAttribute('x1', String(x));
+        connector.setAttribute('y1', String(this.stationY(end)));
+        connector.setAttribute('x2', String(stationX(nextStart)));
+        connector.setAttribute('y2', String(this.stationY(nextStart)));
+        connector.setAttribute('stroke-dasharray', '4 4');
+        this.svg.appendChild(connector);
+        const transfer = this.svgElement('text', 'route-station-transfer');
+        transfer.setAttribute('x', String(Math.min(x, stationX(nextStart)) + 12));
+        transfer.setAttribute('y', String((this.stationY(end) + this.stationY(nextStart)) / 2 + 4));
+        const seconds = leg.transferAfterS;
+        transfer.textContent = seconds === undefined ? 'Transfer' : `Transfer · ${Math.round(seconds / 60)} min`;
+        this.svg.appendChild(transfer);
+      });
+    } else {
+      const line = this.svgElement('line', 'route-diagram-line');
+      line.setAttribute('x1', '30');
+      line.setAttribute('x2', '30');
+      line.setAttribute('y1', String(TOP_PADDING));
+      line.setAttribute('y2', String(height - TOP_PADDING));
+      this.svg.appendChild(line);
+    }
 
     route.stations.forEach((station, index) => {
       const y = this.stationY(index);
+      const x = stationX(index);
       const group = this.svgElement('g', 'route-station');
       group.dataset.stationIndex = String(index);
       const node = this.svgElement('circle', 'route-station-node');
-      node.setAttribute('cx', '30');
+      node.setAttribute('cx', String(x));
       node.setAttribute('cy', String(y));
       node.setAttribute('r', index === 0 || index === route.stations.length - 1 ? '6.5' : '5');
       const label = this.svgElement('text', 'route-station-label');
-      label.setAttribute('x', '48');
+      label.setAttribute('x', String(x + 18));
       label.setAttribute('y', String(y + 4));
       label.textContent = station.name;
       const transfers = this.stationTransfers.get(station.name) ?? [];
@@ -77,6 +126,7 @@ export class TransitRouteDiagram {
       group.append(node, label);
       this.svg.appendChild(group);
       this.stationNodes.push(node);
+      this.stationXs.push(x);
     });
 
     this.vehicleMarker = this.svgElement('g', 'route-vehicle');
@@ -90,14 +140,14 @@ export class TransitRouteDiagram {
     body.setAttribute('rx', '3');
     this.vehicleMarker.append(halo, body);
     this.svg.appendChild(this.vehicleMarker);
-    this.updateMarker(0);
+    this.updateMarker(this.stationXs[0] ?? 30, 0);
   }
 
   update(state: RouteDiagramProgress): void {
     if (!this.route || !this.vehicleMarker) return;
     const distanceM = Math.max(0, Math.min(this.route.routeLengthM, state.distanceM));
-    const markerY = this.distanceY(distanceM);
-    this.updateMarker(markerY);
+    const { x: markerX, y: markerY } = this.distancePosition(distanceM);
+    this.updateMarker(markerX, markerY);
 
     const stoppedIndex = state.doorsOpen ? this.nearestStationIndex(distanceM) : -1;
     const nextIndex = Math.min(this.route.stations.length - 1, Math.max(0, state.stationIndex + (state.doorsOpen ? 0 : 1)));
@@ -119,16 +169,19 @@ export class TransitRouteDiagram {
     }
   }
 
-  private distanceY(distanceM: number): number {
+  private distancePosition(distanceM: number): { x: number; y: number } {
     const stations = this.route?.stations ?? [];
-    if (stations.length < 2) return TOP_PADDING;
+    if (stations.length < 2) return { x: this.stationXs[0] ?? 30, y: TOP_PADDING };
     let next = stations.findIndex((station) => station.distanceM >= distanceM);
-    if (next <= 0) return this.stationY(Math.max(0, next));
-    if (next < 0) return this.stationY(stations.length - 1);
+    if (next <= 0) return { x: this.stationXs[Math.max(0, next)] ?? 30, y: this.stationY(Math.max(0, next)) };
+    if (next < 0) return { x: this.stationXs.at(-1) ?? 30, y: this.stationY(stations.length - 1) };
     const previous = next - 1;
     const span = stations[next].distanceM - stations[previous].distanceM || 1;
     const progress = (distanceM - stations[previous].distanceM) / span;
-    return this.stationY(previous) + progress * STATION_GAP;
+    return {
+      x: (this.stationXs[previous] ?? 30) + ((this.stationXs[next] ?? 30) - (this.stationXs[previous] ?? 30)) * progress,
+      y: this.stationY(previous) + progress * STATION_GAP
+    };
   }
 
   private nearestStationIndex(distanceM: number): number {
@@ -145,8 +198,8 @@ export class TransitRouteDiagram {
     return nearest;
   }
 
-  private updateMarker(y: number): void {
-    this.vehicleMarker?.setAttribute('transform', `translate(30 ${y})`);
+  private updateMarker(x: number, y: number): void {
+    this.vehicleMarker?.setAttribute('transform', `translate(${x} ${y})`);
   }
 
   private computeTransfers(route: DemoRoute, networkRoutes: DemoRoute[]): Map<string, string[]> {

@@ -5,6 +5,9 @@ import type { DemoRoute } from '../route';
 import { RouteRepository, stuttgartCity } from '../route-repository';
 import { readUrlState } from './AppUrlState';
 import { useAppState } from './useAppState';
+import { searchJourneys } from '../features/realtime/api';
+import { enrichRouteFromTerrain } from '../features/realtime/catalogTerrain';
+import { buildJourneyRoute } from '../features/realtime/journeyRoute';
 
 export type BootstrapResult = {
   ready: boolean;
@@ -28,6 +31,7 @@ export function useAppBootstrap(): BootstrapResult {
   repository.current ??= new RouteRepository();
   const initialUrl = useRef(readUrlState());
   const initialized = useRef(false);
+  const restoredRealtime = useRef(false);
   const operation = useRef(0);
   const [result, setResult] = useState<BootstrapResult>({
     ready: false,
@@ -102,6 +106,27 @@ export function useAppBootstrap(): BootstrapResult {
         if (id === operation.current) setResult((old) => ({ ...old, error: asError(error), loadingMessage: null }));
       });
   }, [state.selectedCityId, state.selectedTransportMode, result.cities, dispatch]);
+
+  // A realtime URL stores its endpoints and journey id, then refreshes the
+  // live result on load rather than putting a potentially huge geometry blob in
+  // the address bar.
+  useEffect(() => {
+    const saved = initialUrl.current.realtime;
+    if (!saved || restoredRealtime.current || !result.ready) return;
+    restoredRealtime.current = true;
+    void searchJourneys({
+      origin: saved.origin,
+      originId: saved.origin.id,
+      destination: saved.destination,
+      destinationId: saved.destination.id
+    }).then(async (journeys) => {
+      const journey = journeys.find((candidate) => candidate.id === saved.journeyId);
+      if (!journey) return;
+      const route = buildJourneyRoute(journey, saved.origin, saved.destination);
+      await Promise.all([route, ...(route.journeyLegs ?? [])].map((leg) => enrichRouteFromTerrain(leg).catch(() => false)));
+      dispatch({ type: 'realtime-route-simulated', route, journey: { origin: saved.origin, destination: saved.destination, journey } });
+    }).catch(() => undefined);
+  }, [result.ready, dispatch]);
 
   return result;
 }

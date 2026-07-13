@@ -2,12 +2,13 @@ import type { TransportMode } from '../domain/transport';
 import type { CameraMode } from '../world/CameraController';
 import type { DemoRoute } from '../route';
 import type { AppState } from './AppState';
+import type { RealtimeJourneySimulation } from '../features/realtime/journeyRoute';
 import type { HudTab, Mode, Season } from './types';
 
 /** All state transitions the React shell can dispatch. */
 export type AppAction =
   | { type: 'hud-tab-selected'; tab: HudTab }
-  | { type: 'realtime-route-simulated'; route: DemoRoute }
+  | { type: 'realtime-route-simulated'; route: DemoRoute; journey: RealtimeJourneySimulation }
   | { type: 'city-selected'; cityId: string }
   | { type: 'transport-mode-selected'; mode: TransportMode }
   | { type: 'route-selected'; routeId: string }
