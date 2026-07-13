@@ -7,9 +7,9 @@ import { TerrainSampler } from './terrain';
 import type { GuidewayKind, TransportModeDefinition, VehicleKind } from './domain/transport';
 import type { Season } from './app/types';
 import type { CityDefinition } from './cities';
-import { LightingController } from './world/LightingController';
 import type { CameraMode } from './world/CameraController';
 import { CameraSystem } from './engine/systems/CameraSystem';
+import { LightingSystem } from './engine/systems/LightingSystem';
 import { buildTransitVehicle } from './vehicles';
 import type { VehicleInstance } from './vehicles/types';
 import type { WorldLayerContext } from './world/layers/WorldLayerContext';
@@ -63,10 +63,8 @@ export class TransitWorld {
   private readonly landmarkExclusions: LandmarkZone[];
   private osmScene: OsmSceneStreamer | null = null;
   private terrain: TerrainSampler | null = null;
-  private readonly hemi = new THREE.HemisphereLight();
-  private readonly sun = new THREE.DirectionalLight();
-  private readonly visibilityFill = new THREE.AmbientLight();
-  private readonly lighting = new LightingController(this.scene, this.renderer, this.hemi, this.sun, this.visibilityFill);
+  // Sun/ambient/hemisphere lighting, time-of-day, season lighting, sky + fog.
+  private readonly lightingSystem = new LightingSystem(this.scene, this.renderer);
   private currentSeason: Season = 'summer';
   private cinematicActive = false;
   private cinematicPresetIndex = 0;
@@ -103,8 +101,6 @@ export class TransitWorld {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.setAnimationLoop(null);
 
-    this.scene.background = new THREE.Color(0xaac8df);
-    this.scene.fog = new THREE.Fog(0xaac8df, 900, 2800);
     if (route.elevationDatumM !== undefined) this.terrain = new TerrainSampler(route.elevationDatumM);
     const landmarkLayer = this.city?.landmarkFactory?.(
       this.routeGeo,
@@ -121,7 +117,7 @@ export class TransitWorld {
     const startPoint = this.curve.getPointAt(0);
     const startTangent = this.curve.getTangentAt(0).normalize();
     this.cameraSystem.placeAtStart(startPoint, startTangent);
-    this.lighting.initialize();
+    this.lightingSystem.initialize();
 
     // Scene layers build their meshes from shared route geometry; TransitWorld
     // coordinates them and owns the vehicle, scenery streaming, and frame loop.
@@ -157,39 +153,22 @@ export class TransitWorld {
 
   setSeason(season: Season): void {
     this.currentSeason = season;
+    this.lightingSystem.setSeason(season);
+    // Decorative seasonal props are scene decorations owned by the world.
     this.seasonalObjects.clear();
-    switch (season) {
-      case 'spring':
-        this.scene.background = new THREE.Color(0xb9d6ed);
-        this.scene.fog = new THREE.Fog(0xb9d6ed, 900, 2800);
-        break;
-      case 'summer':
-        this.scene.background = new THREE.Color(0xa7d3ff);
-        this.scene.fog = new THREE.Fog(0xa7d3ff, 1100, 3200);
-        break;
-      case 'autumn':
-        this.scene.background = new THREE.Color(0xcab38f);
-        this.scene.fog = new THREE.Fog(0xcab38f, 760, 2300);
-        this.addLeaves();
-        break;
-      case 'winter':
-        this.scene.background = new THREE.Color(0xd8e5ee);
-        this.scene.fog = new THREE.Fog(0xd8e5ee, 620, 1800);
-        this.addSnow();
-        break;
-    }
-    this.lighting.setSeason(this.currentSeason);
+    if (season === 'autumn') this.addLeaves();
+    else if (season === 'winter') this.addSnow();
   }
 
   setTimeOfDay(hour: number): void {
-    this.lighting.setTimeOfDay(hour);
+    this.lightingSystem.setTimeOfDay(hour);
     this.updateVehicleExteriorLights();
   }
 
   // Head/tail lamps come on in low light (night, dawn, dusk). Opposing trains
   // share the player train's lamp materials via clone(), so they follow along.
   private updateVehicleExteriorLights(): void {
-    this.vehicle?.setExteriorLightsOn?.(this.lighting.daylightFactor() < 0.45);
+    this.vehicle?.setExteriorLightsOn?.(this.lightingSystem.daylightFactor() < 0.45);
   }
 
   cycleCamera(): CameraMode {
@@ -361,6 +340,7 @@ export class TransitWorld {
   dispose(): void {
     window.removeEventListener('resize', this.onRendererResizeBound);
     this.cameraSystem.dispose();
+    this.lightingSystem.dispose();
     this.osmScene?.dispose();
     this.vehicle?.dispose?.();
     // Free geometries/materials/textures built by the scene layers so switching
