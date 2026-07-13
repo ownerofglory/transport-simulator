@@ -1,18 +1,12 @@
+import { collectMaterialConfigErrors, type BlueprintStandardMaterialConfig } from '../standardMaterial';
+
 // Declarative configuration for the Citaro-family bus renderer. The config owns
 // everything that distinguishes one bus from another: livery materials, body
 // formation (section lengths, door and axle positions), articulation rules and
 // display colors. Fine Citaro styling (window pitch, seat spacing, mirror and
 // wiper geometry, ...) lives in buildBusFromBlueprint.ts.
 
-export type BusMaterialConfig = {
-  color: string;
-  roughness?: number;
-  metalness?: number;
-  opacity?: number;
-  transparent?: boolean;
-  emissive?: string;
-  emissiveIntensity?: number;
-};
+export type BusMaterialConfig = BlueprintStandardMaterialConfig;
 
 export const BUS_MATERIAL_ROLES = [
   'body',
@@ -80,8 +74,6 @@ export type BusBlueprintParseResult =
   | { ok: true; config: BusBlueprintConfig }
   | { ok: false; errors: string[] };
 
-const CSS_COLOR = /^#[0-9a-fA-F]{3,8}$/;
-
 // Narrows an untrusted value (e.g. a user-edited JSON file) into a
 // BusBlueprintConfig. Never throws; malformed input is reported as errors.
 export function parseBusBlueprint(raw: unknown): BusBlueprintParseResult {
@@ -96,19 +88,7 @@ export function parseBusBlueprint(raw: unknown): BusBlueprintParseResult {
   const materials = asRecord(root.materials, 'materials', errors);
   if (materials) {
     for (const role of BUS_MATERIAL_ROLES) {
-      const material = asRecord(materials[role], `materials.${role}`, errors);
-      if (!material) continue;
-      if (typeof material.color !== 'string' || !CSS_COLOR.test(material.color)) {
-        errors.push(`materials.${role}.color must be a hex color string`);
-      }
-      if (material.emissive !== undefined && (typeof material.emissive !== 'string' || !CSS_COLOR.test(material.emissive))) {
-        errors.push(`materials.${role}.emissive must be a hex color string`);
-      }
-      for (const key of ['roughness', 'metalness', 'opacity', 'emissiveIntensity'] as const) {
-        if (material[key] !== undefined && typeof material[key] !== 'number') {
-          errors.push(`materials.${role}.${key} must be a number`);
-        }
-      }
+      collectMaterialConfigErrors(materials[role], `materials.${role}`, errors);
     }
   }
 

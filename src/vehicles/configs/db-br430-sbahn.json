@@ -1,0 +1,41 @@
+{
+  "id": "db-br430-sbahn",
+  "kind": "s-bahn",
+  "displayName": "DB BR 430 S-Bahn (Stuttgart)",
+  "materials": {
+    "shell": { "color": "#dfe1df", "roughness": 0.42, "metalness": 0.1 },
+    "accent": { "color": "#d71920", "roughness": 0.4 },
+    "dark": { "color": "#202428", "roughness": 0.38 },
+    "glass": { "color": "#8fb9c7", "transparent": true, "opacity": 0.42, "roughness": 0.06, "doubleSided": true },
+    "interior": { "color": "#e4e1d8", "roughness": 0.88 },
+    "floor": { "color": "#8f9398", "roughness": 0.9 },
+    "seat": { "color": "#315f78", "roughness": 0.88 },
+    "metal": { "color": "#989d9e", "roughness": 0.35, "metalness": 0.7 },
+    "headlight": { "color": "#ffffff", "emissive": "#fff4c7", "emissiveIntensity": 0.55 },
+    "tailLamp": { "color": "#8c1f1c", "emissive": "#7a1512", "emissiveIntensity": 0.35 }
+  },
+  "logo": {
+    "text": "DB",
+    "background": "#e0202b",
+    "foreground": "#ffffff"
+  },
+  "destinationDisplay": {
+    "background": "#111",
+    "foreground": "#fff"
+  },
+  "formation": {
+    "carCenters": [-25.2, -8.4, 8.4, 25.2],
+    "halfLengthM": 34.2,
+    "sectionNamePrefix": "Articulated car DB 430 section"
+  },
+  "layout": {
+    "doorZs": [-3.15, 3.15],
+    "windowZs": [-6.25, -4.85, -1.35, 0, 1.35, 4.85, 6.25],
+    "seatRowZs": [-6.2, -5.1, -1.35, 0, 1.35, 5.1, 6.2],
+    "seatXs": [-1.04, -0.58, 0.58, 1.04],
+    "poleZs": [-3.15, 0, 3.15],
+    "bogieZs": [-5.2, 5.2]
+  },
+  "pantograph": { "x": 0, "y": 3.86, "z": 8.5 },
+  "headlightBeamHeightM": 1.45
+}

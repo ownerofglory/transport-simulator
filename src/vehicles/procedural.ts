@@ -3,10 +3,13 @@ import { makeLabelTexture } from '../labels';
 import type { VehicleKind } from '../domain/transport';
 import { buildBusVehicle } from './blueprint/bus/buildBusFromBlueprint';
 import { defaultBusBlueprint } from './blueprint/bus/defaultBusBlueprint';
+import { buildSBahnVehicle } from './blueprint/sbahn/buildSBahnFromBlueprint';
+import { defaultSBahnBlueprint } from './blueprint/sbahn/defaultSBahnBlueprint';
 import {
   addCabinLight,
   addExteriorLightThrow,
   addOpaqueTransitInterior,
+  addPantograph,
   addSlidingVehicleDoor,
   makeSetExteriorLightsOn,
   type ExteriorLightRig
@@ -46,7 +49,7 @@ class ProceduralTransitVehicleFactory {
     else if (cityId === 'freiburg' && modeId === 's-bahn') this.createBwegtRegionalRailVehicle();
     else if (cityId === 'baden-wuerttemberg-rail' && modeId === 'rail') this.createBwegtRegionalRailVehicle();
     else if (vehicleKind === 'bus') return this.createBusVehicle();
-    else if (vehicleKind === 's-bahn') this.createSBahnVehicle();
+    else if (vehicleKind === 's-bahn') return this.createSBahnVehicle();
     else if (vehicleKind === 'zacke') this.createZackeVehicle();
     else if (vehicleKind === 'schwebebahn') this.createSchwebebahnVehicle();
     else if (vehicleKind === 'seilbahn') this.createSeilbahnVehicle();
@@ -88,172 +91,11 @@ class ProceduralTransitVehicleFactory {
     return buildBusVehicle(defaultBusBlueprint, this.context);
   }
 
+  // DB BR 430 S-Bahn. Rendering is blueprint-driven (see blueprint/sbahn/);
+  // this stays as the procedural fallback entry point and simply builds the
+  // default DB BR 430 config.
   createSBahnVehicle(): VehicleInstance {
-    const shell = new THREE.MeshStandardMaterial({ color: 0xdfe1df, roughness: 0.42, metalness: 0.1 });
-    const red = new THREE.MeshStandardMaterial({ color: 0xd71920, roughness: 0.4 });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x202428, roughness: 0.38 });
-    const glass = new THREE.MeshStandardMaterial({ color: 0x8fb9c7, transparent: true, opacity: 0.42, roughness: 0.06, side: THREE.DoubleSide });
-    const interior = new THREE.MeshStandardMaterial({ color: 0xe4e1d8, roughness: 0.88 });
-    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x8f9398, roughness: 0.9 });
-    const seat = new THREE.MeshStandardMaterial({ color: 0x315f78, roughness: 0.88 });
-    const metal = new THREE.MeshStandardMaterial({ color: 0x989d9e, roughness: 0.35, metalness: 0.7 });
-    const displayMaterial = this.context.makeInteriorDisplayMaterial();
-    this.glassMaterial = glass;
-    const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff4c7, emissiveIntensity: 0.55 });
-    const tailLampMat = new THREE.MeshStandardMaterial({ color: 0x8c1f1c, emissive: 0x7a1512, emissiveIntensity: 0.35 });
-    this.headLampMaterials.push(headlightMat);
-    this.tailLampMaterials.push(tailLampMat);
-    const centers = [-25.2, -8.4, 8.4, 25.2];
-    centers.forEach((center, index) => {
-      const car = new THREE.Group();
-      car.name = `Articulated car DB 430 section ${index + 1}`;
-      car.userData.centerOffsetM = center;
-      const body = new THREE.Mesh(new THREE.BoxGeometry(3.02, 3.3, 16.15), shell);
-      body.position.y = 2.05;
-      body.castShadow = true;
-      car.add(body);
-      this.passengerShells.push(body);
-      const lowerRed = new THREE.Mesh(new THREE.BoxGeometry(3.08, 0.28, 16.22), red);
-      lowerRed.position.y = 0.62;
-      car.add(lowerRed);
-      this.passengerShells.push(lowerRed);
-      const belt = new THREE.Mesh(new THREE.BoxGeometry(3.09, 0.18, 16.23), red);
-      belt.position.y = 1.72;
-      car.add(belt);
-      this.passengerShells.push(belt);
-      for (const side of [-1, 1]) {
-        const band = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.08, 14.5), dark);
-        band.position.set(side * 1.535, 2.43, 0);
-        car.add(band);
-        this.windowBands.push(band);
-        for (const z of [-6.25, -4.85, -1.35, 0, 1.35, 4.85, 6.25]) {
-          const window = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.88, 1.08), glass);
-          window.position.set(side * 1.55, 2.43, z);
-          car.add(window);
-        }
-        this.addSlidingVehicleDoor(car, side * 1.55, -3.15, red, glass, dark, 1.72, 2.05);
-        this.addSlidingVehicleDoor(car, side * 1.55, 3.15, red, glass, dark, 1.72, 2.05);
-      }
-      if (index === 0 || index === centers.length - 1) {
-        // BR 430 front: flat, slightly raked red nose with a wide black
-        // windscreen band, vertical LED light bars and a top destination display.
-        const cabEnd = (index === 0 ? -1 : 1) as -1 | 1;
-        const faceTilt = -cabEnd * 0.197;
-        const nose = new THREE.Mesh(this.makeSBahn430Nose(), red);
-        nose.position.z = cabEnd * 8.0;
-        if (cabEnd < 0) nose.rotation.y = Math.PI;
-        nose.castShadow = true;
-        car.add(nose);
-        this.cabShells.push(nose);
-
-        const mask = new THREE.Mesh(this.makeSBahn430Mask(), dark);
-        mask.position.set(0, 2.58, cabEnd * 8.76);
-        mask.rotation.x = faceTilt;
-        car.add(mask);
-        this.cabShells.push(mask);
-
-        const windscreen = new THREE.Mesh(this.makeSBahn430Windscreen(), glass);
-        windscreen.position.set(0, 2.5, cabEnd * 8.82);
-        windscreen.rotation.x = faceTilt;
-        car.add(windscreen);
-
-        for (const side of [-1, 1] as const) {
-          const housing = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.78, 0.07), dark);
-          housing.position.set(side * 1.12, 1.32, cabEnd * 8.88);
-          car.add(housing);
-          this.cabShells.push(housing);
-          const headBar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.42, 0.055), headlightMat);
-          headBar.position.set(side * 1.12, 1.18, cabEnd * 8.92);
-          car.add(headBar);
-          const tailDot = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.055), tailLampMat);
-          tailDot.position.set(side * 1.12, 1.56, cabEnd * 8.92);
-          car.add(tailDot);
-          this.cabShells.push(headBar, tailDot);
-
-          const cabWindow = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.85, 1.0), glass);
-          cabWindow.position.set(side * 1.55, 2.43, cabEnd * 7.35);
-          car.add(cabWindow);
-        }
-
-        const frontSkirt = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.3, 0.16), dark);
-        frontSkirt.position.set(0, 0.52, cabEnd * 8.72);
-        car.add(frontSkirt);
-        this.cabShells.push(frontSkirt);
-
-        const dbLogo = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.4, 0.28),
-          new THREE.MeshBasicMaterial({ map: makeLabelTexture('DB', { width: 160, height: 112, bg: '#e0202b', fg: '#ffffff' }), side: THREE.DoubleSide })
-        );
-        dbLogo.position.set(0, 1.5, cabEnd * 8.9);
-        if (cabEnd < 0) dbLogo.rotation.y = Math.PI;
-        car.add(dbLogo);
-        this.cabShells.push(dbLogo);
-
-        const displayAssembly = new THREE.Group();
-        displayAssembly.name = `S-Bahn cab route display assembly ${cabEnd}`;
-        displayAssembly.position.set(0, 3.06, cabEnd * 8.76);
-        displayAssembly.rotation.y = cabEnd < 0 ? Math.PI : 0;
-        const tilted = new THREE.Group();
-        tilted.rotation.x = -0.197;
-        displayAssembly.add(tilted);
-        const recess = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.4, 0.03), dark);
-        tilted.add(recess);
-        this.cabShells.push(recess);
-        const display = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.32), new THREE.MeshBasicMaterial({
-          map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 700, height: 128, bg: '#111', fg: '#fff' }),
-          side: THREE.DoubleSide,
-          depthWrite: false,
-          polygonOffset: true,
-          polygonOffsetFactor: -4,
-          polygonOffsetUnits: -4
-        }));
-        display.position.z = 0.025;
-        display.renderOrder = 20;
-        tilted.add(display);
-        car.add(displayAssembly);
-        this.cabDisplays.push(display);
-      }
-      const floor = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.12, 15.5), floorMaterial);
-      floor.position.y = 1.12;
-      car.add(floor);
-      const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.68, 0.08, 15.35), interior);
-      ceiling.position.y = 3.32;
-      car.add(ceiling);
-      this.addCabinLight(car, 3.0, -4.5);
-      this.addCabinLight(car, 3.0, 4.5);
-      this.addOpaqueTransitInterior(car, 15.35, 1.4, interior, () => [-3.15, 3.15]);
-      for (const z of [-6.2, -5.1, -1.35, 0, 1.35, 5.1, 6.2]) {
-        for (const x of [-1.04, -0.58, 0.58, 1.04]) {
-          const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.13, 0.52), seat);
-          cushion.position.set(x, 1.37, z);
-          car.add(cushion);
-          const back = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.68, 0.11), seat);
-          back.position.set(x, 1.72, z - 0.25);
-          car.add(back);
-        }
-      }
-      for (const z of [-3.15, 0, 3.15]) {
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2, 8), metal);
-        pole.position.set(0, 2.1, z);
-        car.add(pole);
-      }
-      const monitor = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 0.54), displayMaterial);
-      monitor.position.set(0, 2.94, 0.15);
-      monitor.rotation.y = Math.PI;
-      monitor.renderOrder = 18;
-      car.add(monitor);
-      for (const z of [-5.2, 5.2]) {
-        const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.42, 1.8), dark);
-        bogie.position.set(0, 0.48, z);
-        car.add(bogie);
-      }
-      this.cars.push(car);
-      this.root.add(car);
-    });
-    this.trainHalfLengthM = 34.2;
-    this.addPantograph(new THREE.Vector3(0, 3.86, 8.5), dark);
-    this.addExteriorLightThrow(this.trainHalfLengthM, 1.45);
-    return this.createVehicleInstance();
+    return buildSBahnVehicle(defaultSBahnBlueprint, this.context);
   }
 
   createBwegtRegionalRailVehicle(): VehicleInstance {
@@ -2425,57 +2267,6 @@ class ProceduralTransitVehicleFactory {
     return geometry;
   }
 
-  private makeSBahn430Nose(): THREE.ExtrudeGeometry {
-    // Side profile of the flat, slightly raked BR 430 front, extruded across the width.
-    const profile = new THREE.Shape();
-    profile.moveTo(0, 0.42);
-    profile.lineTo(0.55, 0.42);
-    profile.lineTo(0.72, 0.62);
-    profile.lineTo(0.78, 1.9);
-    profile.lineTo(0.52, 3.2);
-    profile.quadraticCurveTo(0.42, 3.5, 0.12, 3.6);
-    profile.lineTo(0, 3.6);
-    profile.closePath();
-    const geometry = new THREE.ExtrudeGeometry(profile, {
-      depth: 2.7,
-      bevelEnabled: true,
-      bevelThickness: 0.09,
-      bevelSize: 0.09,
-      bevelSegments: 3
-    });
-    geometry.translate(0, 0, -1.35);
-    geometry.rotateY(-Math.PI / 2);
-    return geometry;
-  }
-
-  private makeSBahn430Mask(): THREE.ExtrudeGeometry {
-    const shape = new THREE.Shape();
-    shape.moveTo(-1.3, -0.66);
-    shape.lineTo(1.3, -0.66);
-    shape.lineTo(1.06, 0.56);
-    shape.quadraticCurveTo(0.98, 0.66, 0.82, 0.68);
-    shape.lineTo(-0.82, 0.68);
-    shape.quadraticCurveTo(-0.98, 0.66, -1.06, 0.56);
-    shape.closePath();
-    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 2 });
-    geometry.translate(0, 0, -0.03);
-    return geometry;
-  }
-
-  private makeSBahn430Windscreen(): THREE.ExtrudeGeometry {
-    const shape = new THREE.Shape();
-    shape.moveTo(-1.18, -0.56);
-    shape.lineTo(1.18, -0.56);
-    shape.lineTo(0.92, 0.44);
-    shape.quadraticCurveTo(0.84, 0.54, 0.68, 0.56);
-    shape.lineTo(-0.68, 0.56);
-    shape.quadraticCurveTo(-0.84, 0.54, -0.92, 0.44);
-    shape.closePath();
-    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.015, bevelSegments: 2 });
-    geometry.translate(0, 0, -0.025);
-    return geometry;
-  }
-
   private makeCabNose(material: THREE.Material): THREE.Mesh {
     const shape = new THREE.Shape();
     shape.moveTo(-1.18, -1.28);
@@ -2511,23 +2302,7 @@ class ProceduralTransitVehicleFactory {
   }
 
   private addPantograph(position: THREE.Vector3, material: THREE.Material): void {
-    const base = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.14, 0.72), material);
-    base.position.copy(position);
-    this.root.add(base);
-    const points = [
-      [new THREE.Vector3(-0.55, 0, -0.2), new THREE.Vector3(0, 0.78, 0)],
-      [new THREE.Vector3(0.55, 0, -0.2), new THREE.Vector3(0, 0.78, 0)],
-      [new THREE.Vector3(-0.55, 0, 0.2), new THREE.Vector3(0, 0.78, 0)],
-      [new THREE.Vector3(0.55, 0, 0.2), new THREE.Vector3(0, 0.78, 0)]
-    ] as const;
-    for (const [a, b] of points) {
-      const curve = new THREE.LineCurve3(a.clone().add(position), b.clone().add(position));
-      const arm = new THREE.Mesh(new THREE.TubeGeometry(curve, 1, 0.025, 6), material);
-      this.root.add(arm);
-    }
-    const shoe = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.055, 0.16), material);
-    shoe.position.copy(position).add(new THREE.Vector3(0, 0.84, 0));
-    this.root.add(shoe);
+    addPantograph(this.root, position, material);
   }
 }
 

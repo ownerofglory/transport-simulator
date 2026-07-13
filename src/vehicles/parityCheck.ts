@@ -1,37 +1,40 @@
 import * as THREE from 'three';
-import type { CityDefinition } from '../../../cities';
-import type { TransportModeDefinition } from '../../../domain/transport';
-import type { DemoRoute } from '../../../route';
-import { buildTransitVehicle } from '../../buildTransitVehicle';
-import type { VehicleBuildContext } from '../../types';
+import type { CityDefinition } from '../cities';
+import type { TransportModeDefinition } from '../domain/transport';
+import type { DemoRoute } from '../route';
+import { buildTransitVehicle } from './buildTransitVehicle';
+import type { VehicleBuildContext } from './types';
 
-// Dev-only parity harness: fingerprints the full bus scene graph so a refactor
-// of the bus builder can be proven visually identical (mesh-for-mesh) to the
-// previous implementation. Not imported by app code; use from the browser
+// Dev-only parity harness: fingerprints a vehicle's full scene graph so a
+// refactor of a builder can be proven visually identical (mesh-for-mesh) to
+// the previous implementation. Not imported by app code; use from the browser
 // console on the vite dev server:
 //
-//   const m = await import('/src/vehicles/blueprint/bus/parityCheck.ts');
+//   const m = await import('/src/vehicles/parityCheck.ts');
 //   m.captureBaseline();          // before the refactor
 //   m.compareWithBaseline();      // after the refactor -> [] means identical
 //
 // Baselines persist in localStorage across reloads/HMR.
 
-const PARITY_LINES: Record<string, string> = {
-  rigid: '35',
-  articulated: '40'
+type ParityTarget = { line: string; vehicleKind: string; modeId: string };
+
+const PARITY_TARGETS: Record<string, ParityTarget> = {
+  'bus-rigid': { line: '35', vehicleKind: 'bus', modeId: 'bus' },
+  'bus-articulated': { line: '40', vehicleKind: 'bus', modeId: 'bus' },
+  'sbahn': { line: 'S1', vehicleKind: 's-bahn', modeId: 's-bahn' }
 };
 
-function makeContext(line: string): VehicleBuildContext {
+function makeContext(target: ParityTarget): VehicleBuildContext {
   const route = {
-    id: `parity-${line}`,
-    line,
+    id: `parity-${target.line}`,
+    line: target.line,
     destination: 'Parity Test'
   } as unknown as DemoRoute;
   const city = { id: 'stuttgart' } as unknown as CityDefinition;
   const modeDefinition = {
-    id: 'bus',
-    vehicleFamily: 'Stuttgart city bus',
-    vehicleKind: 'bus'
+    id: target.modeId,
+    vehicleFamily: `Parity ${target.vehicleKind}`,
+    vehicleKind: target.vehicleKind
   } as unknown as TransportModeDefinition;
   return {
     route,
@@ -75,6 +78,17 @@ function fingerprintMaterial(material: THREE.Material | THREE.Material[]): unkno
 
 type Fingerprint = Record<string, unknown>;
 
+function hashVertexPositions(geometry: THREE.BufferGeometry): string {
+  const attribute = geometry.getAttribute('position');
+  if (!attribute) return 'none';
+  const array = attribute.array as ArrayLike<number>;
+  let hash = 0;
+  for (let i = 0; i < array.length; i++) {
+    hash = (hash * 31 + Math.round(array[i] * 10000)) | 0;
+  }
+  return `${array.length}:${hash}`;
+}
+
 function fingerprintObject(object: THREE.Object3D): Fingerprint {
   const record: Fingerprint = {
     type: object.type,
@@ -87,7 +101,13 @@ function fingerprintObject(object: THREE.Object3D): Fingerprint {
   };
   const mesh = object as THREE.Mesh;
   if (mesh.isMesh) {
-    record.geometry = { type: mesh.geometry.type, params: sanitizeParams((mesh.geometry as unknown as { parameters?: unknown }).parameters) };
+    record.geometry = {
+      type: mesh.geometry.type,
+      params: sanitizeParams((mesh.geometry as unknown as { parameters?: unknown }).parameters),
+      // Vertex-level hash so non-parametric geometries (Extrude/Tube shapes)
+      // are covered too, not just constructor arguments.
+      vertexHash: hashVertexPositions(mesh.geometry)
+    };
     record.material = fingerprintMaterial(mesh.material);
   }
   const light = object as THREE.Light & { distance?: number; decay?: number; angle?: number; penumbra?: number };
@@ -105,8 +125,8 @@ function fingerprintObject(object: THREE.Object3D): Fingerprint {
   return record;
 }
 
-function fingerprintBus(line: string): Fingerprint {
-  const vehicle = buildTransitVehicle(makeContext(line));
+function fingerprintVehicle(target: ParityTarget): Fingerprint {
+  const vehicle = buildTransitVehicle(makeContext(target));
   const record: Fingerprint = {
     scene: fingerprintObject(vehicle.root),
     doors: vehicle.doors.map((door) => ({ closedZ: round(door.closedZ), direction: door.direction, leaves: door.group.children.length })),
@@ -127,13 +147,13 @@ function fingerprintBus(line: string): Fingerprint {
 }
 
 function storageKey(variant: string): string {
-  return `bus-parity-baseline-${variant}`;
+  return `vehicle-parity-baseline-${variant}`;
 }
 
 export function captureBaseline(): Record<string, number> {
   const sizes: Record<string, number> = {};
-  for (const [variant, line] of Object.entries(PARITY_LINES)) {
-    const json = JSON.stringify(fingerprintBus(line));
+  for (const [variant, target] of Object.entries(PARITY_TARGETS)) {
+    const json = JSON.stringify(fingerprintVehicle(target));
     localStorage.setItem(storageKey(variant), json);
     sizes[variant] = json.length;
   }
@@ -157,14 +177,14 @@ function diffValues(path: string, before: unknown, after: unknown, out: string[]
 
 export function compareWithBaseline(): Record<string, string[]> {
   const result: Record<string, string[]> = {};
-  for (const [variant, line] of Object.entries(PARITY_LINES)) {
+  for (const [variant, target] of Object.entries(PARITY_TARGETS)) {
     const baselineJson = localStorage.getItem(storageKey(variant));
     if (!baselineJson) {
       result[variant] = ['NO BASELINE CAPTURED'];
       continue;
     }
     const diffs: string[] = [];
-    diffValues(variant, JSON.parse(baselineJson), fingerprintBus(line), diffs);
+    diffValues(variant, JSON.parse(baselineJson), fingerprintVehicle(target), diffs);
     result[variant] = diffs;
   }
   return result;

@@ -1,5 +1,7 @@
 import { buildBusVehicle } from './blueprint/bus/buildBusFromBlueprint';
 import { defaultBusBlueprint } from './blueprint/bus/defaultBusBlueprint';
+import { buildSBahnVehicle } from './blueprint/sbahn/buildSBahnFromBlueprint';
+import { defaultSBahnBlueprint } from './blueprint/sbahn/defaultSBahnBlueprint';
 import { buildProceduralTransitVehicle, createStadtbahnVehicle } from './procedural';
 import { VehicleRegistry } from './registry';
 import type { VehicleBuildContext, VehicleInstance } from './types';
@@ -22,6 +24,7 @@ vehicleRegistry.setFinalFallback(createStadtbahnVehicle);
 // Registering the default config by id also lets routes/cities opt into it
 // explicitly via vehicleDesignId, and gives custom bus configs a template.
 vehicleRegistry.registerBuilder(defaultBusBlueprint.id, (context) => buildBusVehicle(defaultBusBlueprint, context));
+vehicleRegistry.registerBuilder(defaultSBahnBlueprint.id, (context) => buildSBahnVehicle(defaultSBahnBlueprint, context));
 
 for (const rawConfig of [genericModernTram, genericBus, stuttgartDt8Tango]) {
   const result = vehicleRegistry.registerBlueprintFromJson(rawConfig);

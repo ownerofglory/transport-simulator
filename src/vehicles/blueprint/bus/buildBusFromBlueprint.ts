@@ -10,7 +10,8 @@ import {
   makeSetExteriorLightsOn,
   type ExteriorLightRig
 } from '../../parts';
-import type { BusBlueprintConfig, BusMaterialConfig, BusMaterialRole, BusSectionConfig } from './BusBlueprintConfig';
+import { makeStandardMaterial } from '../standardMaterial';
+import type { BusBlueprintConfig, BusMaterialRole, BusSectionConfig } from './BusBlueprintConfig';
 
 // Mercedes-Benz Citaro family renderer, driven by a BusBlueprintConfig.
 // The config decides livery, formation, door/axle layout and articulation
@@ -82,15 +83,8 @@ function isArticulatedFormation(config: BusBlueprintConfig, context: VehicleBuil
 
 function makeBusMaterials(configMaterials: BusBlueprintConfig['materials']): BusMaterials {
   const materials = {} as BusMaterials;
-  for (const [role, materialConfig] of Object.entries(configMaterials) as [BusMaterialRole, BusMaterialConfig][]) {
-    const params: THREE.MeshStandardMaterialParameters = { color: materialConfig.color };
-    if (materialConfig.roughness !== undefined) params.roughness = materialConfig.roughness;
-    if (materialConfig.metalness !== undefined) params.metalness = materialConfig.metalness;
-    if (materialConfig.opacity !== undefined) params.opacity = materialConfig.opacity;
-    if (materialConfig.transparent !== undefined) params.transparent = materialConfig.transparent;
-    if (materialConfig.emissive !== undefined) params.emissive = materialConfig.emissive;
-    if (materialConfig.emissiveIntensity !== undefined) params.emissiveIntensity = materialConfig.emissiveIntensity;
-    materials[role] = new THREE.MeshStandardMaterial(params);
+  for (const role of Object.keys(configMaterials) as BusMaterialRole[]) {
+    materials[role] = makeStandardMaterial(configMaterials[role]);
   }
   return materials;
 }

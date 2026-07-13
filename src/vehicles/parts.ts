@@ -58,6 +58,28 @@ export function makeSetExteriorLightsOn(rig: ExteriorLightRig): ((on: boolean) =
   };
 }
 
+// Scissor pantograph: four angled arms rising from a roof base to the
+// contact shoe. Added to the vehicle root at an absolute roof position.
+export function addPantograph(root: THREE.Object3D, position: THREE.Vector3, material: THREE.Material): void {
+  const base = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.14, 0.72), material);
+  base.position.copy(position);
+  root.add(base);
+  const points = [
+    [new THREE.Vector3(-0.55, 0, -0.2), new THREE.Vector3(0, 0.78, 0)],
+    [new THREE.Vector3(0.55, 0, -0.2), new THREE.Vector3(0, 0.78, 0)],
+    [new THREE.Vector3(-0.55, 0, 0.2), new THREE.Vector3(0, 0.78, 0)],
+    [new THREE.Vector3(0.55, 0, 0.2), new THREE.Vector3(0, 0.78, 0)]
+  ] as const;
+  for (const [a, b] of points) {
+    const curve = new THREE.LineCurve3(a.clone().add(position), b.clone().add(position));
+    const arm = new THREE.Mesh(new THREE.TubeGeometry(curve, 1, 0.025, 6), material);
+    root.add(arm);
+  }
+  const shoe = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.055, 0.16), material);
+  shoe.position.copy(position).add(new THREE.Vector3(0, 0.84, 0));
+  root.add(shoe);
+}
+
 export function addSlidingVehicleDoor(
   doors: VehicleInstance['doors'],
   car: THREE.Group,
