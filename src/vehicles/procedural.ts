@@ -155,6 +155,13 @@ class ProceduralTransitVehicleFactory {
       tyre: new THREE.MeshStandardMaterial({ color: 0x0d0f12, roughness: 0.9 }),
       hub: new THREE.MeshStandardMaterial({ color: 0xb9bdbf, roughness: 0.42, metalness: 0.7 }),
       seat: new THREE.MeshStandardMaterial({ color: 0x2f5f86, roughness: 0.86 }),
+      // VVS moquette back panel and dark anti-slip low-floor covering.
+      seatBack: new THREE.MeshStandardMaterial({ color: 0x22405c, roughness: 0.9 }),
+      floor: new THREE.MeshStandardMaterial({ color: 0x3b3e42, roughness: 0.94 }),
+      // Signal-yellow grab rails/stanchions, warm ceiling light strip and driver kit.
+      grab: new THREE.MeshStandardMaterial({ color: 0xf2c200, roughness: 0.4, metalness: 0.5 }),
+      lightStrip: new THREE.MeshStandardMaterial({ color: 0xfff6e0, emissive: 0xfff2d2, emissiveIntensity: 0.85 }),
+      driver: new THREE.MeshStandardMaterial({ color: 0x1a1d20, roughness: 0.7 }),
       rubber: new THREE.MeshStandardMaterial({ color: 0x101318, roughness: 0.82 })
     };
   }
@@ -203,8 +210,8 @@ class ProceduralTransitVehicleFactory {
     acPod.position.set(0, 3.34, opts.cab === 'front' ? -half * 0.45 : half * 0.35);
     car.add(acPod);
 
-    // Interior floor, ceiling, walls, seating and grab poles.
-    const floor = new THREE.Mesh(new THREE.BoxGeometry(2.28, 0.08, L - 0.7), m.interior);
+    // Interior floor, ceiling, walls, seating, grab rails and fittings.
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(2.28, 0.08, L - 0.7), m.floor);
     floor.position.y = 1.02;
     car.add(floor);
     const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.08, L - 0.8), m.interior);
@@ -212,6 +219,7 @@ class ProceduralTransitVehicleFactory {
     car.add(ceiling);
     this.addOpaqueTransitInterior(car, L - 0.8, 1.18, m.interior, (side) => side < 0 ? opts.doorZs : []);
     this.addBusSeating(car, m, half, opts.doorZs, opts.cab === 'front', opts.rear === 'tail');
+    this.addBusInteriorFittings(car, m, half, opts.doorZs, opts.cab === 'front');
 
     if (opts.cab === 'front') {
       this.addBusFrontEnd(car, m, displayMaterial, half);
@@ -291,15 +299,90 @@ class ProceduralTransitVehicleFactory {
         const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 0.6), m.seat);
         cushion.position.set(x, 1.35, z);
         car.add(cushion);
-        const back = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.68, 0.12), m.seat);
-        back.position.set(x, 1.69, z - 0.3);
+        // Contoured moquette back with a darker headrest and an aisle grab handle.
+        const back = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.56, 0.11), m.seat);
+        back.position.set(x, 1.66, z - 0.29);
         car.add(back);
+        const headrest = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.2, 0.1), m.seatBack);
+        headrest.position.set(x, 1.98, z - 0.31);
+        car.add(headrest);
+        const handle = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.014, 6, 12), m.grab);
+        handle.rotation.x = Math.PI / 2;
+        handle.position.set(x - Math.sign(x) * 0.24, 2.02, z - 0.3);
+        car.add(handle);
       }
     }
+    // Aisle stanchions carry the grab rail; each gets a red stop-request button.
     for (let z = rowStart + 0.5; z < rowEnd; z += 2.4) {
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.85, 8), m.metal);
-      pole.position.set(0.62, 2.02, z);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 1.9, 10), m.grab);
+      pole.position.set(0.62, 2.0, z);
       car.add(pole);
+      const button = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.05), new THREE.MeshStandardMaterial({ color: 0xd42020, emissive: 0x5a0d0d, emissiveIntensity: 0.4 }));
+      button.position.set(0.7, 1.7, z);
+      car.add(button);
+    }
+  }
+
+  // Ceiling light strip, longitudinal grab rails with hanging straps and, on the
+  // front section, the driver seat, wheel and glazed cab partition.
+  private addBusInteriorFittings(
+    car: THREE.Group,
+    m: ReturnType<ProceduralTransitVehicleFactory['makeBusMaterials']>,
+    half: number,
+    doorZs: number[],
+    cabFront: boolean
+  ): void {
+    const railStart = -half + 0.6;
+    const railEnd = cabFront ? half - 2.3 : half - 0.6;
+    const railLen = railEnd - railStart;
+    const railMid = (railStart + railEnd) / 2;
+
+    // Warm central ceiling light strip (lit by the shared cabin PointLight).
+    const lightStrip = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, railLen), m.lightStrip);
+    lightStrip.position.set(0, 2.94, railMid);
+    car.add(lightStrip);
+
+    for (const side of [-1, 1] as const) {
+      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, railLen, 10), m.grab);
+      rail.rotation.x = Math.PI / 2;
+      rail.position.set(side * 0.78, 2.22, railMid);
+      car.add(rail);
+      // Vertical drops linking the rail to the ceiling, plus hanging hand straps.
+      for (let z = railStart + 0.5; z < railEnd; z += 1.5) {
+        const drop = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.72, 8), m.grab);
+        drop.position.set(side * 0.78, 2.58, z);
+        car.add(drop);
+        const strap = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.012, 6, 12), m.driver);
+        strap.position.set(side * 0.78, 2.12, z + 0.7);
+        car.add(strap);
+      }
+    }
+
+    if (cabFront) {
+      const cabZ = half - 1.5;
+      // Glazed partition separating the driver from the saloon.
+      const partition = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.9, 0.06), m.interior);
+      partition.position.set(-0.72, 1.95, cabZ - 0.3);
+      car.add(partition);
+      const partitionGlass = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.04), m.glass);
+      partitionGlass.position.set(-0.72, 2.55, cabZ - 0.3);
+      car.add(partitionGlass);
+      // Driver seat.
+      const seatBase = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.5), m.driver);
+      seatBase.position.set(0.55, 1.42, cabZ - 0.2);
+      car.add(seatBase);
+      const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.62, 0.12), m.driver);
+      seatBack.position.set(0.55, 1.78, cabZ - 0.42);
+      car.add(seatBack);
+      // Steering wheel raked toward the driver.
+      const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.03, 8, 20), m.driver);
+      wheel.rotation.x = 1.15;
+      wheel.position.set(0.55, 1.72, cabZ + 0.34);
+      car.add(wheel);
+      const column = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.34, 8), m.driver);
+      column.rotation.x = 0.42;
+      column.position.set(0.55, 1.55, cabZ + 0.4);
+      car.add(column);
     }
   }
 
