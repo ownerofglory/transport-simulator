@@ -136,20 +136,20 @@ export function AppShell() {
             {collapsed ? '+' : '−'}
           </button>
         </div>
-        <div className="hud-tabs">
-          <button
-            className={state.hudTab === 'simulator' ? 'active' : ''}
-            onClick={() => dispatch({ type: 'hud-tab-selected', tab: 'simulator' })}
-          >
-            Simulator
-          </button>
+        {/*<div className="hud-tabs">*/}
+          {/*<button*/}
+          {/*  className={state.hudTab === 'simulator' ? 'active' : ''}*/}
+          {/*  onClick={() => dispatch({ type: 'hud-tab-selected', tab: 'simulator' })}*/}
+          {/*>*/}
+          {/*  Simulator*/}
+          {/*</button>*/}
           {/*<button*/}
           {/*  className={state.hudTab === 'realtime' ? 'active' : ''}*/}
           {/*  onClick={() => dispatch({ type: 'hud-tab-selected', tab: 'realtime' })}*/}
           {/*>*/}
           {/*  Realtime*/}
-          {/*</button>*/} {/* TODO: realtime mode */}
-        </div>
+          {/*</button>*/}
+        {/*</div>*/} {/* TODO: realtime mode */}
         <div className="hud-content">
           {state.hudTab === 'realtime' ? (
             <>
