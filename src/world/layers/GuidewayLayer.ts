@@ -1,8 +1,18 @@
 import * as THREE from 'three';
+import type { GuidewayKind } from '../../domain/transport';
+import { BuilderRegistry } from '../../engine/builders/BuilderRegistry';
 import type { WorldLayerContext } from './WorldLayerContext';
 
 /** Builds the running way (rails, bus street, ferry channel, guideway) and tunnels. */
 export class GuidewayLayer {
+  // Per-guideway track builders; unmapped kinds fall back to rail track.
+  private readonly trackBuilders = new BuilderRegistry<GuidewayKind, () => void>()
+    .register('bus', () => this.buildBusRouteStreet())
+    .register('ferry', () => this.buildFerryRoutePath())
+    .register('schwebebahn', () => this.buildSchwebebahnGuideway())
+    .register('zacke', () => this.buildMountainRailwayTrack())
+    .register('seilbahn', () => this.buildMountainRailwayTrack());
+
   constructor(private readonly ctx: WorldLayerContext) {}
 
   build(): void {
@@ -11,22 +21,10 @@ export class GuidewayLayer {
   }
 
   private buildTrack(): void {
-    if (this.ctx.guidewayKind === 'bus') {
-      this.buildBusRouteStreet();
-      return;
-    }
-    if (this.ctx.guidewayKind === 'ferry') {
-      this.buildFerryRoutePath();
-      return;
-    }
-    if (this.ctx.guidewayKind === 'schwebebahn') {
-      this.buildSchwebebahnGuideway();
-      return;
-    }
-    if (this.ctx.guidewayKind === 'zacke' || this.ctx.guidewayKind === 'seilbahn') {
-      this.buildMountainRailwayTrack();
-      return;
-    }
+    (this.trackBuilders.resolveOptional(this.ctx.guidewayKind) ?? (() => this.buildRailTrack()))();
+  }
+
+  private buildRailTrack(): void {
     const railMaterial = new THREE.MeshStandardMaterial({ color: 0x7f858a, metalness: 0.7, roughness: 0.28 });
     const sleeperMaterial = new THREE.MeshStandardMaterial({ color: 0x453429, roughness: 0.85 });
     const ballastMaterial = new THREE.MeshStandardMaterial({ color: 0x6d6a63, roughness: 0.95 });
