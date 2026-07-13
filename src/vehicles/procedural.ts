@@ -809,48 +809,177 @@ class ProceduralTransitVehicleFactory {
     return this.createVehicleInstance();
   }
 
+  // Stuttgart Zahnradbahn ("Zacke") rack railcar. Shares the Stadtbahn's yellow
+  // livery and cab styling but keeps its own rack-drive underframe and steep-grade
+  // bidirectional cab-at-both-ends layout.
   createZackeVehicle(): VehicleInstance {
+    const L = 16.6;
+    const half = L / 2;
     const car = new THREE.Group();
-    car.name = 'Articulated car S-ZT 4.2';
+    car.name = 'Rack railcar SSB ZT 4';
     car.userData.centerOffsetM = 0;
-    const yellow = new THREE.MeshStandardMaterial({ color: 0xffdc00, roughness: 0.45 });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x1b2228, roughness: 0.38 });
-    const glass = new THREE.MeshStandardMaterial({ color: 0x9ccbd7, transparent: true, opacity: 0.42, roughness: 0.06 });
-    const floor = new THREE.MeshStandardMaterial({ color: 0xd8d4c8, roughness: 0.9 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(2.65, 3.1, 18.6), yellow);
-    body.position.y = 1.88;
+
+    const yellow = new THREE.MeshStandardMaterial({ color: 0xffdf00, roughness: 0.5, metalness: 0.05 });
+    const black = new THREE.MeshStandardMaterial({ color: 0x17232b, roughness: 0.38 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x91c7dd, roughness: 0.08, transparent: true, opacity: 0.56, depthWrite: true, side: THREE.DoubleSide });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0xbfc1bd, roughness: 0.64, metalness: 0.12 });
+    const doorMat = new THREE.MeshStandardMaterial({ color: 0xf6c900, roughness: 0.48 });
+    const interiorWall = new THREE.MeshStandardMaterial({ color: 0xd9d5ca, roughness: 0.88 });
+    const interiorFloor = new THREE.MeshStandardMaterial({ color: 0x606565, roughness: 0.94 });
+    const metal = new THREE.MeshStandardMaterial({ color: 0x8a8f91, roughness: 0.4, metalness: 0.65 });
+    const seat = new THREE.MeshStandardMaterial({ color: 0x2f5f86, roughness: 0.86 });
+    const grab = new THREE.MeshStandardMaterial({ color: 0xf2c200, roughness: 0.4, metalness: 0.5 });
+    const lightStrip = new THREE.MeshStandardMaterial({ color: 0xfff6e0, emissive: 0xfff2d2, emissiveIntensity: 0.85 });
+    const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2c4, emissiveIntensity: 0.55 });
+    const tailLampMat = new THREE.MeshStandardMaterial({ color: 0x8c1f1c, emissive: 0x7a1512, emissiveIntensity: 0.35 });
+    this.glassMaterial = glass;
+    this.headLampMaterials.push(headlightMat);
+    this.tailLampMaterials.push(tailLampMat);
+
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.62, 2.86, L - 1.2), yellow);
+    body.position.y = 1.95;
+    body.castShadow = true;
     car.add(body);
     this.passengerShells.push(body);
-    for (const side of [-1, 1]) {
-      const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.08, 15.8), dark);
-      band.position.set(side * 1.35, 2.38, 0);
+    const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.64, 0.55, L - 1.3), black);
+    skirt.position.y = 0.66;
+    car.add(skirt);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.2, L - 1.9), roofMat);
+    roof.position.y = 3.46;
+    car.add(roof);
+
+    const doorZs = [-3.7, 3.7];
+    for (const side of [-1, 1] as const) {
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.02, L - 4.6), black);
+      band.position.set(side * 1.34, 2.5, 0);
       car.add(band);
       this.windowBands.push(band);
-      for (const z of [-6.8, -4.7, -2.4, 0, 2.4, 4.7, 6.8]) {
-        const window = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.88, 1.55), glass);
-        window.position.set(side * 1.37, 2.4, z);
+      for (let z = -(L - 5.6) / 2; z <= (L - 5.6) / 2; z += 1.5) {
+        if (doorZs.some((d) => Math.abs(z - d) < 0.9)) continue;
+        const window = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.86, 1.2), glass);
+        window.position.set(side * 1.36, 2.5, z);
         car.add(window);
       }
+      for (const z of doorZs) this.addSlidingVehicleDoor(car, side * 1.34, z, doorMat, glass, black, 1.5, 1.95);
     }
-    for (const end of [-1, 1]) {
-      const windscreen = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.95, 0.08), glass);
-      windscreen.position.set(0, 2.45, end * 9.34);
+
+    // Both ends are driving cabs: raked yellow nose, black windscreen mask, a
+    // destination display and night-switchable head/tail lamps.
+    const destinationMap = makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 640, height: 128, bg: '#111', fg: '#ffd900' });
+    for (const end of [-1, 1] as const) {
+      const nose = this.makeCabNose(yellow);
+      nose.scale.set(1.08, 1.12, 1.0);
+      nose.position.set(0, 2.05, end * (half - 0.5));
+      if (end < 0) nose.rotation.y = Math.PI;
+      nose.castShadow = true;
+      car.add(nose);
+      this.cabShells.push(nose);
+
+      const mask = new THREE.Mesh(new THREE.BoxGeometry(2.34, 1.02, 0.08), black);
+      mask.position.set(0, 2.74, end * (half - 0.06));
+      car.add(mask);
+      this.cabShells.push(mask);
+      const windscreen = new THREE.Mesh(new THREE.BoxGeometry(2.06, 0.92, 0.06), glass);
+      windscreen.position.set(0, 2.5, end * (half - 0.02));
       car.add(windscreen);
+
+      const display = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.3), new THREE.MeshBasicMaterial({ map: destinationMap, side: THREE.DoubleSide }));
+      display.position.set(0, 2.98, end * (half + 0.01));
+      if (end < 0) display.rotation.y = Math.PI;
+      car.add(display);
+      this.cabDisplays.push(display);
+
+      for (const sx of [-1, 1] as const) {
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.08), headlightMat);
+        head.position.set(sx * 0.92, 1.42, end * (half + 0.02));
+        car.add(head);
+        const tail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.07), tailLampMat);
+        tail.position.set(sx * 1.02, 1.16, end * (half + 0.02));
+        car.add(tail);
+      }
     }
-    const interiorFloor = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.08, 17.5), floor);
-    interiorFloor.position.y = 1.05;
-    car.add(interiorFloor);
-    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.08, 17.4), floor);
-    ceiling.position.y = 3.18;
+
+    // Rack-drive underframe: two rail bogies and a central toothed pinion — the
+    // defining feature of a cog railway — inside a gearbox housing.
+    for (const z of [-(half - 2.4), half - 2.4]) {
+      const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.36, 2.2), black);
+      bogie.position.set(0, 0.44, z);
+      car.add(bogie);
+      for (const wz of [z - 0.8, z + 0.8]) {
+        for (const wx of [-1.02, 1.02]) {
+          const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.14, 18), metal);
+          wheel.rotation.z = Math.PI / 2;
+          wheel.position.set(wx, 0.4, wz);
+          car.add(wheel);
+        }
+      }
+    }
+    const gearbox = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 1.0), black);
+    gearbox.position.set(0, 0.42, 0);
+    car.add(gearbox);
+    const pinionHub = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.16, 18), metal);
+    pinionHub.rotation.z = Math.PI / 2;
+    pinionHub.position.set(0, 0.24, 0);
+    car.add(pinionHub);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.14), metal);
+      tooth.position.set(0, 0.24 + Math.sin(a) * 0.34, Math.cos(a) * 0.34);
+      car.add(tooth);
+    }
+
+    // Interior: floor, ceiling, walls, transverse seating and yellow grab kit.
+    const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.1, L - 2.0), interiorFloor);
+    floorMesh.position.y = 1.06;
+    car.add(floorMesh);
+    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.08, L - 2.2), interiorWall);
+    ceiling.position.y = 3.24;
     car.add(ceiling);
-    this.addOpaqueTransitInterior(car, 17.4, 1.2, floor, () => []);
-    this.addCabinLight(car, 2.9, -4.4);
-    this.addCabinLight(car, 2.9, 4.4);
-    this.glassMaterial = glass;
-    this.trainHalfLengthM = 9.5;
+    this.addOpaqueTransitInterior(car, L - 2.2, 1.2, interiorWall, (side) => side < 0 ? doorZs : []);
+
+    const seatEnd = half - 2.6;
+    for (let z = -seatEnd; z <= seatEnd; z += 1.35) {
+      if (doorZs.some((d) => Math.abs(z - d) < 0.8)) continue;
+      for (const x of [-0.94, -0.54, 0.54, 0.94]) {
+        const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.13, 0.5), seat);
+        cushion.position.set(x, 1.4, z);
+        car.add(cushion);
+        const back = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.62, 0.1), seat);
+        back.position.set(x, 1.73, z - 0.24);
+        car.add(back);
+      }
+    }
+    const lit = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.05, L - 3.0), lightStrip);
+    lit.position.set(0, 3.16, 0);
+    car.add(lit);
+    for (const side of [-1, 1] as const) {
+      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, L - 3.2, 10), grab);
+      rail.rotation.x = Math.PI / 2;
+      rail.position.set(side * 0.8, 2.42, 0);
+      car.add(rail);
+    }
+    for (const z of [-3.7, 0, 3.7]) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 2.0, 10), grab);
+      pole.position.set(0, 2.16, z);
+      car.add(pole);
+    }
+    const monitor = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.44), this.context.makeInteriorDisplayMaterial());
+    monitor.position.set(0, 2.98, 0.1);
+    monitor.rotation.y = Math.PI;
+    monitor.renderOrder = 18;
+    car.add(monitor);
+
+    this.addPantograph(new THREE.Vector3(0, 3.6, 2.6), metal);
+    const roofBox = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.28, 2.4), black);
+    roofBox.position.set(0, 3.7, -3.0);
+    car.add(roofBox);
+
+    this.addCabinLight(car, 2.95, -4.4);
+    this.addCabinLight(car, 2.95, 4.4);
+    this.trainHalfLengthM = half + 0.2;
     this.cars.push(car);
     this.root.add(car);
-    this.addPantograph(new THREE.Vector3(0, 3.55, 0), dark);
+    this.addExteriorLightThrow(this.trainHalfLengthM, 1.4);
     return this.createVehicleInstance();
   }
 
