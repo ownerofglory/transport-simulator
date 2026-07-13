@@ -8,6 +8,7 @@ import { SimulatorLoop } from '../app/SimulatorLoop';
 import type { Mode, Season } from '../app/types';
 import type { SimulatorSnapshotStore } from '../features/simulation/SimulatorSnapshotStore';
 import { InputState } from '../engine/runtime/InputState';
+import { RuntimeMachine } from '../engine/runtime/RuntimeMachine';
 
 /** Everything needed to (re)build the world and initialize the simulator. */
 export type RouteSession = {
@@ -49,14 +50,14 @@ export type SimulatorCommands = {
  */
 export class SimulatorRuntime implements SimulatorCommands {
   readonly input = new InputState();
+  // Runtime lifecycle (idle → loading-engine → ready → running/paused → …) lives
+  // in an explicit machine instead of loaded/paused/disposed booleans.
+  private readonly machine = new RuntimeMachine();
   private readonly simulator = new SimulatorClient();
   private world: TransitWorld | null = null;
   private session: RouteSession | null = null;
   private journeyLegs: DemoRoute[] = [];
   private journeyLegIndex = 0;
-  private paused = false;
-  private loaded = false;
-  private disposed = false;
   private photoActive = false;
   private photoLabelHandler: ((label: string) => void) | null = null;
   private photoModeHandler: ((active: boolean) => void) | null = null;
@@ -71,7 +72,7 @@ export class SimulatorRuntime implements SimulatorCommands {
     this.input.onChange(() => this.applyInput());
     this.loop = new SimulatorLoop({
       turnaroundMs: 4000,
-      getPaused: () => this.paused,
+      getPaused: () => this.machine.matches('paused'),
       getSelectedTime: () => this.session?.time ?? 'auto',
       getCurrentLocalHour: currentLocalHour,
       step: (dt) => this.simulator.step(dt),
@@ -87,13 +88,24 @@ export class SimulatorRuntime implements SimulatorCommands {
 
   /** Loads the WASM simulator; starts the loop and inits the pending session. */
   async load(): Promise<void> {
-    await this.simulator.load();
+    this.machine.send({ type: 'LOAD_ENGINE' });
+    try {
+      await this.simulator.load();
+    } catch (error) {
+      this.machine.send({ type: 'FAIL', error: error as Error });
+      throw error;
+    }
     // Guard against React StrictMode's mount→unmount→mount: if this instance was
     // disposed while the WASM load was in flight, do not start its loop.
-    if (this.disposed) return;
-    this.loaded = true;
+    if (this.machine.matches('disposed')) return;
+    this.machine.send({ type: 'ENGINE_READY' });
     if (this.session) this.resetSimulation(this.session);
     this.loop.start();
+  }
+
+  /** Current runtime lifecycle state value (for debugging/telemetry). */
+  get lifecycle(): string {
+    return this.machine.current.value;
   }
 
   /** Registers a callback for cinematic-preset label changes (photo overlay). */
@@ -111,7 +123,7 @@ export class SimulatorRuntime implements SimulatorCommands {
     this.journeyLegs = [session.route, ...(session.route.journeyLegs ?? [])];
     this.journeyLegIndex = 0;
     this.buildWorld({ ...session, route: this.journeyLegs[0], startStationIndex: 0 });
-    if (this.loaded) this.initializeSimulation(this.session!);
+    if (this.machine.engineReady) this.initializeSimulation(this.session!);
   }
 
   private buildWorld(session: RouteSession): void {
@@ -132,12 +144,12 @@ export class SimulatorRuntime implements SimulatorCommands {
 
   setStartStation(session: RouteSession): void {
     this.session = session;
-    if (this.loaded) this.resetSimulation(session);
+    if (this.machine.engineReady) this.resetSimulation(session);
   }
 
   setRideMode(session: RouteSession): void {
     this.session = session;
-    if (this.loaded) this.resetSimulation(session);
+    if (this.machine.engineReady) this.resetSimulation(session);
   }
 
   resetSimulation(session: RouteSession): void {
@@ -157,7 +169,11 @@ export class SimulatorRuntime implements SimulatorCommands {
   }
 
   private initializeSimulation(session: RouteSession): void {
-    this.paused = false;
+    // Reaching a live world+sim is the machine's running state. LOAD_WORLD is
+    // valid from ready/running/paused/terminal-dwell, so this also clears a
+    // prior pause and completes a terminal turnaround.
+    this.machine.send({ type: 'LOAD_WORLD', sessionKey: worldKey(session) });
+    this.machine.send({ type: 'WORLD_READY' });
     const state = this.simulator.init({
       line: session.route.line,
       destination: session.route.destination,
@@ -174,6 +190,9 @@ export class SimulatorRuntime implements SimulatorCommands {
   /** Rebuilds the world with the next vehicle type after a journey transfer. */
   private advanceJourneyLeg(): void {
     if (!this.session || this.journeyLegIndex >= this.journeyLegs.length - 1) return;
+    // Mark the terminal dwell in the machine; ignored if it already fired, which
+    // is the guard against a turnaround running twice.
+    this.machine.send({ type: 'TERMINAL_REACHED', at: performance.now() });
     this.journeyLegIndex++;
     const nextSession: RouteSession = {
       ...this.session,
@@ -186,14 +205,14 @@ export class SimulatorRuntime implements SimulatorCommands {
   }
 
   setPaused(paused: boolean): void {
-    this.paused = paused;
-    if (this.loaded) this.snapshots.update(this.simulator.setPaused(paused), true);
+    this.machine.send(paused ? { type: 'PAUSE' } : { type: 'RESUME' });
+    if (this.machine.engineReady) this.snapshots.update(this.simulator.setPaused(paused), true);
   }
 
   /** Forwards the current held input to the simulator (driver mode) and world (look). */
   private applyInput(): void {
     this.world?.setInteriorLookInput(this.input.lookX < 0, this.input.lookX > 0);
-    if (this.loaded && this.session?.mode === 'driver') {
+    if (this.machine.engineReady && this.session?.mode === 'driver') {
       this.snapshots.update(this.simulator.setDriverInput(this.input.throttle, this.input.brake), true);
     }
   }
@@ -270,7 +289,7 @@ export class SimulatorRuntime implements SimulatorCommands {
 
   /** Stops the loop and disposes the world; called on viewport unmount. */
   dispose(): void {
-    this.disposed = true;
+    this.machine.send({ type: 'DISPOSE' });
     this.input.onChange(null);
     this.input.reset();
     this.photoActive = false;
@@ -300,3 +319,8 @@ const currentLocalHour = (): number => {
   const now = new Date();
   return now.getHours() + now.getMinutes() / 60;
 };
+
+/** Structural key identifying a world; a change means the world must rebuild. */
+function worldKey(session: RouteSession): string {
+  return [session.city.id, session.route.id, session.route.shapeId ?? '', routeMode(session.route)].join(':');
+}
