@@ -17,6 +17,8 @@ import { useAppState } from './useAppState';
 import { useAppUrlSync } from './useAppUrlSync';
 import type { SimulatorRuntime, RouteSession } from '../simulator/SimulatorRuntime';
 import { InputController } from './InputController';
+import { RuntimeBridge } from './RuntimeBridge';
+import type { DesiredRuntimeState } from '../engine/runtime/DesiredRuntimeState';
 
 /**
  * The React shell: owns selection/input state and drives the imperative
@@ -79,13 +81,16 @@ export function AppShell() {
     [state.realtimeRoute]
   );
 
-  // Route/city change rebuilds the world; other changes only re-init the sim.
-  useEffect(() => { if (runtime && session) runtime.loadRoute(session); }, [runtime, session?.route, session?.city]);
-  useEffect(() => { if (runtime && session) runtime.setStartStation(session); }, [runtime, state.selectedStartStation]);
-  useEffect(() => { if (runtime && session) runtime.setRideMode(session); }, [runtime, state.selectedMode]);
-  useEffect(() => runtime?.setPaused(state.paused), [runtime, state.paused]);
-  useEffect(() => runtime?.setSeason(state.selectedSeason), [runtime, state.selectedSeason]);
-  useEffect(() => runtime?.setTime(state.selectedTime), [runtime, state.selectedTime]);
+  // One declarative desired-state object drives the runtime through RuntimeBridge,
+  // replacing the former chain of one-effect-per-command. worldKey changes rebuild
+  // the world; everything else updates the existing systems in place.
+  const desired = useMemo<DesiredRuntimeState>(() => ({
+    session,
+    simulation: { paused: state.paused },
+    presentation: { season: state.selectedSeason, time: state.selectedTime, cameraMode: state.selectedCameraMode }
+  }), [session, state.paused, state.selectedSeason, state.selectedTime, state.selectedCameraMode]);
+
+  // Low-frequency notifications (not commands) stay as one-shot subscriptions.
   useEffect(() => { runtime?.onPhotoLabel(setPhotoLabel); }, [runtime]);
   useEffect(() => { runtime?.onPhotoMode(setPhotoActive); }, [runtime]);
   useEffect(() => { runtime?.onActiveRoute(setActiveRealtimeRoute); }, [runtime]);
@@ -115,6 +120,7 @@ export function AppShell() {
   return (
     <SimulatorCommandsContext.Provider value={runtime}>
       <SimulatorViewport store={store} onRuntime={onRuntime} />
+      <RuntimeBridge runtime={runtime} desired={desired} />
       <LoadingOverlay message={catalog.loadingMessage} error={catalog.error} />
       <div className={`hud ${collapsed ? 'collapsed' : ''} ${state.selectedMode === 'driver' ? 'driver-mode' : ''}`}>
         <div className="hud-header">

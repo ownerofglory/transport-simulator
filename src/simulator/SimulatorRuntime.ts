@@ -9,6 +9,7 @@ import type { Mode, Season } from '../app/types';
 import type { SimulatorSnapshotStore } from '../features/simulation/SimulatorSnapshotStore';
 import { InputState } from '../engine/runtime/InputState';
 import { RuntimeMachine } from '../engine/runtime/RuntimeMachine';
+import { worldKey } from '../engine/runtime/worldKey';
 
 /** Everything needed to (re)build the world and initialize the simulator. */
 export type RouteSession = {
@@ -32,6 +33,7 @@ export type SimulatorCommands = {
   resetSimulation(session: RouteSession): void;
   setPaused(paused: boolean): void;
   cycleCamera(): CameraMode | undefined;
+  setCameraMode(mode: CameraMode): void;
   adjustZoom(delta: number): void;
   setSeason(season: Season): void;
   setTime(time: 'auto' | number): void;
@@ -221,6 +223,11 @@ export class SimulatorRuntime implements SimulatorCommands {
     return this.world?.cycleCamera();
   }
 
+  setCameraMode(mode: CameraMode): void {
+    if (this.session) this.session.cameraMode = mode;
+    this.world?.setCameraMode(mode);
+  }
+
   adjustZoom(delta: number): void {
     this.world?.adjustCameraZoom(delta);
   }
@@ -319,8 +326,3 @@ const currentLocalHour = (): number => {
   const now = new Date();
   return now.getHours() + now.getMinutes() / 60;
 };
-
-/** Structural key identifying a world; a change means the world must rebuild. */
-function worldKey(session: RouteSession): string {
-  return [session.city.id, session.route.id, session.route.shapeId ?? '', routeMode(session.route)].join(':');
-}
