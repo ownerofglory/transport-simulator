@@ -1,18 +1,24 @@
 import * as THREE from 'three';
 import { makeLabelTexture } from '../../labels';
+import type { GuidewayKind } from '../../domain/transport';
+import { BuilderRegistry } from '../../engine/builders/BuilderRegistry';
 import type { WorldLayerContext } from './WorldLayerContext';
 
 /** Builds platforms, canopies, signage, and stops for every guideway type. */
 export class StationLayer {
+  // Per-guideway station builders; unmapped kinds fall back to rail stations.
+  private readonly builders = new BuilderRegistry<GuidewayKind, () => void>()
+    .register('bus', () => this.buildBusStops())
+    .register('ferry', () => this.buildFerryStops())
+    .register('schwebebahn', () => this.buildSchwebebahnStations())
+    .register('s-bahn', () => this.buildSbahnStations())
+    .register('zacke', () => this.buildMountainRailwayStops())
+    .register('seilbahn', () => this.buildMountainRailwayStops());
+
   constructor(private readonly ctx: WorldLayerContext) {}
 
   build(): void {
-    if (this.ctx.guidewayKind === 'bus') return this.buildBusStops();
-    if (this.ctx.guidewayKind === 'ferry') return this.buildFerryStops();
-    if (this.ctx.guidewayKind === 'schwebebahn') return this.buildSchwebebahnStations();
-    if (this.ctx.guidewayKind === 's-bahn') return this.buildSbahnStations();
-    if (this.ctx.guidewayKind === 'zacke' || this.ctx.guidewayKind === 'seilbahn') return this.buildMountainRailwayStops();
-    this.buildRailStations();
+    (this.builders.resolveOptional(this.ctx.guidewayKind) ?? (() => this.buildRailStations()))();
   }
 
   private buildRailStations(): void {
