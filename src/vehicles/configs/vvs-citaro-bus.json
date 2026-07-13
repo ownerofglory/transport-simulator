@@ -1,0 +1,71 @@
+{
+  "id": "vvs-citaro-bus",
+  "kind": "bus",
+  "displayName": "Mercedes-Benz Citaro (SSB/VVS)",
+  "materials": {
+    "body": { "color": "#ffdd00", "roughness": 0.46, "metalness": 0.06 },
+    "black": { "color": "#14181c", "roughness": 0.36 },
+    "skirt": { "color": "#1c2024", "roughness": 0.62, "metalness": 0.1 },
+    "roof": { "color": "#caccc8", "roughness": 0.66, "metalness": 0.14 },
+    "glass": { "color": "#9bd2e1", "transparent": true, "opacity": 0.4, "roughness": 0.08 },
+    "interior": { "color": "#d8d4c8", "roughness": 0.88 },
+    "metal": { "color": "#8b9293", "roughness": 0.38, "metalness": 0.65 },
+    "tyre": { "color": "#0d0f12", "roughness": 0.9 },
+    "hub": { "color": "#b9bdbf", "roughness": 0.42, "metalness": 0.7 },
+    "seat": { "color": "#2f5f86", "roughness": 0.86 },
+    "seatBack": { "color": "#22405c", "roughness": 0.9 },
+    "floor": { "color": "#3b3e42", "roughness": 0.94 },
+    "grab": { "color": "#f2c200", "roughness": 0.4, "metalness": 0.5 },
+    "lightStrip": { "color": "#fff6e0", "emissive": "#fff2d2", "emissiveIntensity": 0.85 },
+    "driver": { "color": "#1a1d20", "roughness": 0.7 },
+    "rubber": { "color": "#101318", "roughness": 0.82 },
+    "headlight": { "color": "#ffffff", "emissive": "#fff2c4", "emissiveIntensity": 0.55 },
+    "indicator": { "color": "#ff8c1a", "emissive": "#ff7a00", "emissiveIntensity": 0.5 },
+    "tailLamp": { "color": "#8c1f1c", "emissive": "#7a1512", "emissiveIntensity": 0.35 },
+    "stopButton": { "color": "#d42020", "emissive": "#5a0d0d", "emissiveIntensity": 0.4 }
+  },
+  "destinationDisplay": {
+    "background": "#111",
+    "foreground": "#ffb900"
+  },
+  "rigid": {
+    "section": {
+      "centerOffsetM": 0,
+      "lengthM": 12.1,
+      "cab": "front",
+      "rear": "tail",
+      "doorZs": [3.4, -0.2, -3.9],
+      "axleZs": [3.7, -3.7],
+      "name": "Mercedes-Benz Citaro city bus"
+    },
+    "halfLengthM": 6.25
+  },
+  "articulated": {
+    "lines": ["40", "42", "43", "44", "45", "52", "56", "57", "79", "91", "92"],
+    "linePrefixes": ["X"],
+    "cityIds": ["stuttgart"],
+    "applyWhenCityUnknown": true,
+    "sections": [
+      {
+        "centerOffsetM": 5.3,
+        "lengthM": 10.4,
+        "cab": "front",
+        "rear": "joint",
+        "doorZs": [3.15, -1.7],
+        "axleZs": [3.85, -3.15],
+        "name": "Front section Mercedes-Benz Citaro G"
+      },
+      {
+        "centerOffsetM": -3.7,
+        "lengthM": 6.8,
+        "cab": "joint",
+        "rear": "tail",
+        "doorZs": [1.6, -1.95],
+        "axleZs": [-2.4],
+        "name": "Rear section Mercedes-Benz Citaro G"
+      }
+    ],
+    "halfLengthM": 8.8
+  },
+  "headlightBeamHeightM": 1.1
+}

@@ -20,6 +20,13 @@ export class OpposingTrafficLayer {
         if ((object as THREE.Light).isLight || object.name.startsWith('Exterior lamp')) clonedLights.push(object);
       });
       for (const light of clonedLights) light.parent?.remove(light);
+      // A funicular's counterbalance car runs in reverse but its stepped body must
+      // still point its tall end uphill, so flip the cloned shell 180° about its
+      // vertical axis (relative to the player car's already uphill-oriented shell).
+      if (this.ctx.guidewayKind === 'seilbahn') {
+        const shell = root.getObjectByName('Funicular step body');
+        if (shell) shell.rotation.y += Math.PI;
+      }
       const cars = root.children.filter((child): child is THREE.Group => child instanceof THREE.Group && child.name.startsWith('Articulated car'));
       this.trains.push({
         root,

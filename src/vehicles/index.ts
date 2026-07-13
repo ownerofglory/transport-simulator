@@ -51,3 +51,15 @@ export type {
 export { validateVehicleBlueprint } from './blueprint/validateVehicleBlueprint';
 export type { VehicleBlueprintValidationResult } from './blueprint/validateVehicleBlueprint';
 export { buildVehicleFromBlueprint } from './blueprint/buildVehicleFromBlueprint';
+
+// Declarative bus blueprint (config-driven Citaro family renderer).
+export { buildBusVehicle } from './blueprint/bus/buildBusFromBlueprint';
+export { defaultBusBlueprint } from './blueprint/bus/defaultBusBlueprint';
+export { parseBusBlueprint } from './blueprint/bus/BusBlueprintConfig';
+export type { BusBlueprintConfig, BusBlueprintParseResult, BusMaterialConfig, BusMaterialRole, BusSectionConfig } from './blueprint/bus/BusBlueprintConfig';
+
+// Declarative S-Bahn blueprint (config-driven DB BR 430 family renderer).
+export { buildSBahnVehicle } from './blueprint/sbahn/buildSBahnFromBlueprint';
+export { defaultSBahnBlueprint } from './blueprint/sbahn/defaultSBahnBlueprint';
+export { parseSBahnBlueprint } from './blueprint/sbahn/SBahnBlueprintConfig';
+export type { SBahnBlueprintConfig, SBahnBlueprintParseResult, SBahnMaterialRole } from './blueprint/sbahn/SBahnBlueprintConfig';

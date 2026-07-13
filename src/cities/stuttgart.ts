@@ -52,7 +52,9 @@ const stuttgartTransportModes: TransportModeDefinition[] = [
     vehicleFamily: 'Historic Stuttgart funicular car',
     vehicleKind: 'seilbahn',
     guidewayKind: 'seilbahn',
-    interiorCameraProfile: 'rail',
+    // Anchored interior view (like tram/bus) so the seated camera follows the
+    // steeply tilted, stepped funicular body instead of floating outside it.
+    interiorCameraProfile: 'tram',
     lineAccentColor: '#ffd800'
   }
 ];

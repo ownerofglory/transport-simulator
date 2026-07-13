@@ -1,6 +1,19 @@
 import * as THREE from 'three';
 import { makeLabelTexture } from '../labels';
 import type { VehicleKind } from '../domain/transport';
+import { buildBusVehicle } from './blueprint/bus/buildBusFromBlueprint';
+import { defaultBusBlueprint } from './blueprint/bus/defaultBusBlueprint';
+import { buildSBahnVehicle } from './blueprint/sbahn/buildSBahnFromBlueprint';
+import { defaultSBahnBlueprint } from './blueprint/sbahn/defaultSBahnBlueprint';
+import {
+  addCabinLight,
+  addExteriorLightThrow,
+  addOpaqueTransitInterior,
+  addPantograph,
+  addSlidingVehicleDoor,
+  makeSetExteriorLightsOn,
+  type ExteriorLightRig
+} from './parts';
 import type { VehicleBuildContext, VehicleInstance } from './types';
 
 const DOUBLE_FORMATION_LINES = new Set(['U1', 'U6', 'U7', 'U11', 'U12', 'U19']);
@@ -35,8 +48,8 @@ class ProceduralTransitVehicleFactory {
     else if (cityId === 'freiburg' && modeId === 'tram') this.createFreiburgTramVehicle();
     else if (cityId === 'freiburg' && modeId === 's-bahn') this.createBwegtRegionalRailVehicle();
     else if (cityId === 'baden-wuerttemberg-rail' && modeId === 'rail') this.createBwegtRegionalRailVehicle();
-    else if (vehicleKind === 'bus') this.createBusVehicle();
-    else if (vehicleKind === 's-bahn') this.createSBahnVehicle();
+    else if (vehicleKind === 'bus') return this.createBusVehicle();
+    else if (vehicleKind === 's-bahn') return this.createSBahnVehicle();
     else if (vehicleKind === 'zacke') this.createZackeVehicle();
     else if (vehicleKind === 'schwebebahn') this.createSchwebebahnVehicle();
     else if (vehicleKind === 'seilbahn') this.createSeilbahnVehicle();
@@ -47,8 +60,6 @@ class ProceduralTransitVehicleFactory {
   }
 
   private createVehicleInstance(): VehicleInstance {
-    const headLamps = this.headLampMaterials;
-    const tailLamps = this.tailLampMaterials;
     return {
       root: this.root,
       cars: this.cars,
@@ -59,272 +70,32 @@ class ProceduralTransitVehicleFactory {
       cabDisplays: this.cabDisplays,
       glassMaterial: this.glassMaterial,
       trainHalfLengthM: this.trainHalfLengthM,
-      setExteriorLightsOn: headLamps.length + tailLamps.length + this.cabinLights.length > 0
-        ? (on: boolean) => {
-            for (const lamp of headLamps) lamp.emissiveIntensity = on ? 3.4 : 0.55;
-            for (const lamp of tailLamps) lamp.emissiveIntensity = on ? 1.8 : 0.35;
-            for (const beam of this.headlightBeams) beam.intensity = on ? 260 : 0;
-            for (const glow of this.tailGlows) glow.intensity = on ? 8 : 0;
-            for (const cabin of this.cabinLights) cabin.intensity = on ? 6 : 0;
-          }
-        : undefined
+      setExteriorLightsOn: makeSetExteriorLightsOn(this.lightRig)
     };
   }
 
-  createBusVehicle(): VehicleInstance {
-    const car = new THREE.Group();
-    car.name = 'Articulated car Mercedes-Benz city bus';
-    car.userData.centerOffsetM = 0;
-    const yellow = new THREE.MeshStandardMaterial({ color: 0xffdf00, roughness: 0.48, metalness: 0.04 });
-    const black = new THREE.MeshStandardMaterial({ color: 0x151a1d, roughness: 0.36 });
-    const glass = new THREE.MeshStandardMaterial({ color: 0x9bd2e1, transparent: true, opacity: 0.38, roughness: 0.08, depthWrite: true });
-    const interior = new THREE.MeshStandardMaterial({ color: 0xd8d4c8, roughness: 0.88 });
-    const metal = new THREE.MeshStandardMaterial({ color: 0x8b9293, roughness: 0.38, metalness: 0.65 });
-    const seat = new THREE.MeshStandardMaterial({ color: 0x315f77, roughness: 0.88 });
-    const displayMaterial = this.context.makeInteriorDisplayMaterial();
-    this.glassMaterial = glass;
-
-    const body = new THREE.Mesh(new THREE.BoxGeometry(2.55, 2.85, 12.1), yellow);
-    body.position.y = 1.72;
-    body.castShadow = true;
-    car.add(body);
-    this.passengerShells.push(body);
-    for (const side of [-1, 1]) {
-      const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.18, 10.25), black);
-      band.position.set(side * 1.3, 2.36, -0.25);
-      car.add(band);
-      this.windowBands.push(band);
-      for (const z of [-4.65, -3.35, -1.55, 0.05, 2.85, 4.2]) {
-        if (side < 0 && (Math.abs(z + 1.55) < 0.1 || Math.abs(z - 2.85) < 0.1)) continue;
-        const window = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.92, 1.05), glass);
-        window.position.set(side * 1.315, 2.36, z);
-        car.add(window);
-      }
-    }
-    const windscreen = new THREE.Mesh(new THREE.BoxGeometry(2.22, 1.15, 0.08), glass);
-    windscreen.position.set(0, 2.35, 6.09);
-    car.add(windscreen);
-    const destination = new THREE.Mesh(new THREE.PlaneGeometry(1.95, 0.42), new THREE.MeshBasicMaterial({
-      map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 640, height: 128, bg: '#111', fg: '#ffb900' }),
-      side: THREE.DoubleSide
-    }));
-    destination.position.set(0, 2.98, 6.14);
-    car.add(destination);
-    this.addSlidingVehicleDoor(car, -1.315, -1.55, yellow, glass, black, 1.62, 1.9);
-    this.addSlidingVehicleDoor(car, -1.315, 2.85, yellow, glass, black, 1.62, 1.9);
-    for (const z of [-3.7, 3.7]) {
-      for (const x of [-1.26, 1.26]) {
-        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.43, 0.43, 0.18, 20), black);
-        wheel.rotation.z = Math.PI / 2;
-        wheel.position.set(x, 0.52, z);
-        car.add(wheel);
-      }
-    }
-    const roofUnit = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.25, 3.2), black);
-    roofUnit.position.set(0, 3.28, -1.2);
-    car.add(roofUnit);
-    const floor = new THREE.Mesh(new THREE.BoxGeometry(2.28, 0.08, 11.4), interior);
-    floor.position.y = 1.02;
-    car.add(floor);
-    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.08, 11.3), interior);
-    ceiling.position.y = 3.02;
-    car.add(ceiling);
-    this.addOpaqueTransitInterior(car, 11.3, 1.18, interior, (side) => side < 0 ? [-1.55, 2.85] : []);
-    for (const z of [-4.35, -3.25, -2.15, 0.15, 1.25, 4.2]) {
-      for (const x of [-0.92, 0.92]) {
-        const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 0.62), seat);
-        cushion.position.set(x, 1.35, z);
-        car.add(cushion);
-        const back = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.7, 0.12), seat);
-        back.position.set(x, 1.7, z - 0.3);
-        car.add(back);
-      }
-    }
-    for (const z of [-2.45, 0.2, 3.7]) {
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.85, 8), metal);
-      pole.position.set(0.65, 2.02, z);
-      car.add(pole);
-    }
-    const dashboard = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.62, 0.75), black);
-    dashboard.position.set(0, 1.42, 5.48);
-    car.add(dashboard);
-    const nextStopDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.75, 0.44), displayMaterial);
-    nextStopDisplay.position.set(0, 2.72, 4.75);
-    nextStopDisplay.rotation.y = Math.PI;
-    car.add(nextStopDisplay);
-    this.addCabinLight(car, 2.75);
-    this.trainHalfLengthM = 6.25;
-    this.cars.push(car);
-    this.root.add(car);
-    return this.createVehicleInstance();
+  private get lightRig(): ExteriorLightRig {
+    return {
+      headLampMaterials: this.headLampMaterials,
+      tailLampMaterials: this.tailLampMaterials,
+      headlightBeams: this.headlightBeams,
+      tailGlows: this.tailGlows,
+      cabinLights: this.cabinLights
+    };
   }
 
+  // Mercedes-Benz Citaro city bus. Rendering is blueprint-driven (see
+  // blueprint/bus/); this stays as the procedural fallback entry point and
+  // simply builds the default SSB/VVS config.
+  createBusVehicle(): VehicleInstance {
+    return buildBusVehicle(defaultBusBlueprint, this.context);
+  }
+
+  // DB BR 430 S-Bahn. Rendering is blueprint-driven (see blueprint/sbahn/);
+  // this stays as the procedural fallback entry point and simply builds the
+  // default DB BR 430 config.
   createSBahnVehicle(): VehicleInstance {
-    const shell = new THREE.MeshStandardMaterial({ color: 0xdfe1df, roughness: 0.42, metalness: 0.1 });
-    const red = new THREE.MeshStandardMaterial({ color: 0xd71920, roughness: 0.4 });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x202428, roughness: 0.38 });
-    const glass = new THREE.MeshStandardMaterial({ color: 0x8fb9c7, transparent: true, opacity: 0.42, roughness: 0.06, side: THREE.DoubleSide });
-    const interior = new THREE.MeshStandardMaterial({ color: 0xe4e1d8, roughness: 0.88 });
-    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x8f9398, roughness: 0.9 });
-    const seat = new THREE.MeshStandardMaterial({ color: 0x315f78, roughness: 0.88 });
-    const metal = new THREE.MeshStandardMaterial({ color: 0x989d9e, roughness: 0.35, metalness: 0.7 });
-    const displayMaterial = this.context.makeInteriorDisplayMaterial();
-    this.glassMaterial = glass;
-    const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff4c7, emissiveIntensity: 0.55 });
-    const tailLampMat = new THREE.MeshStandardMaterial({ color: 0x8c1f1c, emissive: 0x7a1512, emissiveIntensity: 0.35 });
-    this.headLampMaterials.push(headlightMat);
-    this.tailLampMaterials.push(tailLampMat);
-    const centers = [-25.2, -8.4, 8.4, 25.2];
-    centers.forEach((center, index) => {
-      const car = new THREE.Group();
-      car.name = `Articulated car DB 430 section ${index + 1}`;
-      car.userData.centerOffsetM = center;
-      const body = new THREE.Mesh(new THREE.BoxGeometry(3.02, 3.3, 16.15), shell);
-      body.position.y = 2.05;
-      body.castShadow = true;
-      car.add(body);
-      this.passengerShells.push(body);
-      const lowerRed = new THREE.Mesh(new THREE.BoxGeometry(3.08, 0.28, 16.22), red);
-      lowerRed.position.y = 0.62;
-      car.add(lowerRed);
-      this.passengerShells.push(lowerRed);
-      const belt = new THREE.Mesh(new THREE.BoxGeometry(3.09, 0.18, 16.23), red);
-      belt.position.y = 1.72;
-      car.add(belt);
-      this.passengerShells.push(belt);
-      for (const side of [-1, 1]) {
-        const band = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.08, 14.5), dark);
-        band.position.set(side * 1.535, 2.43, 0);
-        car.add(band);
-        this.windowBands.push(band);
-        for (const z of [-6.25, -4.85, -1.35, 0, 1.35, 4.85, 6.25]) {
-          const window = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.88, 1.08), glass);
-          window.position.set(side * 1.55, 2.43, z);
-          car.add(window);
-        }
-        this.addSlidingVehicleDoor(car, side * 1.55, -3.15, red, glass, dark, 1.72, 2.05);
-        this.addSlidingVehicleDoor(car, side * 1.55, 3.15, red, glass, dark, 1.72, 2.05);
-      }
-      if (index === 0 || index === centers.length - 1) {
-        // BR 430 front: flat, slightly raked red nose with a wide black
-        // windscreen band, vertical LED light bars and a top destination display.
-        const cabEnd = (index === 0 ? -1 : 1) as -1 | 1;
-        const faceTilt = -cabEnd * 0.197;
-        const nose = new THREE.Mesh(this.makeSBahn430Nose(), red);
-        nose.position.z = cabEnd * 8.0;
-        if (cabEnd < 0) nose.rotation.y = Math.PI;
-        nose.castShadow = true;
-        car.add(nose);
-        this.cabShells.push(nose);
-
-        const mask = new THREE.Mesh(this.makeSBahn430Mask(), dark);
-        mask.position.set(0, 2.58, cabEnd * 8.76);
-        mask.rotation.x = faceTilt;
-        car.add(mask);
-        this.cabShells.push(mask);
-
-        const windscreen = new THREE.Mesh(this.makeSBahn430Windscreen(), glass);
-        windscreen.position.set(0, 2.5, cabEnd * 8.82);
-        windscreen.rotation.x = faceTilt;
-        car.add(windscreen);
-
-        for (const side of [-1, 1] as const) {
-          const housing = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.78, 0.07), dark);
-          housing.position.set(side * 1.12, 1.32, cabEnd * 8.88);
-          car.add(housing);
-          this.cabShells.push(housing);
-          const headBar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.42, 0.055), headlightMat);
-          headBar.position.set(side * 1.12, 1.18, cabEnd * 8.92);
-          car.add(headBar);
-          const tailDot = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.055), tailLampMat);
-          tailDot.position.set(side * 1.12, 1.56, cabEnd * 8.92);
-          car.add(tailDot);
-          this.cabShells.push(headBar, tailDot);
-
-          const cabWindow = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.85, 1.0), glass);
-          cabWindow.position.set(side * 1.55, 2.43, cabEnd * 7.35);
-          car.add(cabWindow);
-        }
-
-        const frontSkirt = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.3, 0.16), dark);
-        frontSkirt.position.set(0, 0.52, cabEnd * 8.72);
-        car.add(frontSkirt);
-        this.cabShells.push(frontSkirt);
-
-        const dbLogo = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.4, 0.28),
-          new THREE.MeshBasicMaterial({ map: makeLabelTexture('DB', { width: 160, height: 112, bg: '#e0202b', fg: '#ffffff' }), side: THREE.DoubleSide })
-        );
-        dbLogo.position.set(0, 1.5, cabEnd * 8.9);
-        if (cabEnd < 0) dbLogo.rotation.y = Math.PI;
-        car.add(dbLogo);
-        this.cabShells.push(dbLogo);
-
-        const displayAssembly = new THREE.Group();
-        displayAssembly.name = `S-Bahn cab route display assembly ${cabEnd}`;
-        displayAssembly.position.set(0, 3.06, cabEnd * 8.76);
-        displayAssembly.rotation.y = cabEnd < 0 ? Math.PI : 0;
-        const tilted = new THREE.Group();
-        tilted.rotation.x = -0.197;
-        displayAssembly.add(tilted);
-        const recess = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.4, 0.03), dark);
-        tilted.add(recess);
-        this.cabShells.push(recess);
-        const display = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.32), new THREE.MeshBasicMaterial({
-          map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 700, height: 128, bg: '#111', fg: '#fff' }),
-          side: THREE.DoubleSide,
-          depthWrite: false,
-          polygonOffset: true,
-          polygonOffsetFactor: -4,
-          polygonOffsetUnits: -4
-        }));
-        display.position.z = 0.025;
-        display.renderOrder = 20;
-        tilted.add(display);
-        car.add(displayAssembly);
-        this.cabDisplays.push(display);
-      }
-      const floor = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.12, 15.5), floorMaterial);
-      floor.position.y = 1.12;
-      car.add(floor);
-      const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.68, 0.08, 15.35), interior);
-      ceiling.position.y = 3.32;
-      car.add(ceiling);
-      this.addCabinLight(car, 3.0, -4.5);
-      this.addCabinLight(car, 3.0, 4.5);
-      this.addOpaqueTransitInterior(car, 15.35, 1.4, interior, () => [-3.15, 3.15]);
-      for (const z of [-6.2, -5.1, -1.35, 0, 1.35, 5.1, 6.2]) {
-        for (const x of [-1.04, -0.58, 0.58, 1.04]) {
-          const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.13, 0.52), seat);
-          cushion.position.set(x, 1.37, z);
-          car.add(cushion);
-          const back = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.68, 0.11), seat);
-          back.position.set(x, 1.72, z - 0.25);
-          car.add(back);
-        }
-      }
-      for (const z of [-3.15, 0, 3.15]) {
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2, 8), metal);
-        pole.position.set(0, 2.1, z);
-        car.add(pole);
-      }
-      const monitor = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 0.54), displayMaterial);
-      monitor.position.set(0, 2.94, 0.15);
-      monitor.rotation.y = Math.PI;
-      monitor.renderOrder = 18;
-      car.add(monitor);
-      for (const z of [-5.2, 5.2]) {
-        const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.42, 1.8), dark);
-        bogie.position.set(0, 0.48, z);
-        car.add(bogie);
-      }
-      this.cars.push(car);
-      this.root.add(car);
-    });
-    this.trainHalfLengthM = 34.2;
-    this.addPantograph(new THREE.Vector3(0, 3.86, 8.5), dark);
-    this.addExteriorLightThrow(this.trainHalfLengthM, 1.45);
-    return this.createVehicleInstance();
+    return buildSBahnVehicle(defaultSBahnBlueprint, this.context);
   }
 
   createBwegtRegionalRailVehicle(): VehicleInstance {
@@ -453,48 +224,282 @@ class ProceduralTransitVehicleFactory {
     return this.createVehicleInstance();
   }
 
+  // Stuttgart Zahnradbahn ("Zacke") rack railcar, styled after the DT8 Stadtbahn:
+  // the same Tango body profile, raked nose, black cab mask and corner light
+  // clusters, on its own rack-drive underframe with cabs at both ends.
   createZackeVehicle(): VehicleInstance {
+    const bodyLen = 14.8;
+    const bodyHalf = bodyLen / 2;
     const car = new THREE.Group();
-    car.name = 'Articulated car S-ZT 4.2';
+    car.name = 'Rack railcar SSB ZT 4';
     car.userData.centerOffsetM = 0;
-    const yellow = new THREE.MeshStandardMaterial({ color: 0xffdc00, roughness: 0.45 });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x1b2228, roughness: 0.38 });
-    const glass = new THREE.MeshStandardMaterial({ color: 0x9ccbd7, transparent: true, opacity: 0.42, roughness: 0.06 });
-    const floor = new THREE.MeshStandardMaterial({ color: 0xd8d4c8, roughness: 0.9 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(2.65, 3.1, 18.6), yellow);
-    body.position.y = 1.88;
+
+    const yellow = new THREE.MeshStandardMaterial({ color: 0xffdf00, roughness: 0.52, metalness: 0.05 });
+    const black = new THREE.MeshStandardMaterial({ color: 0x17232b, roughness: 0.38 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x91c7dd, roughness: 0.08, metalness: 0.02, transparent: true, opacity: 0.58, depthWrite: true, side: THREE.DoubleSide });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0xbfc1bd, roughness: 0.64, metalness: 0.12 });
+    const doorMat = new THREE.MeshStandardMaterial({ color: 0xf6c900, roughness: 0.48 });
+    const interiorWall = new THREE.MeshStandardMaterial({ color: 0xd9d5ca, roughness: 0.88 });
+    const interiorFloor = new THREE.MeshStandardMaterial({ color: 0x606565, roughness: 0.94 });
+    const metal = new THREE.MeshStandardMaterial({ color: 0x8a8f91, roughness: 0.4, metalness: 0.65 });
+    const seat = new THREE.MeshStandardMaterial({ color: 0x416b80, roughness: 0.9 });
+    const lightStrip = new THREE.MeshStandardMaterial({ color: 0xfff6e0, emissive: 0xfff2d2, emissiveIntensity: 0.85 });
+    const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff4c7, emissiveIntensity: 0.55 });
+    const indicatorMat = new THREE.MeshStandardMaterial({ color: 0xffb340, emissive: 0xff9d1e, emissiveIntensity: 1.4 });
+    const tailLampMat = new THREE.MeshStandardMaterial({ color: 0x8c1f1c, emissive: 0x7a1512, emissiveIntensity: 0.35 });
+    const lampHousingMat = new THREE.MeshStandardMaterial({ color: 0x22262b, roughness: 0.34, metalness: 0.4 });
+    this.glassMaterial = glass;
+    this.headLampMaterials.push(headlightMat);
+    this.tailLampMaterials.push(tailLampMat);
+
+    // DT8-profile shell: black lower skirt, Tango cross-section body, light grey
+    // roof deck with yellow side fairings and a slatted HVAC pod.
+    const lowerSkirt = new THREE.Mesh(new THREE.BoxGeometry(2.52, 0.24, bodyLen - 0.5), black);
+    lowerSkirt.position.y = 0.43;
+    lowerSkirt.castShadow = true;
+    car.add(lowerSkirt);
+    const body = new THREE.Mesh(this.makeTangoBody(bodyLen), yellow);
+    body.position.y = 0.52;
+    body.castShadow = true;
     car.add(body);
     this.passengerShells.push(body);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(2.14, 0.24, bodyLen - 1.4), roofMat);
+    roof.position.y = 3.34;
+    roof.castShadow = true;
+    car.add(roof);
     for (const side of [-1, 1]) {
-      const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.08, 15.8), dark);
-      band.position.set(side * 1.35, 2.38, 0);
+      const roofFairing = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.36, bodyLen - 1.8), yellow);
+      roofFairing.position.set(side * 1.12, 3.36, 0);
+      car.add(roofFairing);
+    }
+    const hvac = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.24, 2.25), roofMat);
+    hvac.position.set(0, 3.57, -2.6);
+    car.add(hvac);
+    for (let vent = -2; vent <= 2; vent++) {
+      const slat = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.03, 0.07), black);
+      slat.position.set(0, 3.7, -2.6 + vent * 0.28);
+      car.add(slat);
+    }
+
+    const doorZs = [-3.7, 3.7];
+    for (const side of [-1, 1] as const) {
+      // Window band sweeps the full body side, DT8-style, with a separate cab
+      // side window near each end and door jambs/headers framing the openings.
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.08, bodyLen - 1.0), black);
+      band.position.set(side * 1.345, 2.31, 0);
       car.add(band);
       this.windowBands.push(band);
-      for (const z of [-6.8, -4.7, -2.4, 0, 2.4, 4.7, 6.8]) {
-        const window = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.88, 1.55), glass);
-        window.position.set(side * 1.37, 2.4, z);
+      for (const z of [-5.9, -4.9, -1.55, 0, 1.55, 4.9, 5.9]) {
+        const window = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.8, 0.95), glass);
+        window.position.set(side * 1.365, 2.26, z);
         car.add(window);
       }
+      for (const end of [-1, 1] as const) {
+        const cabSideWindow = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.82, 0.9), glass);
+        cabSideWindow.position.set(side * 1.36, 2.3, end * (bodyHalf - 0.75));
+        car.add(cabSideWindow);
+      }
+      for (const z of doorZs) {
+        for (const edge of [-1, 1]) {
+          const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.11, 2.03, 0.09), black);
+          jamb.position.set(side * 1.38, 1.69, z + edge * 0.765);
+          car.add(jamb);
+        }
+        const doorHeader = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.12, 1.62), black);
+        doorHeader.position.set(side * 1.38, 2.67, z);
+        car.add(doorHeader);
+        this.addSlidingVehicleDoor(car, side * 1.34, z, doorMat, glass, black, 1.5, 1.95);
+      }
     }
-    for (const end of [-1, 1]) {
-      const windscreen = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.95, 0.08), glass);
-      windscreen.position.set(0, 2.45, end * 9.34);
+
+    // Both ends carry the raked Tango cab: profile-extruded nose, tilted black
+    // mask and windscreen, wiper, bumper and DT8 round corner light clusters.
+    const noseTilt = 0.258;
+    const destinationMaterial = new THREE.MeshBasicMaterial({
+      map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 512, height: 128, bg: '#111', fg: '#ffd900' }),
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4
+    });
+    for (const end of [-1, 1] as const) {
+      const faceTilt = -end * noseTilt;
+      const nose = new THREE.Mesh(this.makeTangoNose(), yellow);
+      nose.position.z = end * (bodyHalf - 0.07);
+      if (end < 0) nose.rotation.y = Math.PI;
+      nose.castShadow = true;
+      car.add(nose);
+      this.cabShells.push(nose);
+
+      const cabMask = new THREE.Mesh(this.makeTangoCabMask(), black);
+      cabMask.position.set(0, 2.14, end * (bodyHalf + 0.74));
+      cabMask.rotation.x = faceTilt;
+      car.add(cabMask);
+      this.cabShells.push(cabMask);
+
+      const windscreen = new THREE.Mesh(this.makeTangoWindscreen(), glass);
+      windscreen.position.set(0, 2.16, end * (bodyHalf + 0.8));
+      windscreen.rotation.x = faceTilt;
       car.add(windscreen);
+
+      const wiper = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.8, 0.03), black);
+      wiper.position.set(-0.3, 1.78, end * (bodyHalf + 0.88));
+      wiper.rotation.set(faceTilt, 0, end * 0.5);
+      car.add(wiper);
+      this.cabShells.push(wiper);
+
+      const bumper = new THREE.Mesh(new THREE.BoxGeometry(2.24, 0.24, 0.14), black);
+      bumper.position.set(0, 0.5, end * (bodyHalf + 0.94));
+      car.add(bumper);
+      this.cabShells.push(bumper);
+
+      for (const x of [-1, 1] as const) {
+        const housing = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.42, 0.08), lampHousingMat);
+        housing.position.set(x * 0.82, 1.0, end * (bodyHalf + 0.94));
+        car.add(housing);
+        this.cabShells.push(housing);
+        const headlight = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.06, 18), headlightMat);
+        headlight.rotation.x = Math.PI / 2;
+        headlight.position.set(x * 0.72, 1.08, end * (bodyHalf + 0.97));
+        car.add(headlight);
+        const indicator = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.055, 14), indicatorMat);
+        indicator.rotation.x = Math.PI / 2;
+        indicator.position.set(x * 0.95, 1.08, end * (bodyHalf + 0.97));
+        car.add(indicator);
+        const tailLamp = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.055, 14), tailLampMat);
+        tailLamp.rotation.x = Math.PI / 2;
+        tailLamp.position.set(x * 0.84, 0.86, end * (bodyHalf + 0.97));
+        car.add(tailLamp);
+        this.cabShells.push(headlight, indicator, tailLamp);
+      }
+
+      // Route display recessed in the mask band above the windscreen, tilted with
+      // the nose rake exactly like the Stadtbahn cab display.
+      const assembly = new THREE.Group();
+      assembly.position.set(0, 2.72, end * (bodyHalf + 0.68));
+      assembly.rotation.y = end < 0 ? Math.PI : 0;
+      const tilted = new THREE.Group();
+      tilted.rotation.x = -noseTilt;
+      assembly.add(tilted);
+      const recess = new THREE.Mesh(new THREE.BoxGeometry(1.76, 0.4, 0.03), black);
+      tilted.add(recess);
+      const display = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.3), destinationMaterial);
+      display.position.z = 0.025;
+      display.renderOrder = 20;
+      tilted.add(display);
+      car.add(assembly);
+      this.cabShells.push(recess);
+      this.cabDisplays.push(display);
+
+      // Rear-view mirrors and SSB front markings, as on the DT8 face.
+      for (const side of [-1, 1] as const) {
+        const mirrorArm = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.035, 0.05), black);
+        mirrorArm.position.set(side * 1.38, 2.6, end * (bodyHalf - 0.3));
+        car.add(mirrorArm);
+        const mirrorHead = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.26, 0.17), black);
+        mirrorHead.position.set(side * 1.48, 2.55, end * (bodyHalf - 0.3));
+        car.add(mirrorHead);
+      }
+      const frontLogo = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.58, 0.22),
+        new THREE.MeshBasicMaterial({ map: makeLabelTexture('SSB', { width: 288, height: 96, bg: '#ffdf00', fg: '#ffffff' }), side: THREE.DoubleSide })
+      );
+      frontLogo.position.set(-0.55, 1.36, end * (bodyHalf + 0.94));
+      if (end < 0) frontLogo.rotation.y = Math.PI;
+      car.add(frontLogo);
+      this.cabShells.push(frontLogo);
+      const cabNumber = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.3, 0.1),
+        new THREE.MeshBasicMaterial({
+          map: makeLabelTexture(end < 0 ? '1001' : '1002', { width: 192, height: 64, bg: '#ffdf00', fg: '#17232b' }),
+          side: THREE.DoubleSide
+        })
+      );
+      cabNumber.position.set(0.62, 1.36, end * (bodyHalf + 0.94));
+      if (end < 0) cabNumber.rotation.y = Math.PI;
+      car.add(cabNumber);
+      this.cabShells.push(cabNumber);
     }
-    const interiorFloor = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.08, 17.5), floor);
-    interiorFloor.position.y = 1.05;
-    car.add(interiorFloor);
-    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.08, 17.4), floor);
-    ceiling.position.y = 3.18;
+
+    // Rack-drive underframe: two rail bogies and a central toothed pinion — the
+    // defining feature of a cog railway — inside a gearbox housing.
+    for (const z of [-(bodyHalf - 1.9), bodyHalf - 1.9]) {
+      const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.38, 1.85), black);
+      bogie.position.set(0, 0.43, z);
+      car.add(bogie);
+      for (const wz of [z - 0.58, z + 0.58]) {
+        for (const wx of [-0.92, 0.92]) {
+          const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.2, 24), black);
+          wheel.rotation.z = Math.PI / 2;
+          wheel.position.set(wx, 0.37, wz);
+          car.add(wheel);
+        }
+      }
+    }
+    const gearbox = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 1.0), black);
+    gearbox.position.set(0, 0.42, 0);
+    car.add(gearbox);
+    const pinionHub = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.16, 18), metal);
+    pinionHub.rotation.z = Math.PI / 2;
+    pinionHub.position.set(0, 0.24, 0);
+    car.add(pinionHub);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.14), metal);
+      tooth.position.set(0, 0.24 + Math.sin(a) * 0.34, Math.cos(a) * 0.34);
+      car.add(tooth);
+    }
+
+    // Interior: floor, ceiling, walls, DT8-blue transverse seating and metal rails.
+    const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(2.28, 0.08, bodyLen - 1.6), interiorFloor);
+    floorMesh.position.y = 1.02;
+    car.add(floorMesh);
+    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.28, 0.08, bodyLen - 1.8), interiorWall);
+    ceiling.position.y = 3.14;
     car.add(ceiling);
-    this.addOpaqueTransitInterior(car, 17.4, 1.2, floor, () => []);
-    this.addCabinLight(car, 2.9, -4.4);
-    this.addCabinLight(car, 2.9, 4.4);
-    this.glassMaterial = glass;
-    this.trainHalfLengthM = 9.5;
+    this.addOpaqueTransitInterior(car, bodyLen - 1.8, 1.2, interiorWall, (side) => side < 0 ? doorZs : []);
+
+    const seatEnd = bodyHalf - 1.9;
+    for (let z = -seatEnd; z <= seatEnd; z += 1.35) {
+      if (doorZs.some((d) => Math.abs(z - d) < 0.8)) continue;
+      for (const x of [-0.94, -0.54, 0.54, 0.94]) {
+        const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.13, 0.5), seat);
+        cushion.position.set(x, 1.35, z);
+        car.add(cushion);
+        const back = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.62, 0.1), seat);
+        back.position.set(x, 1.68, z - 0.24);
+        car.add(back);
+      }
+    }
+    const lit = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.05, bodyLen - 2.6), lightStrip);
+    lit.position.set(0, 3.08, 0);
+    car.add(lit);
+    for (const side of [-1, 1] as const) {
+      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, bodyLen - 2.8, 8), metal);
+      rail.rotation.x = Math.PI / 2;
+      rail.position.set(side * 0.95, 2.88, 0);
+      car.add(rail);
+    }
+    for (const z of [-3.7, 0, 3.7]) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.9, 8), metal);
+      pole.position.set(0, 2.06, z);
+      car.add(pole);
+    }
+    const monitor = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.44), this.context.makeInteriorDisplayMaterial());
+    monitor.position.set(0, 2.88, 0.1);
+    monitor.rotation.y = Math.PI;
+    monitor.renderOrder = 18;
+    car.add(monitor);
+
+    this.addPantograph(new THREE.Vector3(0, 3.6, 2.6), metal);
+
+    this.addCabinLight(car, 2.95, -4.4);
+    this.addCabinLight(car, 2.95, 4.4);
+    this.trainHalfLengthM = bodyHalf + 1.05;
     this.cars.push(car);
     this.root.add(car);
-    this.addPantograph(new THREE.Vector3(0, 3.55, 0), dark);
+    this.addExteriorLightThrow(this.trainHalfLengthM, 1.35);
     return this.createVehicleInstance();
   }
 
@@ -626,86 +631,170 @@ class ProceduralTransitVehicleFactory {
     return this.createVehicleInstance();
   }
 
+  // Historic 1929 Stuttgart Standseilbahn car. Its defining feature is the
+  // terraced body: three teak passenger compartments stepped up toward the uphill
+  // end so the floors stay usable on the incline. Runs on a funicular truck with a
+  // central cable grip.
+  //
+  // The stepped shell lives in an inner group so its tall end can be pointed at the
+  // uphill end of the route regardless of travel direction (the player runs forward,
+  // the counterbalancing opposing car runs in reverse). See OpposingTrafficLayer,
+  // which flips the cloned shell by a further 180°.
   createSeilbahnVehicle(): VehicleInstance {
     const car = new THREE.Group();
-    car.name = 'Articulated car 1929 teak funicular';
+    car.name = 'Historic Stuttgart funicular car (1929)';
     car.userData.centerOffsetM = 0;
+    // Anchored interior camera seated on the centreline of the middle compartment,
+    // looking straight down the aisle and out through the leading windscreen.
+    car.userData.passengerCameraLocal = [0, 2.34, -0.4];
+    car.userData.passengerLookAtLocal = [0, 2.2, 9];
+    const body = new THREE.Group();
+    body.name = 'Funicular step body';
+    car.add(body);
+
     const teak = new THREE.MeshStandardMaterial({ color: 0x7b4b2a, roughness: 0.74 });
     const mahogany = new THREE.MeshStandardMaterial({ color: 0x4f301f, roughness: 0.82 });
     const brass = new THREE.MeshStandardMaterial({ color: 0xc7a04c, roughness: 0.34, metalness: 0.72 });
-    const cream = new THREE.MeshStandardMaterial({ color: 0xd9ccb1, roughness: 0.88 });
-    const glass = new THREE.MeshStandardMaterial({ color: 0xc2e0e7, transparent: true, opacity: 0.38, roughness: 0.08 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(2.24, 2.72, 9.9), teak);
-    body.position.y = 1.67;
-    car.add(body);
-    this.passengerShells.push(body);
-    for (const side of [-1, 1] as const) {
-      const lowerBelt = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.32, 9.5), mahogany);
-      lowerBelt.position.set(side * 1.08, 1.12, 0);
-      car.add(lowerBelt);
-      const header = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.34, 9.5), mahogany);
-      header.position.set(side * 1.08, 2.98, 0);
-      car.add(header);
-      for (const z of [-3.7, -1.85, 0, 1.85, 3.7]) {
-        const window = new THREE.Mesh(new THREE.BoxGeometry(0.075, 1.22, 1.28), glass);
-        window.position.set(side * 1.13, 2.06, z);
-        car.add(window);
-        const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.42, 0.12), mahogany);
-        mullion.position.set(side * 1.08, 2.04, z + 0.92);
-        car.add(mullion);
-      }
-    }
-    for (const end of [-1, 1] as const) {
-      const windscreen = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.24, 0.075), glass);
-      windscreen.position.set(0, 2.04, end * 4.94);
-      car.add(windscreen);
-      const endFrame = new THREE.Mesh(new THREE.BoxGeometry(2.02, 0.18, 0.12), mahogany);
-      endFrame.position.set(0, 3.01, end * 4.88);
-      car.add(endFrame);
-    }
-    const floorBase = new THREE.Mesh(new THREE.BoxGeometry(2.04, 0.12, 9.05), mahogany);
-    floorBase.position.y = 0.9;
-    car.add(floorBase);
-    for (let z = -4.15; z <= 4.15; z += 0.48) {
-      const plank = new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.028, 0.28), teak);
-      plank.position.set(0, 0.98, z);
-      car.add(plank);
-    }
-    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.04, 0.08, 8.9), cream);
-    ceiling.position.y = 3.02;
-    car.add(ceiling);
-    this.addOpaqueTransitInterior(car, 8.9, 1.0, mahogany, () => []);
-    for (const side of [-1, 1] as const) {
-      const benchBase = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.18, 8.15), mahogany);
-      benchBase.position.set(side * 0.6, 1.14, 0);
-      car.add(benchBase);
-      const benchBack = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.8, 8.0), teak);
-      benchBack.position.set(side * 0.77, 1.54, 0);
-      car.add(benchBack);
-      for (const z of [-3.1, -1.5, 0, 1.5, 3.1]) {
-        const divider = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.76, 0.06), brass);
-        divider.position.set(side * 0.7, 1.48, z);
-        car.add(divider);
-      }
-    }
-    for (const x of [-0.78, 0, 0.78]) {
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 2.0, 10), brass);
-      pole.position.set(x, 1.98, 0);
-      car.add(pole);
-    }
-    const handrail = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 7.9, 10), brass);
-    handrail.rotation.z = Math.PI / 2;
-    handrail.position.set(0, 2.6, 0);
-    car.add(handrail);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(2.54, 0.24, 10.2), mahogany);
-    roof.position.y = 3.14;
-    car.add(roof);
-    this.passengerShells.push(roof);
-    this.addCabinLight(car, 2.8);
+    const glass = new THREE.MeshStandardMaterial({ color: 0xc2e0e7, transparent: true, opacity: 0.4, roughness: 0.08, side: THREE.DoubleSide });
+    const iron = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.5, metalness: 0.4 });
+    const lampMat = new THREE.MeshStandardMaterial({ color: 0xfff2cf, emissive: 0xffe6a8, emissiveIntensity: 0.7 });
+    const headlightMat = new THREE.MeshStandardMaterial({ color: 0xfff7e0, emissive: 0xfff0c0, emissiveIntensity: 0.5 });
     this.glassMaterial = glass;
-    this.trainHalfLengthM = 5;
+    this.headLampMaterials.push(headlightMat);
+
+    // Three compartments stepped up toward +z. Each carries its own body, glazing,
+    // roof, plank floor, benches and a brass ceiling lamp.
+    const compartments = [
+      { center: -3.25, floorY: 0.78 },
+      { center: 0, floorY: 1.2 },
+      { center: 3.25, floorY: 1.62 }
+    ];
+    const compLen = 3.05;
+    const destinationMap = makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 640, height: 128, bg: '#3a2417', fg: '#f4d79a' });
+
+    compartments.forEach((comp, index) => {
+      const shell = new THREE.Mesh(new THREE.BoxGeometry(2.24, 2.36, compLen), teak);
+      shell.position.set(0, comp.floorY + 1.16, comp.center);
+      shell.castShadow = true;
+      body.add(shell);
+      this.passengerShells.push(shell);
+
+      // Overhanging mahogany roof stepped to this compartment's height.
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.2, compLen + 0.28), mahogany);
+      roof.position.set(0, comp.floorY + 2.46, comp.center);
+      body.add(roof);
+      this.passengerShells.push(roof);
+
+      for (const side of [-1, 1] as const) {
+        const lowerBelt = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.3, compLen), mahogany);
+        lowerBelt.position.set(side * 1.08, comp.floorY + 0.32, comp.center);
+        body.add(lowerBelt);
+        const header = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.3, compLen), mahogany);
+        header.position.set(side * 1.08, comp.floorY + 2.18, comp.center);
+        body.add(header);
+        for (const dz of [-0.75, 0.75]) {
+          const window = new THREE.Mesh(new THREE.BoxGeometry(0.075, 1.16, 1.2), glass);
+          window.position.set(side * 1.12, comp.floorY + 1.26, comp.center + dz);
+          body.add(window);
+        }
+        // Teak mullions framing the glazing.
+        for (const dz of [-1.45, 0, 1.45]) {
+          const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.34, 0.12), mahogany);
+          mullion.position.set(side * 1.08, comp.floorY + 1.26, comp.center + dz);
+          body.add(mullion);
+        }
+      }
+
+      // Plank floor, longitudinal benches, brass poles and a ceiling lamp.
+      for (let z = comp.center - 1.35; z <= comp.center + 1.35; z += 0.46) {
+        const plank = new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.028, 0.3), teak);
+        plank.position.set(0, comp.floorY + 0.07, z);
+        body.add(plank);
+      }
+      for (const side of [-1, 1] as const) {
+        const benchBase = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.16, compLen - 0.5), mahogany);
+        benchBase.position.set(side * 0.6, comp.floorY + 0.34, comp.center);
+        body.add(benchBase);
+        const benchBack = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.72, compLen - 0.5), teak);
+        benchBack.position.set(side * 0.76, comp.floorY + 0.72, comp.center);
+        body.add(benchBack);
+      }
+      for (const dz of [-0.95, 0.95]) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 1.95, 10), brass);
+        pole.position.set(0.78, comp.floorY + 1.05, comp.center + dz);
+        body.add(pole);
+      }
+      const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.05, 12), brass);
+      lampBase.position.set(0, comp.floorY + 2.3, comp.center);
+      body.add(lampBase);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 10), lampMat);
+      lamp.position.set(0, comp.floorY + 2.18, comp.center);
+      body.add(lamp);
+
+      // Low riser closing just the step face between compartments, so the saloon
+      // stays open overhead and passengers can see out along the whole car.
+      if (index < compartments.length - 1) {
+        const next = compartments[index + 1];
+        const stepDiff = next.floorY - comp.floorY;
+        const riser = new THREE.Mesh(new THREE.BoxGeometry(2.24, stepDiff + 0.5, 0.12), mahogany);
+        riser.position.set(0, comp.floorY + 0.55 + stepDiff / 2, (comp.center + next.center) / 2);
+        body.add(riser);
+      }
+    });
+
+    // End cabs: raked windscreen, a lit route board and a brass headlamp on the
+    // downhill/uphill faces of the outer compartments.
+    const ends = [
+      { z: compartments[0].center - compLen / 2, floorY: compartments[0].floorY, dir: -1 as const },
+      { z: compartments[2].center + compLen / 2, floorY: compartments[2].floorY, dir: 1 as const }
+    ];
+    for (const end of ends) {
+      const windscreen = new THREE.Mesh(new THREE.BoxGeometry(1.82, 1.2, 0.075), glass);
+      windscreen.position.set(0, end.floorY + 1.3, end.z + end.dir * 0.04);
+      body.add(windscreen);
+      const board = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.3), new THREE.MeshBasicMaterial({ map: destinationMap, side: THREE.DoubleSide }));
+      board.position.set(0, end.floorY + 2.16, end.z + end.dir * 0.16);
+      if (end.dir < 0) board.rotation.y = Math.PI;
+      body.add(board);
+      this.cabDisplays.push(board);
+      const headlamp = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.1, 14), headlightMat);
+      headlamp.rotation.x = Math.PI / 2;
+      headlamp.position.set(0, end.floorY + 0.55, end.z + end.dir * 0.14);
+      body.add(headlamp);
+      const buffer = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.24, 0.16), iron);
+      buffer.position.set(0, end.floorY + 0.1, end.z + end.dir * 0.12);
+      body.add(buffer);
+    }
+
+    // Funicular running gear: an inclined chassis beam, two rail-wheel axles and a
+    // central cable grip clamping onto the haulage rope.
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.2, 9.0), iron);
+    chassis.position.set(0, 0.55, 0);
+    chassis.rotation.x = -0.14; // parallel to the mean grade so it reads as a funicular truck.
+    body.add(chassis);
+    for (const axle of [{ z: -3.3, y: 0.32 }, { z: 3.3, y: 1.16 }]) {
+      for (const x of [-0.92, 0.92]) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.12, 18), iron);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(x, axle.y, axle.z);
+        body.add(wheel);
+      }
+    }
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.34, 0.7), iron);
+    grip.position.set(0, 0.42, 0);
+    body.add(grip);
+
+    // Point the tall end uphill: if the route loses elevation from start to end the
+    // player drives downhill, so the stepped shell is spun to face the other way.
+    const points = this.context.route.controlPoints;
+    const descending = points.length > 1 && points[points.length - 1][1] < points[0][1];
+    if (descending) body.rotation.y = Math.PI;
+
+    this.addCabinLight(body, compartments[1].floorY + 1.9);
+    this.trainHalfLengthM = 5.4;
     this.cars.push(car);
     this.root.add(car);
+    this.addExteriorLightThrow(this.trainHalfLengthM, 1.0);
     return this.createVehicleInstance();
   }
 
@@ -1584,33 +1673,14 @@ class ProceduralTransitVehicleFactory {
     return this.createVehicleInstance();
   }
 
-  // Real light throw at night: a headlight beam pooling on the track ahead
-  // (local +z leads in travel direction) and a red glow behind the last cab.
-  // Intensities start at 0; setExteriorLightsOn switches them with the lamps.
+  // Shared part builders live in ./parts.ts; these thin wrappers keep the
+  // factory's collector fields as the single place part output is gathered.
   private addExteriorLightThrow(halfLengthM: number, beamHeightM: number): void {
-    const headBeam = new THREE.SpotLight(0xfff3d0, 0, 80, 0.4, 0.6, 1.8);
-    headBeam.name = 'Exterior lamp headlight beam';
-    headBeam.position.set(0, beamHeightM, halfLengthM - 0.1);
-    headBeam.target.name = 'Exterior lamp headlight target';
-    headBeam.target.position.set(0, 0.15, halfLengthM + 26);
-    this.root.add(headBeam, headBeam.target);
-    this.headlightBeams.push(headBeam);
-
-    const tailGlow = new THREE.PointLight(0xd42020, 0, 16, 2);
-    tailGlow.name = 'Exterior lamp tail glow';
-    tailGlow.position.set(0, 0.9, -(halfLengthM + 1.4));
-    this.root.add(tailGlow);
-    this.tailGlows.push(tailGlow);
+    addExteriorLightThrow(this.root, this.lightRig, halfLengthM, beamHeightM);
   }
 
-  // Warm cabin light so the interior stays readable in night/dawn views;
-  // switched together with the exterior lamps and off in daylight.
   private addCabinLight(parent: THREE.Object3D, y: number, z = 0): void {
-    const light = new THREE.PointLight(0xfff4dc, 0, 11, 1.8);
-    light.name = 'Cabin light';
-    light.position.set(0, y, z);
-    parent.add(light);
-    this.cabinLights.push(light);
+    addCabinLight(this.lightRig, parent, y, z);
   }
 
   private addSlidingVehicleDoor(
@@ -1623,32 +1693,7 @@ class ProceduralTransitVehicleFactory {
     width: number,
     height: number
   ): void {
-    const side = Math.sign(x) || 1;
-    const opening = new THREE.Mesh(new THREE.PlaneGeometry(width, height), openingMaterial);
-    opening.position.set(x + side * 0.055, 1.75, z);
-    opening.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
-    car.add(opening);
-    for (const direction of [-1, 1] as const) {
-      const closedZ = z + direction * width * 0.24;
-      const leaf = new THREE.Group();
-      leaf.position.z = closedZ;
-      for (const edge of [-1, 1] as const) {
-        const stile = new THREE.Mesh(new THREE.BoxGeometry(0.125, height - 0.08, width * 0.075), doorMaterial);
-        stile.position.set(x + side * 0.03, 1.75, edge * width * 0.205);
-        leaf.add(stile);
-      }
-      const crystal = new THREE.Mesh(new THREE.BoxGeometry(0.082, height * 0.8, width * 0.37), glassMaterial);
-      crystal.position.set(x + side * 0.018, 1.9, 0);
-      leaf.add(crystal);
-      const frameTop = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.16, width * 0.48), doorMaterial);
-      frameTop.position.set(x + side * 0.032, 2.64, 0);
-      leaf.add(frameTop);
-      const frameBottom = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.18, width * 0.48), doorMaterial);
-      frameBottom.position.set(x + side * 0.032, 0.88, 0);
-      leaf.add(frameBottom);
-      car.add(leaf);
-      this.doors.push({ group: leaf, closedZ, direction });
-    }
+    addSlidingVehicleDoor(this.doors, car, x, z, doorMaterial, glassMaterial, openingMaterial, width, height);
   }
 
   private addOpaqueTransitInterior(
@@ -1658,28 +1703,7 @@ class ProceduralTransitVehicleFactory {
     material: THREE.Material,
     doorZones: (side: -1 | 1) => number[]
   ): void {
-    for (const side of [-1, 1] as const) {
-      const exclusions = doorZones(side).map((center) => ({ start: center - 0.92, end: center + 0.92 })).sort((a, b) => a.start - b.start);
-      let cursor = -length / 2;
-      for (const exclusion of [...exclusions, { start: length / 2, end: length / 2 }]) {
-        const end = Math.min(length / 2, exclusion.start);
-        if (end - cursor > 0.18) {
-          const lowerWall = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.68, end - cursor), material);
-          lowerWall.position.set(side * halfWidth, 1.42, (cursor + end) / 2);
-          car.add(lowerWall);
-        }
-        cursor = Math.max(cursor, exclusion.end);
-      }
-      const header = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.38, length), material);
-      header.position.set(side * (halfWidth - 0.03), 3.02, 0);
-      car.add(header);
-      for (let z = -length / 2 + 1.2; z < length / 2 - 0.6; z += 2.05) {
-        if (exclusions.some((zone) => z >= zone.start && z <= zone.end)) continue;
-        const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.0, 0.1), material);
-        mullion.position.set(side * halfWidth, 2.38, z);
-        car.add(mullion);
-      }
-    }
+    addOpaqueTransitInterior(car, length, halfWidth, material, doorZones);
   }
 
   private addTangoCar(
@@ -2168,7 +2192,9 @@ class ProceduralTransitVehicleFactory {
     car.add(overheadDisplayFront);
   }
 
-  private makeTangoBody(): THREE.ExtrudeGeometry {
+  // Shared DT8 Tango body cross-section; depth defaults to a Stadtbahn car and is
+  // overridable so shorter cars (e.g. the Zacke railcar) reuse the same profile.
+  private makeTangoBody(depth = 18.25): THREE.ExtrudeGeometry {
     const crossSection = new THREE.Shape();
     crossSection.moveTo(-1.325, 0);
     crossSection.lineTo(1.325, 0);
@@ -2178,13 +2204,13 @@ class ProceduralTransitVehicleFactory {
     crossSection.lineTo(-1.325, 2.08);
     crossSection.closePath();
     const geometry = new THREE.ExtrudeGeometry(crossSection, {
-      depth: 18.25,
+      depth,
       bevelEnabled: true,
       bevelSize: 0.025,
       bevelThickness: 0.025,
       bevelSegments: 1
     });
-    geometry.translate(0, 0, -9.125);
+    geometry.translate(0, 0, -depth / 2);
     return geometry;
   }
 
@@ -2241,57 +2267,6 @@ class ProceduralTransitVehicleFactory {
     return geometry;
   }
 
-  private makeSBahn430Nose(): THREE.ExtrudeGeometry {
-    // Side profile of the flat, slightly raked BR 430 front, extruded across the width.
-    const profile = new THREE.Shape();
-    profile.moveTo(0, 0.42);
-    profile.lineTo(0.55, 0.42);
-    profile.lineTo(0.72, 0.62);
-    profile.lineTo(0.78, 1.9);
-    profile.lineTo(0.52, 3.2);
-    profile.quadraticCurveTo(0.42, 3.5, 0.12, 3.6);
-    profile.lineTo(0, 3.6);
-    profile.closePath();
-    const geometry = new THREE.ExtrudeGeometry(profile, {
-      depth: 2.7,
-      bevelEnabled: true,
-      bevelThickness: 0.09,
-      bevelSize: 0.09,
-      bevelSegments: 3
-    });
-    geometry.translate(0, 0, -1.35);
-    geometry.rotateY(-Math.PI / 2);
-    return geometry;
-  }
-
-  private makeSBahn430Mask(): THREE.ExtrudeGeometry {
-    const shape = new THREE.Shape();
-    shape.moveTo(-1.3, -0.66);
-    shape.lineTo(1.3, -0.66);
-    shape.lineTo(1.06, 0.56);
-    shape.quadraticCurveTo(0.98, 0.66, 0.82, 0.68);
-    shape.lineTo(-0.82, 0.68);
-    shape.quadraticCurveTo(-0.98, 0.66, -1.06, 0.56);
-    shape.closePath();
-    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 2 });
-    geometry.translate(0, 0, -0.03);
-    return geometry;
-  }
-
-  private makeSBahn430Windscreen(): THREE.ExtrudeGeometry {
-    const shape = new THREE.Shape();
-    shape.moveTo(-1.18, -0.56);
-    shape.lineTo(1.18, -0.56);
-    shape.lineTo(0.92, 0.44);
-    shape.quadraticCurveTo(0.84, 0.54, 0.68, 0.56);
-    shape.lineTo(-0.68, 0.56);
-    shape.quadraticCurveTo(-0.84, 0.54, -0.92, 0.44);
-    shape.closePath();
-    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.015, bevelSegments: 2 });
-    geometry.translate(0, 0, -0.025);
-    return geometry;
-  }
-
   private makeCabNose(material: THREE.Material): THREE.Mesh {
     const shape = new THREE.Shape();
     shape.moveTo(-1.18, -1.28);
@@ -2327,23 +2302,7 @@ class ProceduralTransitVehicleFactory {
   }
 
   private addPantograph(position: THREE.Vector3, material: THREE.Material): void {
-    const base = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.14, 0.72), material);
-    base.position.copy(position);
-    this.root.add(base);
-    const points = [
-      [new THREE.Vector3(-0.55, 0, -0.2), new THREE.Vector3(0, 0.78, 0)],
-      [new THREE.Vector3(0.55, 0, -0.2), new THREE.Vector3(0, 0.78, 0)],
-      [new THREE.Vector3(-0.55, 0, 0.2), new THREE.Vector3(0, 0.78, 0)],
-      [new THREE.Vector3(0.55, 0, 0.2), new THREE.Vector3(0, 0.78, 0)]
-    ] as const;
-    for (const [a, b] of points) {
-      const curve = new THREE.LineCurve3(a.clone().add(position), b.clone().add(position));
-      const arm = new THREE.Mesh(new THREE.TubeGeometry(curve, 1, 0.025, 6), material);
-      this.root.add(arm);
-    }
-    const shoe = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.055, 0.16), material);
-    shoe.position.copy(position).add(new THREE.Vector3(0, 0.84, 0));
-    this.root.add(shoe);
+    addPantograph(this.root, position, material);
   }
 }
 
