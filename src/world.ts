@@ -8,7 +8,8 @@ import type { GuidewayKind, TransportModeDefinition, VehicleKind } from './domai
 import type { Season } from './app/types';
 import type { CityDefinition } from './cities';
 import { LightingController } from './world/LightingController';
-import { CameraController, type CameraMode } from './world/CameraController';
+import type { CameraMode } from './world/CameraController';
+import { CameraSystem } from './engine/systems/CameraSystem';
 import { buildTransitVehicle } from './vehicles';
 import type { VehicleInstance } from './vehicles/types';
 import type { WorldLayerContext } from './world/layers/WorldLayerContext';
@@ -41,7 +42,8 @@ const CINEMATIC_PRESETS: Array<{ id: CinematicPreset; label: string }> = [
 ];
 export class TransitWorld {
   readonly scene = new THREE.Scene();
-  readonly camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 5000);
+  // Camera + chase/passenger/cab rig, zoom, look, and resize are owned here.
+  private readonly cameraSystem = new CameraSystem();
   readonly renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   private train = new THREE.Group();
   private vehicle: VehicleInstance | null = null;
@@ -65,11 +67,17 @@ export class TransitWorld {
   private readonly sun = new THREE.DirectionalLight();
   private readonly visibilityFill = new THREE.AmbientLight();
   private readonly lighting = new LightingController(this.scene, this.renderer, this.hemi, this.sun, this.visibilityFill);
-  private readonly cameraController = new CameraController(this.camera);
   private currentSeason: Season = 'summer';
   private cinematicActive = false;
   private cinematicPresetIndex = 0;
-  private readonly onResizeBound = () => this.onResize();
+  // Renderer sizing stays with the world (it owns the renderer); CameraSystem
+  // owns the camera aspect side of the resize.
+  private readonly onRendererResizeBound = () => this.renderer.setSize(window.innerWidth, window.innerHeight);
+
+  /** The active camera, owned by CameraSystem; exposed for the engine renderer. */
+  get camera(): THREE.PerspectiveCamera {
+    return this.cameraSystem.camera;
+  }
 
   constructor(
     curve: THREE.CatmullRomCurve3,
@@ -112,11 +120,7 @@ export class TransitWorld {
     // empty terrain before the first frame.
     const startPoint = this.curve.getPointAt(0);
     const startTangent = this.curve.getTangentAt(0).normalize();
-    this.camera.position.set(
-      startPoint.x - startTangent.x * 60,
-      startPoint.y + 16,
-      startPoint.z - startTangent.z * 60
-    );
+    this.cameraSystem.placeAtStart(startPoint, startTangent);
     this.lighting.initialize();
 
     // Scene layers build their meshes from shared route geometry; TransitWorld
@@ -144,7 +148,7 @@ export class TransitWorld {
     }
     this.scene.add(this.seasonalObjects);
 
-    window.addEventListener('resize', this.onResizeBound);
+    window.addEventListener('resize', this.onRendererResizeBound);
   }
 
   mount(target: HTMLElement): void {
@@ -189,27 +193,27 @@ export class TransitWorld {
   }
 
   cycleCamera(): CameraMode {
-    this.cameraController.cycle();
+    this.cameraSystem.cycle();
     this.updateVehicleGlass();
-    return this.cameraController.currentMode();
+    return this.cameraSystem.currentMode();
   }
 
   currentCameraMode(): CameraMode {
-    return this.cameraController.currentMode();
+    return this.cameraSystem.currentMode();
   }
 
   setCameraMode(mode: CameraMode): CameraMode {
-    this.cameraController.setMode(mode);
+    this.cameraSystem.setMode(mode);
     this.updateVehicleGlass();
-    return this.cameraController.currentMode();
+    return this.cameraSystem.currentMode();
   }
 
   setInteriorLookInput(leftHeld: boolean, rightHeld: boolean): void {
-    this.cameraController.setLookInput(leftHeld, rightHeld);
+    this.cameraSystem.setLookInput(leftHeld, rightHeld);
   }
 
   adjustCameraZoom(delta: number): void {
-    this.cameraController.adjustZoom(delta);
+    this.cameraSystem.adjustZoom(delta);
   }
 
   toggleCinematicMode(): { active: boolean; label: string } {
@@ -242,7 +246,7 @@ export class TransitWorld {
   private updateVehicleGlass(): void {
     const glassMaterial = this.vehicle?.glassMaterial;
     if (!glassMaterial) return;
-    const mode = this.cameraController.currentMode();
+    const mode = this.cameraSystem.currentMode();
     const interiorView = !this.cinematicActive && (mode === 'passenger' || mode === 'cab');
     const cabView = mode === 'cab';
     glassMaterial.opacity = interiorView ? 0.1 : 0.58;
@@ -270,7 +274,7 @@ export class TransitWorld {
     this.updateInteriorDisplay(nextStation, doorsOpen);
     this.updateArticulatedVehicle(this.train, this.vehicle?.cars ?? [], distanceM, 1, this.activeLaneOffsetM);
     this.opposingLayer?.update(distanceM);
-    this.cameraController.update({
+    this.cameraSystem.follow({
       position,
       tangent,
       underground,
@@ -355,7 +359,8 @@ export class TransitWorld {
   }
 
   dispose(): void {
-    window.removeEventListener('resize', this.onResizeBound);
+    window.removeEventListener('resize', this.onRendererResizeBound);
+    this.cameraSystem.dispose();
     this.osmScene?.dispose();
     this.vehicle?.dispose?.();
     // Free geometries/materials/textures built by the scene layers so switching
@@ -799,11 +804,5 @@ export class TransitWorld {
     if (!origin) return new THREE.Vector3(0, 0, 0);
     const lonScale = Math.cos((origin.lat * Math.PI) / 180) * EARTH_M_PER_DEG_LAT;
     return new THREE.Vector3(-(lon - origin.lon) * lonScale, 0, (lat - origin.lat) * EARTH_M_PER_DEG_LAT);
-  }
-
-  private onResize(): void {
-    this.camera.aspect = window.innerWidth / window.innerHeight;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 }
