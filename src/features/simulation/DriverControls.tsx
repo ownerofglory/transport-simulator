@@ -1,17 +1,24 @@
-import type { Dispatch } from 'react';
-import type { AppAction } from '../../app/app-actions';
+import { useContext } from 'react';
+import { SimulatorCommandsContext } from './useSimulatorRuntime';
 
 /** Pointer throttle/brake buttons (visible only in driver mode via CSS). */
-export function DriverControls({ dispatch }: { dispatch: Dispatch<AppAction> }) {
-  const bind = (type: 'throttle-changed' | 'brake-changed') => ({
-    onPointerDown: () => dispatch({ type, held: true }),
-    onPointerUp: () => dispatch({ type, held: false }),
-    onPointerLeave: () => dispatch({ type, held: false })
+export function DriverControls() {
+  // The runtime mounts asynchronously; tolerate its absence during early renders.
+  const commands = useContext(SimulatorCommandsContext);
+  const bind = (control: 'throttle' | 'brake') => ({
+    onPointerDown: () => set(control, 1),
+    onPointerUp: () => set(control, 0),
+    onPointerLeave: () => set(control, 0)
   });
+  const set = (control: 'throttle' | 'brake', value: number) => {
+    if (!commands) return;
+    if (control === 'throttle') commands.input.setThrottle(value);
+    else commands.input.setBrake(value);
+  };
   return (
     <div className="driver-controls">
-      <button {...bind('throttle-changed')}>Throttle</button>
-      <button {...bind('brake-changed')}>Brake</button>
+      <button {...bind('throttle')}>Throttle</button>
+      <button {...bind('brake')}>Brake</button>
       <div className="hint">W/ArrowUp throttle · S/ArrowDown brake</div>
     </div>
   );

@@ -5,9 +5,13 @@ import type { RealtimeJourneySimulation } from '../features/realtime/journeyRout
 import type { HudTab, Mode, Season } from './types';
 
 /**
- * Serializable selection + input state for the app. Routes are referenced by id
- * and resolved through RouteRepository so the state stays lightweight and easy
- * to persist (URL/localStorage) without carrying full DemoRoute objects.
+ * Serializable selection state for the app. Routes are referenced by id and
+ * resolved through RouteRepository so the state stays lightweight and easy to
+ * persist (URL/localStorage) without carrying full DemoRoute objects.
+ *
+ * Transient held input (throttle/brake/look) and photo-mode activation are NOT
+ * stored here — they are owned by the engine (see engine/runtime/InputState and
+ * SimulatorRuntime) so holding a control never re-renders the shell.
  */
 export type AppState = {
   hudTab: HudTab;
@@ -23,12 +27,7 @@ export type AppState = {
   selectedTime: 'auto' | number;
   selectedStartStation: number;
   selectedCameraMode: CameraMode;
-  photoModeActive: boolean;
   paused: boolean;
-  throttleHeld: boolean;
-  brakeHeld: boolean;
-  lookLeftHeld: boolean;
-  lookRightHeld: boolean;
 };
 
 export function createInitialAppState(routeId: string = demoRoute.id): AppState {
@@ -44,11 +43,6 @@ export function createInitialAppState(routeId: string = demoRoute.id): AppState 
     selectedTime: 'auto',
     selectedStartStation: 0,
     selectedCameraMode: 'chase',
-    photoModeActive: false,
-    paused: false,
-    throttleHeld: false,
-    brakeHeld: false,
-    lookLeftHeld: false,
-    lookRightHeld: false
+    paused: false
   };
 }

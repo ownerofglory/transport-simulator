@@ -56,7 +56,7 @@ export function RealtimePanel() {
         >
           Camera
         </button>
-        <button onClick={() => dispatch({ type: 'photo-mode-changed', active: true })}>Photo</button>
+        <button onClick={() => commands?.enterPhotoMode()}>Photo</button>
       </div>
 
       {modal === 'journey' && <JourneySearchModal onClose={() => setModal(null)} />}

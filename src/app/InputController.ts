@@ -20,6 +20,7 @@ export class InputController {
   ) {
     addEventListener('keydown', this.keyDown);
     addEventListener('keyup', this.keyUp);
+    addEventListener('blur', this.releaseAll);
     target.addEventListener('wheel', this.wheel, { passive: false });
     target.addEventListener('touchstart', this.touchStart, { passive: true });
     target.addEventListener('touchmove', this.touchMove, { passive: false });
@@ -28,14 +29,24 @@ export class InputController {
   }
 
   dispose(): void {
+    // Release held controls so a disposed controller cannot leave input latched.
+    this.releaseAll();
     removeEventListener('keydown', this.keyDown);
     removeEventListener('keyup', this.keyUp);
+    removeEventListener('blur', this.releaseAll);
     this.target.removeEventListener('wheel', this.wheel);
     this.target.removeEventListener('touchstart', this.touchStart);
     this.target.removeEventListener('touchmove', this.touchMove);
     this.target.removeEventListener('touchend', this.touchEnd);
     this.target.removeEventListener('touchcancel', this.touchEnd);
   }
+
+  /** Releases every held control; used on focus loss and disposal. */
+  private releaseAll = (): void => {
+    this.callbacks.onThrottle(false);
+    this.callbacks.onBrake(false);
+    this.callbacks.onLook(false, false);
+  };
 
   private keyDown = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') this.callbacks.onPhotoExit();

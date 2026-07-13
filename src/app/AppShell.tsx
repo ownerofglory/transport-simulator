@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { routeMode, type DemoRoute } from '../route';
 import { transportModeLabel } from '../domain/transport';
 import { SimulatorCommandsContext } from '../features/simulation/useSimulatorRuntime';
@@ -33,8 +33,8 @@ export function AppShell() {
   const [activeRealtimeRoute, setActiveRealtimeRoute] = useState<DemoRoute | null>(null);
   const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 760px)').matches);
   const [photoLabel, setPhotoLabel] = useState('Platform fly-by');
-  const photoActiveRef = useRef(state.photoModeActive);
-  photoActiveRef.current = state.photoModeActive;
+  // Photo activation is owned by the runtime; the shell only mirrors it for the overlay.
+  const [photoActive, setPhotoActive] = useState(false);
 
   const onRuntime = useCallback((next: SimulatorRuntime | null) => setRuntime(next), []);
   const catalogRoute = catalog.routes.find((entry) => entry.id === state.selectedRouteId);
@@ -84,34 +84,29 @@ export function AppShell() {
   useEffect(() => { if (runtime && session) runtime.setStartStation(session); }, [runtime, state.selectedStartStation]);
   useEffect(() => { if (runtime && session) runtime.setRideMode(session); }, [runtime, state.selectedMode]);
   useEffect(() => runtime?.setPaused(state.paused), [runtime, state.paused]);
-  useEffect(() => runtime?.setDriverInput(state.throttleHeld ? 1 : 0, state.brakeHeld ? 1 : 0), [runtime, state.throttleHeld, state.brakeHeld]);
-  useEffect(() => runtime?.setInteriorLook(state.lookLeftHeld, state.lookRightHeld), [runtime, state.lookLeftHeld, state.lookRightHeld]);
   useEffect(() => runtime?.setSeason(state.selectedSeason), [runtime, state.selectedSeason]);
   useEffect(() => runtime?.setTime(state.selectedTime), [runtime, state.selectedTime]);
   useEffect(() => { runtime?.onPhotoLabel(setPhotoLabel); }, [runtime]);
+  useEffect(() => { runtime?.onPhotoMode(setPhotoActive); }, [runtime]);
   useEffect(() => { runtime?.onActiveRoute(setActiveRealtimeRoute); }, [runtime]);
   useEffect(() => setActiveRealtimeRoute(state.realtimeRoute), [state.realtimeRoute]);
-  useEffect(() => {
-    if (!runtime) return;
-    if (state.photoModeActive) runtime.enterPhotoMode();
-    else runtime.exitPhotoMode();
-  }, [runtime, state.photoModeActive]);
 
-  // Raw input listeners feed dispatches; zoom goes straight to the camera.
+  // Physical input is translated to semantic commands written straight to the
+  // runtime — held throttle/brake/look never touch React state.
   useEffect(() => {
     if (!runtime) return;
     const target = document.querySelector<HTMLElement>('.simulator-viewport');
     if (!target) return;
     const input = new InputController(target, {
-      onThrottle: (held) => dispatch({ type: 'throttle-changed', held }),
-      onBrake: (held) => dispatch({ type: 'brake-changed', held }),
-      onLook: (leftHeld, rightHeld) => dispatch({ type: 'look-changed', leftHeld, rightHeld }),
+      onThrottle: (held) => runtime.input.setThrottle(held ? 1 : 0),
+      onBrake: (held) => runtime.input.setBrake(held ? 1 : 0),
+      onLook: (left, right) => runtime.input.setLook(left, right),
       onZoom: (delta) => runtime.adjustZoom(delta),
-      onPhotoToggle: () => dispatch({ type: 'photo-mode-changed', active: !photoActiveRef.current }),
-      onPhotoExit: () => dispatch({ type: 'photo-mode-changed', active: false })
+      onPhotoToggle: () => runtime.togglePhotoMode(),
+      onPhotoExit: () => runtime.exitPhotoMode()
     });
     return () => input.dispose();
-  }, [runtime, dispatch]);
+  }, [runtime]);
 
   const notice = route && catalog.currentCity
     ? `${catalog.currentCity.shortLabel} · ${transportModeLabel(routeMode(route), catalog.currentCity.transportModes)} · ${route.agency ?? catalog.currentCity.noticeNetworkName} · ${route.description} ${catalog.currentCity.freeRideNotice} Source: ${route.source ?? 'demo route'}. ${catalog.attribution} Vector 3D scenery: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. Relief: Mapzen Terrain Tiles on AWS Open Data.`
@@ -163,10 +158,10 @@ export function AppShell() {
               <div className="controls">
                 <button onClick={() => dispatch({ type: 'pause-changed', paused: !state.paused })}>{state.paused ? 'Resume' : 'Pause'}</button>
                 <button onClick={() => { const mode = runtime?.cycleCamera(); if (mode) dispatch({ type: 'camera-selected', cameraMode: mode }); }}>Camera</button>
-                <button onClick={() => dispatch({ type: 'photo-mode-changed', active: true })}>Photo</button>
+                <button onClick={() => runtime?.enterPhotoMode()}>Photo</button>
                 <button onClick={() => session && runtime?.resetSimulation(session)}>Restart</button>
               </div>
-              <DriverControls dispatch={dispatch} />
+              <DriverControls />
             </>
           )}
         </div>
@@ -178,10 +173,10 @@ export function AppShell() {
       <div className="notice">{notice}</div>
       {runtime && (
         <PhotoModeOverlay
-          active={state.photoModeActive}
+          active={photoActive}
           label={photoLabel}
           commands={runtime}
-          onExit={() => dispatch({ type: 'photo-mode-changed', active: false })}
+          onExit={() => runtime.exitPhotoMode()}
         />
       )}
     </SimulatorCommandsContext.Provider>

@@ -29,14 +29,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, selectedCameraMode: action.cameraMode };
     case 'pause-changed':
       return { ...state, paused: action.paused };
-    case 'photo-mode-changed':
-      return { ...state, photoModeActive: action.active };
-    case 'throttle-changed':
-      return { ...state, throttleHeld: action.held };
-    case 'brake-changed':
-      return { ...state, brakeHeld: action.held };
-    case 'look-changed':
-      return { ...state, lookLeftHeld: action.leftHeld, lookRightHeld: action.rightHeld };
     case 'initial-state-loaded':
       return { ...state, ...action.state };
   }

@@ -18,8 +18,4 @@ export type AppAction =
   | { type: 'time-selected'; time: 'auto' | number }
   | { type: 'camera-selected'; cameraMode: CameraMode }
   | { type: 'pause-changed'; paused: boolean }
-  | { type: 'photo-mode-changed'; active: boolean }
-  | { type: 'throttle-changed'; held: boolean }
-  | { type: 'brake-changed'; held: boolean }
-  | { type: 'look-changed'; leftHeld: boolean; rightHeld: boolean }
   | { type: 'initial-state-loaded'; state: Partial<AppState> };

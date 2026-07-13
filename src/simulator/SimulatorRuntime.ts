@@ -7,6 +7,7 @@ import { SimulatorClient } from './SimulatorClient';
 import { SimulatorLoop } from '../app/SimulatorLoop';
 import type { Mode, Season } from '../app/types';
 import type { SimulatorSnapshotStore } from '../features/simulation/SimulatorSnapshotStore';
+import { InputState } from '../engine/runtime/InputState';
 
 /** Everything needed to (re)build the world and initialize the simulator. */
 export type RouteSession = {
@@ -22,19 +23,21 @@ export type RouteSession = {
 
 /** Imperative command surface the React shell drives via effects. */
 export type SimulatorCommands = {
+  /** Transient held input (throttle/brake/look); written to directly, never via React. */
+  readonly input: InputState;
   loadRoute(session: RouteSession): void;
   setStartStation(session: RouteSession): void;
   setRideMode(session: RouteSession): void;
   resetSimulation(session: RouteSession): void;
   setPaused(paused: boolean): void;
-  setDriverInput(throttle: number, brake: number): void;
-  setInteriorLook(left: boolean, right: boolean): void;
   cycleCamera(): CameraMode | undefined;
   adjustZoom(delta: number): void;
   setSeason(season: Season): void;
   setTime(time: 'auto' | number): void;
+  togglePhotoMode(): void;
   enterPhotoMode(): void;
   exitPhotoMode(): void;
+  onPhotoMode(handler: (active: boolean) => void): void;
   cyclePhotoPreset(): void;
   exportScreenshot(): Promise<void>;
 };
@@ -45,6 +48,7 @@ export type SimulatorCommands = {
  * world is rebuilt only on loadRoute; other changes re-init the simulator.
  */
 export class SimulatorRuntime implements SimulatorCommands {
+  readonly input = new InputState();
   private readonly simulator = new SimulatorClient();
   private world: TransitWorld | null = null;
   private session: RouteSession | null = null;
@@ -53,7 +57,9 @@ export class SimulatorRuntime implements SimulatorCommands {
   private paused = false;
   private loaded = false;
   private disposed = false;
+  private photoActive = false;
   private photoLabelHandler: ((label: string) => void) | null = null;
+  private photoModeHandler: ((active: boolean) => void) | null = null;
   private activeRouteHandler: ((route: DemoRoute) => void) | null = null;
   private readonly loop: SimulatorLoop;
 
@@ -61,6 +67,8 @@ export class SimulatorRuntime implements SimulatorCommands {
     private readonly container: HTMLElement,
     private readonly snapshots: SimulatorSnapshotStore
   ) {
+    // Held input goes straight to the simulator/world, never through React.
+    this.input.onChange(() => this.applyInput());
     this.loop = new SimulatorLoop({
       turnaroundMs: 4000,
       getPaused: () => this.paused,
@@ -182,14 +190,12 @@ export class SimulatorRuntime implements SimulatorCommands {
     if (this.loaded) this.snapshots.update(this.simulator.setPaused(paused), true);
   }
 
-  setDriverInput(throttle: number, brake: number): void {
+  /** Forwards the current held input to the simulator (driver mode) and world (look). */
+  private applyInput(): void {
+    this.world?.setInteriorLookInput(this.input.lookX < 0, this.input.lookX > 0);
     if (this.loaded && this.session?.mode === 'driver') {
-      this.snapshots.update(this.simulator.setDriverInput(throttle, brake), true);
+      this.snapshots.update(this.simulator.setDriverInput(this.input.throttle, this.input.brake), true);
     }
-  }
-
-  setInteriorLook(left: boolean, right: boolean): void {
-    this.world?.setInteriorLookInput(left, right);
   }
 
   cycleCamera(): CameraMode | undefined {
@@ -210,17 +216,34 @@ export class SimulatorRuntime implements SimulatorCommands {
     this.world?.setTimeOfDay(time === 'auto' ? currentLocalHour() : time);
   }
 
+  /** Registers a callback for photo-mode activation changes (overlay visibility). */
+  onPhotoMode(handler: (active: boolean) => void): void {
+    this.photoModeHandler = handler;
+    handler(this.photoActive);
+  }
+
+  togglePhotoMode(): void {
+    if (this.photoActive) this.exitPhotoMode();
+    else this.enterPhotoMode();
+  }
+
   enterPhotoMode(): void {
+    // Switching workspace releases any held driver/look input.
+    this.input.reset();
     const result = this.world?.setCinematicMode(true);
-    document.body.classList.toggle('photo-mode', !!result?.active);
+    this.photoActive = !!result?.active;
+    document.body.classList.toggle('photo-mode', this.photoActive);
     if (result) this.photoLabelHandler?.(result.label);
+    this.photoModeHandler?.(this.photoActive);
     this.renderNow();
   }
 
   exitPhotoMode(): void {
     const result = this.world?.setCinematicMode(false);
+    this.photoActive = false;
     document.body.classList.remove('photo-mode');
     if (result) this.photoLabelHandler?.(result.label);
+    this.photoModeHandler?.(this.photoActive);
     this.renderNow();
   }
 
@@ -248,6 +271,9 @@ export class SimulatorRuntime implements SimulatorCommands {
   /** Stops the loop and disposes the world; called on viewport unmount. */
   dispose(): void {
     this.disposed = true;
+    this.input.onChange(null);
+    this.input.reset();
+    this.photoActive = false;
     this.loop.stop();
     this.loop.setState(null);
     this.world?.dispose();
