@@ -1,20 +1,19 @@
 import * as THREE from 'three';
 import { makeLabelTexture } from '../labels';
 import type { VehicleKind } from '../domain/transport';
+import { buildBusVehicle } from './blueprint/bus/buildBusFromBlueprint';
+import { defaultBusBlueprint } from './blueprint/bus/defaultBusBlueprint';
+import {
+  addCabinLight,
+  addExteriorLightThrow,
+  addOpaqueTransitInterior,
+  addSlidingVehicleDoor,
+  makeSetExteriorLightsOn,
+  type ExteriorLightRig
+} from './parts';
 import type { VehicleBuildContext, VehicleInstance } from './types';
 
 const DOUBLE_FORMATION_LINES = new Set(['U1', 'U6', 'U7', 'U11', 'U12', 'U19']);
-
-// Stuttgart trunk/express bus lines that run articulated ("Gelenkbus" / double-traction)
-// Mercedes-Benz Citaro G units. Express (X) lines are articulated as a class.
-const STUTTGART_ARTICULATED_BUS_LINES = new Set([
-  '40', '42', '43', '44', '45', '52', '56', '57', '79', '91', '92'
-]);
-
-function isStuttgartArticulatedBusLine(line: string): boolean {
-  const normalized = line.trim().toUpperCase();
-  return STUTTGART_ARTICULATED_BUS_LINES.has(normalized) || normalized.startsWith('X');
-}
 
 class ProceduralTransitVehicleFactory {
   private readonly root = new THREE.Group();
@@ -46,7 +45,7 @@ class ProceduralTransitVehicleFactory {
     else if (cityId === 'freiburg' && modeId === 'tram') this.createFreiburgTramVehicle();
     else if (cityId === 'freiburg' && modeId === 's-bahn') this.createBwegtRegionalRailVehicle();
     else if (cityId === 'baden-wuerttemberg-rail' && modeId === 'rail') this.createBwegtRegionalRailVehicle();
-    else if (vehicleKind === 'bus') this.createBusVehicle();
+    else if (vehicleKind === 'bus') return this.createBusVehicle();
     else if (vehicleKind === 's-bahn') this.createSBahnVehicle();
     else if (vehicleKind === 'zacke') this.createZackeVehicle();
     else if (vehicleKind === 'schwebebahn') this.createSchwebebahnVehicle();
@@ -58,8 +57,6 @@ class ProceduralTransitVehicleFactory {
   }
 
   private createVehicleInstance(): VehicleInstance {
-    const headLamps = this.headLampMaterials;
-    const tailLamps = this.tailLampMaterials;
     return {
       root: this.root,
       cars: this.cars,
@@ -70,449 +67,25 @@ class ProceduralTransitVehicleFactory {
       cabDisplays: this.cabDisplays,
       glassMaterial: this.glassMaterial,
       trainHalfLengthM: this.trainHalfLengthM,
-      setExteriorLightsOn: headLamps.length + tailLamps.length + this.cabinLights.length > 0
-        ? (on: boolean) => {
-            for (const lamp of headLamps) lamp.emissiveIntensity = on ? 3.4 : 0.55;
-            for (const lamp of tailLamps) lamp.emissiveIntensity = on ? 1.8 : 0.35;
-            for (const beam of this.headlightBeams) beam.intensity = on ? 260 : 0;
-            for (const glow of this.tailGlows) glow.intensity = on ? 8 : 0;
-            for (const cabin of this.cabinLights) cabin.intensity = on ? 6 : 0;
-          }
-        : undefined
+      setExteriorLightsOn: makeSetExteriorLightsOn(this.lightRig)
     };
   }
 
-  // Mercedes-Benz Citaro city bus. A single 12m rigid unit by default; Stuttgart
-  // trunk/express lines are built as an 18m articulated ("Gelenkbus") formation of
-  // two low-floor sections joined by a rubber bellows over a shared centre turntable.
-  createBusVehicle(): VehicleInstance {
-    const materials = this.makeBusMaterials();
-    const displayMaterial = this.context.makeInteriorDisplayMaterial();
-    this.glassMaterial = materials.glass;
-
-    const cityId = this.context.city?.id;
-    const articulated = (cityId === 'stuttgart' || cityId === undefined)
-      && isStuttgartArticulatedBusLine(this.context.route.line);
-
-    if (articulated) {
-      // Front (motorised) section carries the driver and first two axles; the
-      // rear trailer section rides on the third axle. Joint/bellows sits at z=0.
-      const front = this.addBusSection({
-        centerOffsetM: 5.3,
-        lengthM: 10.4,
-        cab: 'front',
-        rear: 'joint',
-        doorZs: [3.15, -1.7],
-        axleZs: [3.85, -3.15],
-        materials,
-        displayMaterial,
-        name: 'Front section Mercedes-Benz Citaro G'
-      });
-      const rear = this.addBusSection({
-        centerOffsetM: -3.7,
-        lengthM: 6.8,
-        cab: 'joint',
-        rear: 'tail',
-        doorZs: [1.6, -1.95],
-        axleZs: [-2.4],
-        materials,
-        displayMaterial,
-        name: 'Rear section Mercedes-Benz Citaro G'
-      });
-      this.cars.push(front, rear);
-      this.addBusBellows(materials);
-      this.trainHalfLengthM = 8.8;
-    } else {
-      const car = this.addBusSection({
-        centerOffsetM: 0,
-        lengthM: 12.1,
-        cab: 'front',
-        rear: 'tail',
-        doorZs: [3.4, -0.2, -3.9],
-        axleZs: [3.7, -3.7],
-        materials,
-        displayMaterial,
-        name: 'Mercedes-Benz Citaro city bus'
-      });
-      this.cars.push(car);
-      this.trainHalfLengthM = 6.25;
-    }
-
-    this.addExteriorLightThrow(this.trainHalfLengthM, 1.1);
-    return this.createVehicleInstance();
-  }
-
-  private makeBusMaterials() {
+  private get lightRig(): ExteriorLightRig {
     return {
-      // SSB/VVS traffic yellow with a subtle sheen.
-      body: new THREE.MeshStandardMaterial({ color: 0xffdd00, roughness: 0.46, metalness: 0.06 }),
-      black: new THREE.MeshStandardMaterial({ color: 0x14181c, roughness: 0.36 }),
-      skirt: new THREE.MeshStandardMaterial({ color: 0x1c2024, roughness: 0.62, metalness: 0.1 }),
-      roof: new THREE.MeshStandardMaterial({ color: 0xcaccc8, roughness: 0.66, metalness: 0.14 }),
-      glass: new THREE.MeshStandardMaterial({ color: 0x9bd2e1, transparent: true, opacity: 0.4, roughness: 0.08, depthWrite: true }),
-      interior: new THREE.MeshStandardMaterial({ color: 0xd8d4c8, roughness: 0.88 }),
-      metal: new THREE.MeshStandardMaterial({ color: 0x8b9293, roughness: 0.38, metalness: 0.65 }),
-      tyre: new THREE.MeshStandardMaterial({ color: 0x0d0f12, roughness: 0.9 }),
-      hub: new THREE.MeshStandardMaterial({ color: 0xb9bdbf, roughness: 0.42, metalness: 0.7 }),
-      seat: new THREE.MeshStandardMaterial({ color: 0x2f5f86, roughness: 0.86 }),
-      // VVS moquette back panel and dark anti-slip low-floor covering.
-      seatBack: new THREE.MeshStandardMaterial({ color: 0x22405c, roughness: 0.9 }),
-      floor: new THREE.MeshStandardMaterial({ color: 0x3b3e42, roughness: 0.94 }),
-      // Signal-yellow grab rails/stanchions, warm ceiling light strip and driver kit.
-      grab: new THREE.MeshStandardMaterial({ color: 0xf2c200, roughness: 0.4, metalness: 0.5 }),
-      lightStrip: new THREE.MeshStandardMaterial({ color: 0xfff6e0, emissive: 0xfff2d2, emissiveIntensity: 0.85 }),
-      driver: new THREE.MeshStandardMaterial({ color: 0x1a1d20, roughness: 0.7 }),
-      rubber: new THREE.MeshStandardMaterial({ color: 0x101318, roughness: 0.82 })
+      headLampMaterials: this.headLampMaterials,
+      tailLampMaterials: this.tailLampMaterials,
+      headlightBeams: this.headlightBeams,
+      tailGlows: this.tailGlows,
+      cabinLights: this.cabinLights
     };
   }
 
-  // Builds one rigid low-floor bus body centred on its own local z=0 so the
-  // articulated renderer can bend the two sections independently along the route.
-  private addBusSection(opts: {
-    centerOffsetM: number;
-    lengthM: number;
-    cab: 'front' | 'joint';
-    rear: 'tail' | 'joint';
-    doorZs: number[];
-    axleZs: number[];
-    materials: ReturnType<ProceduralTransitVehicleFactory['makeBusMaterials']>;
-    displayMaterial: THREE.Material;
-    name: string;
-  }): THREE.Group {
-    const { materials: m, lengthM: L, displayMaterial } = opts;
-    const half = L / 2;
-    const car = new THREE.Group();
-    car.name = opts.name;
-    car.userData.centerOffsetM = opts.centerOffsetM;
-
-    const body = new THREE.Mesh(new THREE.BoxGeometry(2.55, 2.62, L), m.body);
-    body.position.y = 1.82;
-    body.castShadow = true;
-    car.add(body);
-    this.passengerShells.push(body);
-
-    // Dark lower skirt / bumper strip and a rounded roof cap for a Citaro profile.
-    const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.58, 0.62, L - 0.1), m.skirt);
-    skirt.position.y = 0.72;
-    car.add(skirt);
-    const roofCap = new THREE.Mesh(new THREE.BoxGeometry(2.34, 0.2, L - 0.3), m.roof);
-    roofCap.position.y = 3.19;
-    car.add(roofCap);
-
-    this.addBusSideWindows(car, m, half, opts.doorZs, opts.cab === 'front');
-    for (const z of opts.doorZs) {
-      this.addSlidingVehicleDoor(car, -1.315, z, m.body, m.glass, m.black, 1.62, 1.95);
-    }
-    for (const z of opts.axleZs) this.addBusWheels(car, m, z);
-
-    // Roof air-conditioning pod, offset toward the non-cab end.
-    const acPod = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.26, Math.min(3.2, L * 0.32)), m.black);
-    acPod.position.set(0, 3.34, opts.cab === 'front' ? -half * 0.45 : half * 0.35);
-    car.add(acPod);
-
-    // Interior floor, ceiling, walls, seating, grab rails and fittings.
-    const floor = new THREE.Mesh(new THREE.BoxGeometry(2.28, 0.08, L - 0.7), m.floor);
-    floor.position.y = 1.02;
-    car.add(floor);
-    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.08, L - 0.8), m.interior);
-    ceiling.position.y = 3.0;
-    car.add(ceiling);
-    this.addOpaqueTransitInterior(car, L - 0.8, 1.18, m.interior, (side) => side < 0 ? opts.doorZs : []);
-    this.addBusSeating(car, m, half, opts.doorZs, opts.cab === 'front', opts.rear === 'tail');
-    this.addBusInteriorFittings(car, m, half, opts.doorZs, opts.cab === 'front');
-
-    if (opts.cab === 'front') {
-      this.addBusFrontEnd(car, m, displayMaterial, half);
-    } else {
-      this.addBusGangwayRing(car, m, half, 1);
-    }
-    if (opts.rear === 'tail') {
-      this.addBusRearEnd(car, m, -half);
-    } else {
-      this.addBusGangwayRing(car, m, -half, -1);
-    }
-
-    this.addCabinLight(car, 2.78, opts.cab === 'front' ? -half * 0.3 : 0);
-    this.root.add(car);
-    return car;
-  }
-
-  private addBusSideWindows(
-    car: THREE.Group,
-    m: ReturnType<ProceduralTransitVehicleFactory['makeBusMaterials']>,
-    half: number,
-    doorZs: number[],
-    cabFront: boolean
-  ): void {
-    const bandStart = -half + 0.55;
-    const bandEnd = cabFront ? half - 2.1 : half - 0.55; // leave the cab bay clear at the front.
-    for (const side of [-1, 1] as const) {
-      const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.14, bandEnd - bandStart), m.black);
-      band.position.set(side * 1.3, 2.42, (bandStart + bandEnd) / 2);
-      car.add(band);
-      this.windowBands.push(band);
-      for (let z = bandStart + 0.62; z < bandEnd - 0.4; z += 1.24) {
-        // Skip glazing where a door interrupts the window band on the curb side.
-        if (side < 0 && doorZs.some((doorZ) => Math.abs(z - doorZ) < 0.72)) continue;
-        const window = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.9, 1.02), m.glass);
-        window.position.set(side * 1.315, 2.42, z);
-        car.add(window);
-      }
-    }
-  }
-
-  private addBusWheels(
-    car: THREE.Group,
-    m: ReturnType<ProceduralTransitVehicleFactory['makeBusMaterials']>,
-    z: number
-  ): void {
-    for (const x of [-1.24, 1.24]) {
-      const tyre = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.24, 22), m.tyre);
-      tyre.rotation.z = Math.PI / 2;
-      tyre.position.set(x, 0.5, z);
-      car.add(tyre);
-      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.26, 14), m.hub);
-      hub.rotation.z = Math.PI / 2;
-      hub.position.set(x, 0.5, z);
-      car.add(hub);
-      // Wheel-arch trim following the tyre crown.
-      const arch = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.34, 1.18), m.skirt);
-      arch.position.set(x + Math.sign(x) * 0.06, 0.86, z);
-      car.add(arch);
-    }
-  }
-
-  private addBusSeating(
-    car: THREE.Group,
-    m: ReturnType<ProceduralTransitVehicleFactory['makeBusMaterials']>,
-    half: number,
-    doorZs: number[],
-    cabFront: boolean,
-    tail: boolean
-  ): void {
-    const rowStart = cabFront ? -half + 1.0 : -half + 0.9;
-    const rowEnd = tail ? half - 1.2 : half - 0.9;
-    for (let z = rowStart; z <= rowEnd; z += 1.1) {
-      if (cabFront && z > half - 2.4) continue; // keep the driver bay clear.
-      if (doorZs.some((doorZ) => Math.abs(z - doorZ) < 0.66)) continue;
-      for (const x of [-0.92, 0.92]) {
-        const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 0.6), m.seat);
-        cushion.position.set(x, 1.35, z);
-        car.add(cushion);
-        // Contoured moquette back with a darker headrest and an aisle grab handle.
-        const back = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.56, 0.11), m.seat);
-        back.position.set(x, 1.66, z - 0.29);
-        car.add(back);
-        const headrest = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.2, 0.1), m.seatBack);
-        headrest.position.set(x, 1.98, z - 0.31);
-        car.add(headrest);
-        const handle = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.014, 6, 12), m.grab);
-        handle.rotation.x = Math.PI / 2;
-        handle.position.set(x - Math.sign(x) * 0.24, 2.02, z - 0.3);
-        car.add(handle);
-      }
-    }
-    // Aisle stanchions carry the grab rail; each gets a red stop-request button.
-    for (let z = rowStart + 0.5; z < rowEnd; z += 2.4) {
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 1.9, 10), m.grab);
-      pole.position.set(0.62, 2.0, z);
-      car.add(pole);
-      const button = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.05), new THREE.MeshStandardMaterial({ color: 0xd42020, emissive: 0x5a0d0d, emissiveIntensity: 0.4 }));
-      button.position.set(0.7, 1.7, z);
-      car.add(button);
-    }
-  }
-
-  // Ceiling light strip, longitudinal grab rails with hanging straps and, on the
-  // front section, the driver seat, wheel and glazed cab partition.
-  private addBusInteriorFittings(
-    car: THREE.Group,
-    m: ReturnType<ProceduralTransitVehicleFactory['makeBusMaterials']>,
-    half: number,
-    doorZs: number[],
-    cabFront: boolean
-  ): void {
-    const railStart = -half + 0.6;
-    const railEnd = cabFront ? half - 2.3 : half - 0.6;
-    const railLen = railEnd - railStart;
-    const railMid = (railStart + railEnd) / 2;
-
-    // Warm central ceiling light strip (lit by the shared cabin PointLight).
-    const lightStrip = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, railLen), m.lightStrip);
-    lightStrip.position.set(0, 2.94, railMid);
-    car.add(lightStrip);
-
-    for (const side of [-1, 1] as const) {
-      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, railLen, 10), m.grab);
-      rail.rotation.x = Math.PI / 2;
-      rail.position.set(side * 0.78, 2.22, railMid);
-      car.add(rail);
-      // Vertical drops linking the rail to the ceiling, plus hanging hand straps.
-      for (let z = railStart + 0.5; z < railEnd; z += 1.5) {
-        const drop = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.72, 8), m.grab);
-        drop.position.set(side * 0.78, 2.58, z);
-        car.add(drop);
-        const strap = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.012, 6, 12), m.driver);
-        strap.position.set(side * 0.78, 2.12, z + 0.7);
-        car.add(strap);
-      }
-    }
-
-    if (cabFront) {
-      const cabZ = half - 1.5;
-      // Glazed partition separating the driver from the saloon.
-      const partition = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.9, 0.06), m.interior);
-      partition.position.set(-0.72, 1.95, cabZ - 0.3);
-      car.add(partition);
-      const partitionGlass = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.04), m.glass);
-      partitionGlass.position.set(-0.72, 2.55, cabZ - 0.3);
-      car.add(partitionGlass);
-      // Driver seat.
-      const seatBase = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.5), m.driver);
-      seatBase.position.set(0.55, 1.42, cabZ - 0.2);
-      car.add(seatBase);
-      const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.62, 0.12), m.driver);
-      seatBack.position.set(0.55, 1.78, cabZ - 0.42);
-      car.add(seatBack);
-      // Steering wheel raked toward the driver.
-      const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.03, 8, 20), m.driver);
-      wheel.rotation.x = 1.15;
-      wheel.position.set(0.55, 1.72, cabZ + 0.34);
-      car.add(wheel);
-      const column = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.34, 8), m.driver);
-      column.rotation.x = 0.42;
-      column.position.set(0.55, 1.55, cabZ + 0.4);
-      car.add(column);
-    }
-  }
-
-  // Raked Citaro front: windscreen, black mask, destination display, headlight
-  // clusters (night-switchable), wing mirrors, wipers and a bumper.
-  private addBusFrontEnd(
-    car: THREE.Group,
-    m: ReturnType<ProceduralTransitVehicleFactory['makeBusMaterials']>,
-    displayMaterial: THREE.Material,
-    frontZ: number
-  ): void {
-    const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2c4, emissiveIntensity: 0.55 });
-    const indicatorMat = new THREE.MeshStandardMaterial({ color: 0xff8c1a, emissive: 0xff7a00, emissiveIntensity: 0.5 });
-    this.headLampMaterials.push(headlightMat);
-
-    // Black mask panel wrapping the windscreen and destination display.
-    const mask = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.9, 0.1), m.black);
-    mask.position.set(0, 2.62, frontZ + 0.02);
-    car.add(mask);
-    this.cabShells.push(mask);
-
-    const windscreen = new THREE.Mesh(new THREE.BoxGeometry(2.18, 1.14, 0.06), m.glass);
-    windscreen.position.set(0, 2.36, frontZ + 0.08);
-    windscreen.rotation.x = -0.08;
-    car.add(windscreen);
-
-    // Destination roller-blind display above the windscreen.
-    const destination = new THREE.Mesh(new THREE.PlaneGeometry(1.95, 0.4), new THREE.MeshBasicMaterial({
-      map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 640, height: 128, bg: '#111', fg: '#ffb900' }),
-      side: THREE.DoubleSide
-    }));
-    destination.position.set(0, 3.06, frontZ + 0.09);
-    car.add(destination);
-
-    // Lower bumper with two headlight clusters and amber indicators.
-    const bumper = new THREE.Mesh(new THREE.BoxGeometry(2.52, 0.5, 0.24), m.skirt);
-    bumper.position.set(0, 0.78, frontZ + 0.02);
-    car.add(bumper);
-    this.cabShells.push(bumper);
-    for (const side of [-1, 1] as const) {
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.24, 0.08), headlightMat);
-      head.position.set(side * 0.92, 1.02, frontZ + 0.1);
-      car.add(head);
-      const indicator = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.07), indicatorMat);
-      indicator.position.set(side * 1.16, 1.0, frontZ + 0.08);
-      car.add(indicator);
-      // Wing mirror on a stalk.
-      const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5, 8), m.black);
-      stalk.rotation.z = Math.PI / 2;
-      stalk.position.set(side * 1.5, 2.66, frontZ - 0.35);
-      car.add(stalk);
-      const mirror = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.42, 0.24), m.black);
-      mirror.position.set(side * 1.76, 2.66, frontZ - 0.35);
-      car.add(mirror);
-    }
-    // Windscreen wiper.
-    const wiper = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.04, 0.04), m.black);
-    wiper.position.set(-0.2, 1.86, frontZ + 0.12);
-    wiper.rotation.z = 0.32;
-    car.add(wiper);
-
-    // Driver dashboard and passenger next-stop display, hidden in cab view.
-    const dashboard = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.6, 0.72), m.black);
-    dashboard.position.set(0, 1.44, frontZ - 0.62);
-    car.add(dashboard);
-    const nextStopDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.75, 0.44), displayMaterial);
-    nextStopDisplay.position.set(0, 2.74, frontZ - 1.35);
-    nextStopDisplay.rotation.y = Math.PI;
-    car.add(nextStopDisplay);
-    this.cabDisplays.push(nextStopDisplay);
-  }
-
-  // Rear engine bay with tail-light clusters (night-switchable) and a bumper.
-  private addBusRearEnd(
-    car: THREE.Group,
-    m: ReturnType<ProceduralTransitVehicleFactory['makeBusMaterials']>,
-    rearZ: number
-  ): void {
-    const tailLampMat = new THREE.MeshStandardMaterial({ color: 0x8c1f1c, emissive: 0x7a1512, emissiveIntensity: 0.35 });
-    this.tailLampMaterials.push(tailLampMat);
-
-    const engineHatch = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.05, 0.12), m.skirt);
-    engineHatch.position.set(0, 1.2, rearZ - 0.02);
-    car.add(engineHatch);
-    const rearWindow = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.7, 0.06), m.glass);
-    rearWindow.position.set(0, 2.5, rearZ - 0.04);
-    car.add(rearWindow);
-    const bumper = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.46, 0.22), m.skirt);
-    bumper.position.set(0, 0.72, rearZ - 0.02);
-    car.add(bumper);
-    for (const side of [-1, 1] as const) {
-      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.5, 0.07), tailLampMat);
-      tail.position.set(side * 1.0, 1.02, rearZ - 0.06);
-      car.add(tail);
-    }
-  }
-
-  // Flat connection ring at an articulation joint; the bellows spans the gap.
-  private addBusGangwayRing(
-    car: THREE.Group,
-    m: ReturnType<ProceduralTransitVehicleFactory['makeBusMaterials']>,
-    jointZ: number,
-    sign: 1 | -1
-  ): void {
-    const ring = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.5, 0.1), m.rubber);
-    ring.position.set(0, 1.86, jointZ + sign * 0.02);
-    car.add(ring);
-    const aperture = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.0, 0.14), m.black);
-    aperture.position.set(0, 1.7, jointZ + sign * 0.03);
-    car.add(aperture);
-  }
-
-  // Rubber accordion bellows bridging the two articulated sections at the centre
-  // turntable (z=0). Added to the root so it stays over the bend point.
-  private addBusBellows(m: ReturnType<ProceduralTransitVehicleFactory['makeBusMaterials']>): void {
-    const bellows = new THREE.Mesh(new THREE.BoxGeometry(2.42, 2.54, 0.72), m.rubber);
-    bellows.position.set(0, 1.86, 0);
-    bellows.castShadow = true;
-    this.root.add(bellows);
-    this.passengerShells.push(bellows);
-    // Accordion ribs for the folded-rubber look.
-    for (const z of [-0.24, 0, 0.24]) {
-      const rib = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2.62, 0.06), m.black);
-      rib.position.set(0, 1.86, z);
-      this.root.add(rib);
-    }
-    // Low turntable plate at floor level between the sections.
-    const plate = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.1, 24), m.metal);
-    plate.position.set(0, 0.62, 0);
-    this.root.add(plate);
+  // Mercedes-Benz Citaro city bus. Rendering is blueprint-driven (see
+  // blueprint/bus/); this stays as the procedural fallback entry point and
+  // simply builds the default SSB/VVS config.
+  createBusVehicle(): VehicleInstance {
+    return buildBusVehicle(defaultBusBlueprint, this.context);
   }
 
   createSBahnVehicle(): VehicleInstance {
@@ -2258,33 +1831,14 @@ class ProceduralTransitVehicleFactory {
     return this.createVehicleInstance();
   }
 
-  // Real light throw at night: a headlight beam pooling on the track ahead
-  // (local +z leads in travel direction) and a red glow behind the last cab.
-  // Intensities start at 0; setExteriorLightsOn switches them with the lamps.
+  // Shared part builders live in ./parts.ts; these thin wrappers keep the
+  // factory's collector fields as the single place part output is gathered.
   private addExteriorLightThrow(halfLengthM: number, beamHeightM: number): void {
-    const headBeam = new THREE.SpotLight(0xfff3d0, 0, 80, 0.4, 0.6, 1.8);
-    headBeam.name = 'Exterior lamp headlight beam';
-    headBeam.position.set(0, beamHeightM, halfLengthM - 0.1);
-    headBeam.target.name = 'Exterior lamp headlight target';
-    headBeam.target.position.set(0, 0.15, halfLengthM + 26);
-    this.root.add(headBeam, headBeam.target);
-    this.headlightBeams.push(headBeam);
-
-    const tailGlow = new THREE.PointLight(0xd42020, 0, 16, 2);
-    tailGlow.name = 'Exterior lamp tail glow';
-    tailGlow.position.set(0, 0.9, -(halfLengthM + 1.4));
-    this.root.add(tailGlow);
-    this.tailGlows.push(tailGlow);
+    addExteriorLightThrow(this.root, this.lightRig, halfLengthM, beamHeightM);
   }
 
-  // Warm cabin light so the interior stays readable in night/dawn views;
-  // switched together with the exterior lamps and off in daylight.
   private addCabinLight(parent: THREE.Object3D, y: number, z = 0): void {
-    const light = new THREE.PointLight(0xfff4dc, 0, 11, 1.8);
-    light.name = 'Cabin light';
-    light.position.set(0, y, z);
-    parent.add(light);
-    this.cabinLights.push(light);
+    addCabinLight(this.lightRig, parent, y, z);
   }
 
   private addSlidingVehicleDoor(
@@ -2297,32 +1851,7 @@ class ProceduralTransitVehicleFactory {
     width: number,
     height: number
   ): void {
-    const side = Math.sign(x) || 1;
-    const opening = new THREE.Mesh(new THREE.PlaneGeometry(width, height), openingMaterial);
-    opening.position.set(x + side * 0.055, 1.75, z);
-    opening.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
-    car.add(opening);
-    for (const direction of [-1, 1] as const) {
-      const closedZ = z + direction * width * 0.24;
-      const leaf = new THREE.Group();
-      leaf.position.z = closedZ;
-      for (const edge of [-1, 1] as const) {
-        const stile = new THREE.Mesh(new THREE.BoxGeometry(0.125, height - 0.08, width * 0.075), doorMaterial);
-        stile.position.set(x + side * 0.03, 1.75, edge * width * 0.205);
-        leaf.add(stile);
-      }
-      const crystal = new THREE.Mesh(new THREE.BoxGeometry(0.082, height * 0.8, width * 0.37), glassMaterial);
-      crystal.position.set(x + side * 0.018, 1.9, 0);
-      leaf.add(crystal);
-      const frameTop = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.16, width * 0.48), doorMaterial);
-      frameTop.position.set(x + side * 0.032, 2.64, 0);
-      leaf.add(frameTop);
-      const frameBottom = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.18, width * 0.48), doorMaterial);
-      frameBottom.position.set(x + side * 0.032, 0.88, 0);
-      leaf.add(frameBottom);
-      car.add(leaf);
-      this.doors.push({ group: leaf, closedZ, direction });
-    }
+    addSlidingVehicleDoor(this.doors, car, x, z, doorMaterial, glassMaterial, openingMaterial, width, height);
   }
 
   private addOpaqueTransitInterior(
@@ -2332,28 +1861,7 @@ class ProceduralTransitVehicleFactory {
     material: THREE.Material,
     doorZones: (side: -1 | 1) => number[]
   ): void {
-    for (const side of [-1, 1] as const) {
-      const exclusions = doorZones(side).map((center) => ({ start: center - 0.92, end: center + 0.92 })).sort((a, b) => a.start - b.start);
-      let cursor = -length / 2;
-      for (const exclusion of [...exclusions, { start: length / 2, end: length / 2 }]) {
-        const end = Math.min(length / 2, exclusion.start);
-        if (end - cursor > 0.18) {
-          const lowerWall = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.68, end - cursor), material);
-          lowerWall.position.set(side * halfWidth, 1.42, (cursor + end) / 2);
-          car.add(lowerWall);
-        }
-        cursor = Math.max(cursor, exclusion.end);
-      }
-      const header = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.38, length), material);
-      header.position.set(side * (halfWidth - 0.03), 3.02, 0);
-      car.add(header);
-      for (let z = -length / 2 + 1.2; z < length / 2 - 0.6; z += 2.05) {
-        if (exclusions.some((zone) => z >= zone.start && z <= zone.end)) continue;
-        const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.0, 0.1), material);
-        mullion.position.set(side * halfWidth, 2.38, z);
-        car.add(mullion);
-      }
-    }
+    addOpaqueTransitInterior(car, length, halfWidth, material, doorZones);
   }
 
   private addTangoCar(
