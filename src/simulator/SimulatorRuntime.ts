@@ -10,6 +10,8 @@ import type { SimulatorSnapshotStore } from '../features/simulation/SimulatorSna
 import { InputState } from '../engine/runtime/InputState';
 import { RuntimeMachine } from '../engine/runtime/RuntimeMachine';
 import { worldKey } from '../engine/runtime/worldKey';
+import { TransitEngine } from '../engine/core/TransitEngine';
+import { LegacyWorldSystem } from '../engine/core/LegacyWorldSystem';
 
 /** Everything needed to (re)build the world and initialize the simulator. */
 export type RouteSession = {
@@ -57,6 +59,8 @@ export class SimulatorRuntime implements SimulatorCommands {
   private readonly machine = new RuntimeMachine();
   private readonly simulator = new SimulatorClient();
   private world: TransitWorld | null = null;
+  // Owns the render + system loop; wraps the current world via LegacyWorldSystem.
+  private engine: TransitEngine | null = null;
   private session: RouteSession | null = null;
   private journeyLegs: DemoRoute[] = [];
   private journeyLegIndex = 0;
@@ -81,7 +85,7 @@ export class SimulatorRuntime implements SimulatorCommands {
       onAutoTimeHour: (hour) => this.world?.setTimeOfDay(hour),
       onState: (state, dt) => {
         this.world?.updateTrain(state.distanceM, state.doorsOpen, dt, state.nextStation);
-        this.world?.render();
+        this.engine?.update(dt, 1);
         this.snapshots.update(state);
       },
       onTerminalTurnaround: () => this.advanceJourneyLeg()
@@ -131,7 +135,8 @@ export class SimulatorRuntime implements SimulatorCommands {
   private buildWorld(session: RouteSession): void {
     this.session = session;
     this.activeRouteHandler?.(session.route);
-    this.world?.dispose();
+    // Disposing the engine disposes the previous world (via LegacyWorldSystem).
+    this.engine?.dispose();
     this.container.replaceChildren();
     this.world = new TransitWorld(
       createRouteCurve(session.route),
@@ -141,6 +146,8 @@ export class SimulatorRuntime implements SimulatorCommands {
       resolveTransportModeDefinition(routeMode(session.route), session.city.transportModes)
     );
     this.world.mount(this.container);
+    this.engine = new TransitEngine(this.world.scene, this.world.camera, this.world.renderer);
+    this.engine.register(new LegacyWorldSystem(this.world));
     this.applyWorldSettings(session);
   }
 
@@ -302,7 +309,8 @@ export class SimulatorRuntime implements SimulatorCommands {
     this.photoActive = false;
     this.loop.stop();
     this.loop.setState(null);
-    this.world?.dispose();
+    this.engine?.dispose();
+    this.engine = null;
     this.world = null;
     this.container.replaceChildren();
     document.body.classList.remove('photo-mode', 'photo-capture');
@@ -318,7 +326,7 @@ export class SimulatorRuntime implements SimulatorCommands {
     const state = this.loop.currentState();
     if (!state || !this.world) return;
     this.world.updateTrain(state.distanceM, state.doorsOpen, 1 / 60, state.nextStation);
-    this.world.render();
+    this.engine?.update(1 / 60, 1);
   }
 }
 
