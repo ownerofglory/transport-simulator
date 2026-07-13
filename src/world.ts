@@ -84,15 +84,17 @@ export class TransitWorld {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.setAnimationLoop(null);
 
-    if (route.elevationDatumM !== undefined) this.terrain = new TerrainSampler(route.elevationDatumM);
-    const landmarkLayer = this.city?.landmarkFactory?.(
-      this.routeGeo,
-      (lat, lon) => this.projectGeo(lat, lon),
-      (lat, lon) => this.terrain?.sample(lat, lon) ?? Promise.resolve(0)
-    );
-    this.landmarkGroup = landmarkLayer?.group ?? new THREE.Group();
-    this.landmarkExclusions = landmarkLayer?.zones ?? [];
-    this.scene.add(this.landmarkGroup);
+    // Terrain sampling, curated landmarks, and OSM streaming/visibility.
+    this.environment = new EnvironmentSystem({
+      scene: this.scene,
+      route: this.route,
+      city: this.city,
+      guidewayKind: this.guidewayKind,
+      routeGeo: this.routeGeo,
+      projectGeo: (lat, lon) => this.projectGeo(lat, lon),
+      surfaceHeightAt: (t) => this.surfaceHeightAt(t),
+      nearestSelectedGeoPoint: (lat, lon, points) => this.nearestSelectedGeoPoint(lat, lon, points)
+    });
 
     // Place the camera near the route start so cities that use a regional
     // coordinate origin (e.g. Bodensee) don't produce a long fly-in over
@@ -105,7 +107,7 @@ export class TransitWorld {
     // Scene layers build their meshes from shared route geometry; TransitWorld
     // coordinates them and owns the vehicle, scenery streaming, and frame loop.
     const layerContext = this.createLayerContext();
-    this.ground = new RouteLayer(layerContext).build();
+    const ground = new RouteLayer(layerContext).build();
     new GuidewayLayer(layerContext).build();
     new StationLayer(layerContext).build();
     this.activeVehicle = new ActiveVehicleSystem({
@@ -121,20 +123,7 @@ export class TransitWorld {
     this.activeVehicle.updateExteriorLights(this.lightingSystem.daylightFactor());
     this.opposingLayer = new OpposingTrafficLayer(layerContext);
     this.opposingLayer.build(this.activeVehicle.root);
-    // Ferry routes are on open water — streaming land buildings from surrounding hills
-    // at their real elevation (often 200–300 m above the lake) produces floating boxes.
-    const osmEnabled = this.guidewayKind !== 'ferry' && this.routeGeoPoints().length >= 2;
-    if (osmEnabled) {
-      this.osmScene = new OsmSceneStreamer(
-        this.scene,
-        (lat, lon) => this.projectGeo(lat, lon),
-        (lat, lon) => this.scenerySurfaceHeight(lat, lon),
-        this.landmarkExclusions
-      );
-      this.osmScene.update(this.geoPointAt(0));
-    } else if (this.guidewayKind !== 'ferry') {
-      new LandmarkLayer(layerContext).build();
-    }
+    this.environment.buildScenery(layerContext, ground, this.geoPointAt(0));
     this.scene.add(this.seasonalObjects);
 
     window.addEventListener('resize', this.onRendererResizeBound);
@@ -222,10 +211,8 @@ export class TransitWorld {
     const normal = this.normalAt(t);
     const position = this.curve.getPointAt(t).add(normal.clone().multiplyScalar(this.activeLaneOffsetM));
 
-    this.osmScene?.update(this.geoPointAt(t));
-    if (this.ground) this.ground.visible = !underground;
-    if (this.osmScene) this.osmScene.group.visible = !underground;
-    this.landmarkGroup.visible = !underground;
+    this.environment.updateStreaming(this.geoPointAt(t));
+    this.environment.setUnderground(underground);
     this.activeVehicle.updateDoors(doorsOpen, deltaSeconds);
     this.activeVehicle.updateInteriorDisplay(nextStation, doorsOpen);
     this.activeVehicle.place(distanceM);
