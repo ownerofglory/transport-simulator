@@ -1111,86 +1111,152 @@ class ProceduralTransitVehicleFactory {
     return this.createVehicleInstance();
   }
 
+  // Historic 1929 Stuttgart Standseilbahn car. Its defining feature is the
+  // terraced body: three teak passenger compartments stepped up toward the uphill
+  // end so the floors stay usable on the incline. Runs on a funicular truck with a
+  // central cable grip.
   createSeilbahnVehicle(): VehicleInstance {
     const car = new THREE.Group();
-    car.name = 'Articulated car 1929 teak funicular';
+    car.name = 'Historic Stuttgart funicular car (1929)';
     car.userData.centerOffsetM = 0;
     const teak = new THREE.MeshStandardMaterial({ color: 0x7b4b2a, roughness: 0.74 });
     const mahogany = new THREE.MeshStandardMaterial({ color: 0x4f301f, roughness: 0.82 });
     const brass = new THREE.MeshStandardMaterial({ color: 0xc7a04c, roughness: 0.34, metalness: 0.72 });
     const cream = new THREE.MeshStandardMaterial({ color: 0xd9ccb1, roughness: 0.88 });
-    const glass = new THREE.MeshStandardMaterial({ color: 0xc2e0e7, transparent: true, opacity: 0.38, roughness: 0.08 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(2.24, 2.72, 9.9), teak);
-    body.position.y = 1.67;
-    car.add(body);
-    this.passengerShells.push(body);
-    for (const side of [-1, 1] as const) {
-      const lowerBelt = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.32, 9.5), mahogany);
-      lowerBelt.position.set(side * 1.08, 1.12, 0);
-      car.add(lowerBelt);
-      const header = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.34, 9.5), mahogany);
-      header.position.set(side * 1.08, 2.98, 0);
-      car.add(header);
-      for (const z of [-3.7, -1.85, 0, 1.85, 3.7]) {
-        const window = new THREE.Mesh(new THREE.BoxGeometry(0.075, 1.22, 1.28), glass);
-        window.position.set(side * 1.13, 2.06, z);
-        car.add(window);
-        const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.42, 0.12), mahogany);
-        mullion.position.set(side * 1.08, 2.04, z + 0.92);
-        car.add(mullion);
-      }
-    }
-    for (const end of [-1, 1] as const) {
-      const windscreen = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.24, 0.075), glass);
-      windscreen.position.set(0, 2.04, end * 4.94);
-      car.add(windscreen);
-      const endFrame = new THREE.Mesh(new THREE.BoxGeometry(2.02, 0.18, 0.12), mahogany);
-      endFrame.position.set(0, 3.01, end * 4.88);
-      car.add(endFrame);
-    }
-    const floorBase = new THREE.Mesh(new THREE.BoxGeometry(2.04, 0.12, 9.05), mahogany);
-    floorBase.position.y = 0.9;
-    car.add(floorBase);
-    for (let z = -4.15; z <= 4.15; z += 0.48) {
-      const plank = new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.028, 0.28), teak);
-      plank.position.set(0, 0.98, z);
-      car.add(plank);
-    }
-    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.04, 0.08, 8.9), cream);
-    ceiling.position.y = 3.02;
-    car.add(ceiling);
-    this.addOpaqueTransitInterior(car, 8.9, 1.0, mahogany, () => []);
-    for (const side of [-1, 1] as const) {
-      const benchBase = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.18, 8.15), mahogany);
-      benchBase.position.set(side * 0.6, 1.14, 0);
-      car.add(benchBase);
-      const benchBack = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.8, 8.0), teak);
-      benchBack.position.set(side * 0.77, 1.54, 0);
-      car.add(benchBack);
-      for (const z of [-3.1, -1.5, 0, 1.5, 3.1]) {
-        const divider = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.76, 0.06), brass);
-        divider.position.set(side * 0.7, 1.48, z);
-        car.add(divider);
-      }
-    }
-    for (const x of [-0.78, 0, 0.78]) {
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 2.0, 10), brass);
-      pole.position.set(x, 1.98, 0);
-      car.add(pole);
-    }
-    const handrail = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 7.9, 10), brass);
-    handrail.rotation.z = Math.PI / 2;
-    handrail.position.set(0, 2.6, 0);
-    car.add(handrail);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(2.54, 0.24, 10.2), mahogany);
-    roof.position.y = 3.14;
-    car.add(roof);
-    this.passengerShells.push(roof);
-    this.addCabinLight(car, 2.8);
+    const glass = new THREE.MeshStandardMaterial({ color: 0xc2e0e7, transparent: true, opacity: 0.4, roughness: 0.08, side: THREE.DoubleSide });
+    const iron = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.5, metalness: 0.4 });
+    const lampMat = new THREE.MeshStandardMaterial({ color: 0xfff2cf, emissive: 0xffe6a8, emissiveIntensity: 0.7 });
+    const headlightMat = new THREE.MeshStandardMaterial({ color: 0xfff7e0, emissive: 0xfff0c0, emissiveIntensity: 0.5 });
     this.glassMaterial = glass;
-    this.trainHalfLengthM = 5;
+    this.headLampMaterials.push(headlightMat);
+
+    // Three compartments stepped up toward +z (uphill). Each carries its own body,
+    // glazing, roof, plank floor, benches and a brass ceiling lamp.
+    const compartments = [
+      { center: -3.25, floorY: 0.78 },
+      { center: 0, floorY: 1.2 },
+      { center: 3.25, floorY: 1.62 }
+    ];
+    const compLen = 3.05;
+    const destinationMap = makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 640, height: 128, bg: '#3a2417', fg: '#f4d79a' });
+
+    compartments.forEach((comp, index) => {
+      const bodyY = comp.floorY + 1.16;
+      const body = new THREE.Mesh(new THREE.BoxGeometry(2.24, 2.36, compLen), teak);
+      body.position.set(0, bodyY, comp.center);
+      body.castShadow = true;
+      car.add(body);
+      this.passengerShells.push(body);
+
+      // Overhanging mahogany roof stepped to this compartment's height.
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.2, compLen + 0.28), mahogany);
+      roof.position.set(0, comp.floorY + 2.46, comp.center);
+      car.add(roof);
+      this.passengerShells.push(roof);
+
+      for (const side of [-1, 1] as const) {
+        const lowerBelt = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.3, compLen), mahogany);
+        lowerBelt.position.set(side * 1.08, comp.floorY + 0.32, comp.center);
+        car.add(lowerBelt);
+        const header = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.3, compLen), mahogany);
+        header.position.set(side * 1.08, comp.floorY + 2.18, comp.center);
+        car.add(header);
+        for (const dz of [-0.75, 0.75]) {
+          const window = new THREE.Mesh(new THREE.BoxGeometry(0.075, 1.16, 1.2), glass);
+          window.position.set(side * 1.12, comp.floorY + 1.26, comp.center + dz);
+          car.add(window);
+        }
+        // Teak mullions framing the glazing.
+        for (const dz of [-1.45, 0, 1.45]) {
+          const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.34, 0.12), mahogany);
+          mullion.position.set(side * 1.08, comp.floorY + 1.26, comp.center + dz);
+          car.add(mullion);
+        }
+      }
+
+      // Plank floor, longitudinal benches, brass poles and a ceiling lamp.
+      for (let z = comp.center - 1.35; z <= comp.center + 1.35; z += 0.46) {
+        const plank = new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.028, 0.3), teak);
+        plank.position.set(0, comp.floorY + 0.07, z);
+        car.add(plank);
+      }
+      for (const side of [-1, 1] as const) {
+        const benchBase = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.16, compLen - 0.5), mahogany);
+        benchBase.position.set(side * 0.6, comp.floorY + 0.34, comp.center);
+        car.add(benchBase);
+        const benchBack = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.72, compLen - 0.5), teak);
+        benchBack.position.set(side * 0.76, comp.floorY + 0.72, comp.center);
+        car.add(benchBack);
+      }
+      for (const dz of [-0.95, 0.95]) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 1.95, 10), brass);
+        pole.position.set(0.78, comp.floorY + 1.05, comp.center + dz);
+        car.add(pole);
+      }
+      const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.05, 12), brass);
+      lampBase.position.set(0, comp.floorY + 2.3, comp.center);
+      car.add(lampBase);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 10), lampMat);
+      lamp.position.set(0, comp.floorY + 2.18, comp.center);
+      car.add(lamp);
+
+      // Riser wall closing the step between this compartment and the next.
+      if (index < compartments.length - 1) {
+        const next = compartments[index + 1];
+        const riser = new THREE.Mesh(new THREE.BoxGeometry(2.24, next.floorY - comp.floorY + 2.36, 0.12), mahogany);
+        riser.position.set(0, (bodyY + next.floorY + 1.16) / 2, (comp.center + next.center) / 2);
+        car.add(riser);
+      }
+    });
+
+    // End cabs: raked windscreen, mahogany frame, a lit route board and a brass
+    // headlamp — the downhill/uphill faces of the outer compartments.
+    const ends = [
+      { z: compartments[0].center - compLen / 2, floorY: compartments[0].floorY, dir: -1 as const },
+      { z: compartments[2].center + compLen / 2, floorY: compartments[2].floorY, dir: 1 as const }
+    ];
+    for (const end of ends) {
+      const windscreen = new THREE.Mesh(new THREE.BoxGeometry(1.82, 1.2, 0.075), glass);
+      windscreen.position.set(0, end.floorY + 1.3, end.z + end.dir * 0.04);
+      car.add(windscreen);
+      const board = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.3), new THREE.MeshBasicMaterial({ map: destinationMap, side: THREE.DoubleSide }));
+      board.position.set(0, end.floorY + 2.16, end.z + end.dir * 0.16);
+      if (end.dir < 0) board.rotation.y = Math.PI;
+      car.add(board);
+      this.cabDisplays.push(board);
+      const headlamp = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.1, 14), headlightMat);
+      headlamp.rotation.x = Math.PI / 2;
+      headlamp.position.set(0, end.floorY + 0.55, end.z + end.dir * 0.14);
+      car.add(headlamp);
+      const buffer = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.24, 0.16), iron);
+      buffer.position.set(0, end.floorY + 0.1, end.z + end.dir * 0.12);
+      car.add(buffer);
+    }
+
+    // Funicular running gear: an inclined chassis beam, two rail-wheel axles and a
+    // central cable grip clamping onto the haulage rope.
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.2, 9.0), iron);
+    chassis.position.set(0, 0.55, 0);
+    chassis.rotation.x = -0.14; // parallel to the mean grade so it reads as a funicular truck.
+    car.add(chassis);
+    for (const axle of [{ z: -3.3, y: 0.32 }, { z: 3.3, y: 1.16 }]) {
+      for (const x of [-0.92, 0.92]) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.12, 18), iron);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(x, axle.y, axle.z);
+        car.add(wheel);
+      }
+    }
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.34, 0.7), iron);
+    grip.position.set(0, 0.42, 0);
+    car.add(grip);
+
+    this.addOpaqueTransitInterior(car, 9.4, 1.0, mahogany, () => []);
+    this.addCabinLight(car, compartments[1].floorY + 1.9);
+    this.trainHalfLengthM = 5.4;
     this.cars.push(car);
     this.root.add(car);
+    this.addExteriorLightThrow(this.trainHalfLengthM, 1.0);
     return this.createVehicleInstance();
   }
 
