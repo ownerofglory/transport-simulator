@@ -1,9 +1,6 @@
 import * as THREE from 'three';
 import { makeLabelTexture } from './labels';
-import type { LandmarkZone } from './landmarks';
-import { OsmSceneStreamer } from './osm-scene';
 import type { DemoRoute } from './route';
-import { TerrainSampler } from './terrain';
 import type { GuidewayKind, TransportModeDefinition } from './domain/transport';
 import type { Season } from './app/types';
 import type { CityDefinition } from './cities';
@@ -14,11 +11,11 @@ import { PhotoSystem, type CinematicPreset } from './engine/systems/PhotoSystem'
 
 export type { CinematicPreset };
 import { ActiveVehicleSystem } from './engine/systems/ActiveVehicleSystem';
+import { EnvironmentSystem } from './engine/systems/EnvironmentSystem';
 import type { WorldLayerContext } from './world/layers/WorldLayerContext';
 import { RouteLayer } from './world/layers/RouteLayer';
 import { GuidewayLayer } from './world/layers/GuidewayLayer';
 import { StationLayer } from './world/layers/StationLayer';
-import { LandmarkLayer } from './world/layers/LandmarkLayer';
 import { OpposingTrafficLayer } from './world/layers/OpposingTrafficLayer';
 type GeoPoint = { lat: number; lon: number };
 
@@ -39,13 +36,10 @@ export class TransitWorld {
   private opposingLayer: OpposingTrafficLayer | null = null;
   // The active vehicle (placement, doors, interior display, visibility, lamps).
   private activeVehicle!: ActiveVehicleSystem;
-  private ground: THREE.Mesh | null = null;
+  // Terrain sampling, curated landmarks, OSM streaming, and scenery visibility.
+  private environment!: EnvironmentSystem;
   private readonly routeGeo: GeoPoint[];
   private readonly routeGeoDistancesM: number[];
-  private readonly landmarkGroup: THREE.Group;
-  private readonly landmarkExclusions: LandmarkZone[];
-  private osmScene: OsmSceneStreamer | null = null;
-  private terrain: TerrainSampler | null = null;
   // Sun/ambient/hemisphere lighting, time-of-day, season lighting, sky + fog.
   private readonly lightingSystem = new LightingSystem(this.scene, this.renderer);
   private currentSeason: Season = 'summer';
@@ -253,15 +247,12 @@ export class TransitWorld {
     this.cameraSystem.dispose();
     this.lightingSystem.dispose();
     this.photoSystem.dispose();
-    this.osmScene?.dispose();
+    this.environment.dispose();
     this.activeVehicle.dispose();
     // Free geometries/materials/textures built by the scene layers so switching
     // routes does not leak GPU resources.
     this.disposeSceneGraph();
     this.opposingLayer = null;
-    this.ground = null;
-    this.osmScene = null;
-    this.terrain = null;
     this.renderer.domElement.remove();
     this.renderer.dispose();
   }
@@ -511,18 +502,6 @@ export class TransitWorld {
     const { index, fraction } = this.geoSegmentAt(t);
     const next = Math.min(index + 1, heights.length - 1);
     return THREE.MathUtils.lerp(heights[index] ?? heights.at(-1) ?? 0, heights[next] ?? heights.at(-1) ?? 0, fraction);
-  }
-
-  private async scenerySurfaceHeight(lat: number, lon: number): Promise<number> {
-    const sampledHeight = await (this.terrain?.sample(lat, lon) ?? Promise.resolve(0));
-    if (this.routeGeo.length < 2) return sampledHeight;
-    const nearest = this.nearestSelectedGeoPoint(lat, lon, this.routeGeo);
-    const innerCorridorM = this.guidewayKind === 's-bahn' ? 28 : this.guidewayKind === 'bus' ? 20 : 12;
-    const outerCorridorM = this.guidewayKind === 's-bahn' ? 110 : this.guidewayKind === 'bus' ? 80 : 52;
-    if (nearest.distanceM >= outerCorridorM) return sampledHeight;
-    const routeSurfaceHeight = this.surfaceHeightAt(nearest.t);
-    const blend = THREE.MathUtils.smoothstep(nearest.distanceM, innerCorridorM, outerCorridorM);
-    return THREE.MathUtils.lerp(routeSurfaceHeight, sampledHeight, blend);
   }
 
   private makeRouteStrip(
