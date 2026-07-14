@@ -34,12 +34,14 @@ export function RouteDiagramPanel({
   }, [route, routes, journeyLegs]);
 
   useEffect(() => {
-    const activeIndex = activeRoute ? routes.findIndex((candidate) => candidate.id === activeRoute.id) : -1;
+    // Catalog routes are alternatives, not consecutive segments. Only a
+    // transfer journey needs a cumulative offset in the combined schematic.
+    const activeIndex = activeRoute && journeyLegs ? journeyLegs.findIndex((candidate) => candidate.id === activeRoute.id) : -1;
     const distanceOffset = activeIndex > 0
-      ? routes.slice(0, activeIndex).reduce((total, candidate) => total + candidate.routeLengthM, 0)
+      ? journeyLegs!.slice(0, activeIndex).reduce((total, candidate) => total + candidate.routeLengthM, 0)
       : 0;
     const stationOffset = activeIndex > 0
-      ? routes.slice(0, activeIndex).reduce((total, candidate) => total + candidate.stations.length, 0)
+      ? journeyLegs!.slice(0, activeIndex).reduce((total, candidate) => total + candidate.stations.length, 0)
       : 0;
     diagram.current?.update({
       distanceM: snapshot.distanceM + distanceOffset,
@@ -47,7 +49,7 @@ export function RouteDiagramPanel({
       stationIndex: snapshot.stationIndex + stationOffset,
       speedMps: snapshot.speedMps
     });
-  }, [snapshot, activeRoute, routes]);
+  }, [snapshot, activeRoute, journeyLegs]);
 
   return <section ref={el} className="route-diagram" />;
 }
