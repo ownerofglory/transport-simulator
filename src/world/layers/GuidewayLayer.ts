@@ -5,6 +5,8 @@ import type { WorldLayerContext } from './WorldLayerContext';
 
 /** Builds the running way (rails, bus street, ferry channel, guideway) and tunnels. */
 export class GuidewayLayer {
+  /** All meshes go under this group; the world adds it to the scene. */
+  readonly root = new THREE.Group();
   // Per-guideway track builders; unmapped kinds fall back to rail track.
   private readonly trackBuilders = new BuilderRegistry<GuidewayKind, () => void>()
     .register('bus', () => this.buildBusRouteStreet())
@@ -33,14 +35,14 @@ export class GuidewayLayer {
     for (const trackOffset of [this.ctx.activeLaneOffsetM, this.ctx.oppositeLaneOffsetM]) {
       const ballast = new THREE.Mesh(this.ctx.makeTrackStrip(trackOffset, 4.5, trackSegments), ballastMaterial);
       ballast.receiveShadow = true;
-      this.ctx.scene.add(ballast);
+      this.root.add(ballast);
 
       for (const railOffset of [-this.ctx.railGaugeM / 2, this.ctx.railGaugeM / 2]) {
         const points = this.ctx.offsetCurvePoints(trackOffset + railOffset, trackSegments, 0.22);
         const railCurve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
         const rail = new THREE.Mesh(new THREE.TubeGeometry(railCurve, trackSegments, 0.08, 8), railMaterial);
         rail.castShadow = true;
-        this.ctx.scene.add(rail);
+        this.root.add(rail);
       }
     }
 
@@ -62,7 +64,7 @@ export class GuidewayLayer {
       sleepers.instanceMatrix.needsUpdate = true;
       sleepers.receiveShadow = true;
       sleepers.name = 'Curve-aligned sleepers';
-      this.ctx.scene.add(sleepers);
+      this.root.add(sleepers);
     }
   }
 
@@ -71,10 +73,10 @@ export class GuidewayLayer {
     const sleeper = new THREE.MeshStandardMaterial({ color: 0x493a2d, roughness: 0.9 });
     const rack = new THREE.MeshStandardMaterial({ color: 0x555b5e, metalness: 0.65, roughness: 0.4 });
     const ballast = new THREE.Mesh(this.ctx.makeTrackStrip(0, 3.1, 220), new THREE.MeshStandardMaterial({ color: 0x66645f, roughness: 1 }));
-    this.ctx.scene.add(ballast);
+    this.root.add(ballast);
     for (const offset of [-0.5, 0.5]) {
       const line = new THREE.CatmullRomCurve3(this.ctx.offsetCurvePoints(offset, 240, 0.22));
-      this.ctx.scene.add(new THREE.Mesh(new THREE.TubeGeometry(line, 240, 0.07, 7), rail));
+      this.root.add(new THREE.Mesh(new THREE.TubeGeometry(line, 240, 0.07, 7), rail));
     }
     const count = Math.max(80, Math.min(520, Math.floor(this.ctx.route.routeLengthM / (this.ctx.guidewayKind === 'zacke' ? 1.4 : 2.5))));
     const bars = new THREE.InstancedMesh(
@@ -94,12 +96,12 @@ export class GuidewayLayer {
     }
     bars.name = this.ctx.guidewayKind === 'zacke' ? 'Zacke center rack' : 'Seilbahn sleepers';
     bars.instanceMatrix.needsUpdate = true;
-    this.ctx.scene.add(bars);
+    this.root.add(bars);
     if (this.ctx.guidewayKind === 'seilbahn') {
       const cableCurve = new THREE.CatmullRomCurve3(this.ctx.offsetCurvePoints(0, 240, 0.34));
       const cable = new THREE.Mesh(new THREE.TubeGeometry(cableCurve, 240, 0.035, 5), rack);
       cable.name = 'Funicular haul cable';
-      this.ctx.scene.add(cable);
+      this.root.add(cable);
     }
   }
 
@@ -112,17 +114,17 @@ export class GuidewayLayer {
       const beam = new THREE.Mesh(this.ctx.makeRouteStrip(offset, 0.8, 0, 1, 420, 2.55), steel);
       beam.name = 'Schwebebahn running beam';
       beam.castShadow = true;
-      this.ctx.scene.add(beam);
+      this.root.add(beam);
 
       const rail = new THREE.Mesh(this.ctx.makeRouteStrip(offset, 0.16, 0, 1, 420, 2.84), darkSteel);
       rail.name = 'Schwebebahn upper guide rail';
-      this.ctx.scene.add(rail);
+      this.root.add(rail);
     }
 
     const maintenanceWalkway = new THREE.Mesh(this.ctx.makeRouteStrip(0, 4.2, 0, 1, 360, 2.2), deck);
     maintenanceWalkway.name = 'Schwebebahn maintenance deck';
     maintenanceWalkway.receiveShadow = true;
-    this.ctx.scene.add(maintenanceWalkway);
+    this.root.add(maintenanceWalkway);
 
     const supportCount = THREE.MathUtils.clamp(Math.ceil(this.ctx.route.routeLengthM / 18), 32, 1200);
     const columns = new THREE.InstancedMesh(new THREE.BoxGeometry(0.38, 1, 0.38), steel, supportCount * 2);
@@ -158,13 +160,13 @@ export class GuidewayLayer {
     columns.castShadow = true;
     columns.receiveShadow = true;
     columns.name = 'Schwebebahn support columns';
-    this.ctx.scene.add(columns);
+    this.root.add(columns);
 
     crossheads.instanceMatrix.needsUpdate = true;
     crossheads.castShadow = true;
     crossheads.receiveShadow = true;
     crossheads.name = 'Schwebebahn support crossheads';
-    this.ctx.scene.add(crossheads);
+    this.root.add(crossheads);
   }
 
   private buildBusRouteStreet(): void {
@@ -192,14 +194,14 @@ export class GuidewayLayer {
     street.name = `GTFS bus street corridor ${this.ctx.route.line}`;
     street.receiveShadow = true;
     street.renderOrder = 2;
-    this.ctx.scene.add(street);
+    this.root.add(street);
 
     for (const side of [-1, 1]) {
       const sidewalk = new THREE.Mesh(this.ctx.makeRouteStrip(side * 5.45, 2.2, 0, 1, 360, 0.24), sidewalkMaterial);
       sidewalk.name = `Bus corridor sidewalk ${side}`;
       sidewalk.receiveShadow = true;
       sidewalk.renderOrder = 1;
-      this.ctx.scene.add(sidewalk);
+      this.root.add(sidewalk);
     }
 
     const dashSpacingM = 16;
@@ -218,7 +220,7 @@ export class GuidewayLayer {
     markings.name = 'GTFS bus corridor center markings';
     markings.instanceMatrix.needsUpdate = true;
     markings.renderOrder = 3;
-    this.ctx.scene.add(markings);
+    this.root.add(markings);
   }
 
   private buildFerryRoutePath(): void {
@@ -239,7 +241,7 @@ export class GuidewayLayer {
     const path = new THREE.Mesh(this.ctx.makeRouteStrip(0, 10.5, 0, 1, 320, 0.18), channelMaterial);
     path.name = `Ferry route channel ${this.ctx.route.line}`;
     path.renderOrder = 1;
-    this.ctx.scene.add(path);
+    this.root.add(path);
 
     const wakeCount = THREE.MathUtils.clamp(Math.floor(this.ctx.route.routeLengthM / 55), 18, 220);
     const wakes = new THREE.InstancedMesh(new THREE.BoxGeometry(0.18, 0.04, 7.5), wakeMaterial, wakeCount);
@@ -256,7 +258,7 @@ export class GuidewayLayer {
     wakes.instanceMatrix.needsUpdate = true;
     wakes.renderOrder = 2;
     wakes.name = 'Ferry wake markers';
-    this.ctx.scene.add(wakes);
+    this.root.add(wakes);
   }
 
   private buildTunnels(): void {
@@ -291,18 +293,18 @@ export class GuidewayLayer {
       const segments = Math.max(24, (end - start) * 6);
       const lining = new THREE.Mesh(new THREE.TubeGeometry(tunnelCurve, segments, boreRadiusM, 18, false), liningMaterial);
       lining.name = 'OSM tunnel lining';
-      this.ctx.scene.add(lining);
+      this.root.add(lining);
 
       const lightPoints = tunnelCurve.getSpacedPoints(Math.max(4, end - start)).map((point) => point.add(new THREE.Vector3(0, 5.8, 0)));
       const lightCurve = new THREE.CatmullRomCurve3(lightPoints);
-      this.ctx.scene.add(new THREE.Mesh(new THREE.TubeGeometry(lightCurve, segments, 0.075, 5), lightMaterial));
+      this.root.add(new THREE.Mesh(new THREE.TubeGeometry(lightCurve, segments, 0.075, 5), lightMaterial));
 
       for (const t of [0, 1]) {
         const tangent = tunnelCurve.getTangentAt(t).normalize();
         const portal = new THREE.Mesh(new THREE.TorusGeometry(boreRadiusM, 0.5, 8, 24), portalMaterial);
         portal.position.copy(tunnelCurve.getPointAt(t));
         portal.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
-        this.ctx.scene.add(portal);
+        this.root.add(portal);
       }
     }
   }

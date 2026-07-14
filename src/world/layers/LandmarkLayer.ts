@@ -3,6 +3,8 @@ import type { WorldLayerContext } from './WorldLayerContext';
 
 /** Fallback procedural city blocks lining the route when OSM scenery is absent. */
 export class LandmarkLayer {
+  /** All meshes go under this group; the world adds it to the scene. */
+  readonly root = new THREE.Group();
   constructor(private readonly ctx: WorldLayerContext) {}
 
   build(): void {
@@ -29,7 +31,7 @@ export class LandmarkLayer {
         b.position.add(tangent.multiplyScalar((Math.random() - 0.5) * 70));
         b.castShadow = true;
         b.receiveShadow = true;
-        this.ctx.scene.add(b);
+        this.root.add(b);
       }
     }
   }

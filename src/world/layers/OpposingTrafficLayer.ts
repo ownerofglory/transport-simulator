@@ -5,6 +5,8 @@ import type { WorldLayerContext } from './WorldLayerContext';
 export class OpposingTrafficLayer {
   private readonly trains: { root: THREE.Group; cars: THREE.Group[]; phaseM: number }[] = [];
 
+  /** All meshes go under this group; the world adds it to the scene. */
+  readonly root = new THREE.Group();
   constructor(private readonly ctx: WorldLayerContext) {}
 
   /** Clones the player train into evenly-spaced oncoming services. */
@@ -33,7 +35,7 @@ export class OpposingTrafficLayer {
         cars,
         phaseM: ((index + 1) / (trainCount + 1)) * this.ctx.route.routeLengthM
       });
-      this.ctx.scene.add(root);
+      this.root.add(root);
     }
   }
 

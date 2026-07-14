@@ -6,6 +6,8 @@ import type { WorldLayerContext } from './WorldLayerContext';
 
 /** Builds platforms, canopies, signage, and stops for every guideway type. */
 export class StationLayer {
+  /** All meshes go under this group; the world adds it to the scene. */
+  readonly root = new THREE.Group();
   // Per-guideway station builders; unmapped kinds fall back to rail stations.
   private readonly builders = new BuilderRegistry<GuidewayKind, () => void>()
     .register('bus', () => this.buildBusStops())
@@ -50,7 +52,7 @@ export class StationLayer {
       stationGroup.name = `${underground ? 'Underground' : 'Surface'} station ${station.name}`;
       stationGroup.position.copy(p);
       stationGroup.rotation.y = yaw;
-      this.ctx.scene.add(stationGroup);
+      this.root.add(stationGroup);
 
       if (underground) {
         const ceiling = new THREE.Mesh(new THREE.BoxGeometry(27, 0.48, 82), undergroundWallMat);
@@ -213,17 +215,17 @@ export class StationLayer {
       stationGroup.name = `DB S-Bahn station ${station.name}`;
       stationGroup.position.copy(center);
       stationGroup.rotation.y = yaw;
-      this.ctx.scene.add(stationGroup);
+      this.root.add(stationGroup);
 
       for (const side of [-1, 1]) {
         const platform = new THREE.Mesh(this.ctx.makeRouteStrip(side * 6.25, 5.7, startT, endT, 72, 0.28), platformMaterial);
         platform.receiveShadow = true;
         platform.name = `S-Bahn 96cm platform ${station.name}`;
-        this.ctx.scene.add(platform);
+        this.root.add(platform);
         const edge = new THREE.Mesh(this.ctx.makeRouteStrip(side * 3.55, 0.35, startT, endT, 76, 0.31), edgeMaterial);
-        this.ctx.scene.add(edge);
+        this.root.add(edge);
         const tactile = new THREE.Mesh(this.ctx.makeRouteStrip(side * 3.95, 0.55, startT, endT, 76, 0.335), tactileMaterial);
-        this.ctx.scene.add(tactile);
+        this.root.add(tactile);
 
         for (const z of [-48, 0, 48]) {
           const sign = new THREE.Mesh(
@@ -300,7 +302,7 @@ export class StationLayer {
       sign.scale.set(7, 1.45, 1);
       group.add(sign);
       this.ctx.stationMarkers.push(sign);
-      this.ctx.scene.add(group);
+      this.root.add(group);
     }
   }
 
@@ -329,19 +331,19 @@ export class StationLayer {
       const platform = new THREE.Mesh(this.ctx.makeRouteStrip(0, 4.9, startT, endT, 42, -1.38), platformMaterial);
       platform.name = `Schwebebahn island platform ${station.name}`;
       platform.receiveShadow = true;
-      this.ctx.scene.add(platform);
+      this.root.add(platform);
 
       for (const edgeOffset of [-1.48, 1.48]) {
         const edge = new THREE.Mesh(this.ctx.makeRouteStrip(edgeOffset, 0.18, startT, endT, 44, -1.31), edgeMaterial);
         edge.name = `Schwebebahn platform edge ${station.name}`;
-        this.ctx.scene.add(edge);
+        this.root.add(edge);
       }
 
       const stationGroup = new THREE.Group();
       stationGroup.name = `Schwebebahn station hall ${station.name}`;
       stationGroup.position.copy(center);
       stationGroup.rotation.y = yaw;
-      this.ctx.scene.add(stationGroup);
+      this.root.add(stationGroup);
 
       const roof = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.22, 19.5), steel);
       roof.position.set(0, 0.95, 0);
@@ -456,7 +458,7 @@ export class StationLayer {
       const seat = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.18, 3.2), seatMaterial);
       seat.position.set(-1.25, 0.72, 2.8);
       group.add(seat);
-      this.ctx.scene.add(group);
+      this.root.add(group);
       this.ctx.stationMarkers.push(label);
     }
   }
@@ -505,7 +507,7 @@ export class StationLayer {
       sign.scale.set(7, 1.45, 1);
       group.add(sign);
       this.ctx.stationMarkers.push(sign);
-      this.ctx.scene.add(group);
+      this.root.add(group);
     }
   }
 }

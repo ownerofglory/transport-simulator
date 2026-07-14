@@ -68,7 +68,9 @@ export class EnvironmentSystem implements EngineSystem {
       );
       this.osmScene.update(initialGeoPoint);
     } else if (this.ctx.guidewayKind !== 'ferry') {
-      new LandmarkLayer(layerContext).build();
+      const landmarkLayer = new LandmarkLayer(layerContext);
+      landmarkLayer.build();
+      this.ctx.scene.add(landmarkLayer.root);
     }
   }
 

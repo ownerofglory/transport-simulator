@@ -9,7 +9,7 @@ import type { GeoPoint } from '../../landmarks';
  * so each layer can build its meshes without re-deriving route geometry.
  */
 export type WorldLayerContext = {
-  scene: THREE.Scene;
+  // The raw scene is intentionally not exposed; each layer owns a root group.
   curve: THREE.CatmullRomCurve3;
   route: DemoRoute;
   guidewayKind: GuidewayKind;

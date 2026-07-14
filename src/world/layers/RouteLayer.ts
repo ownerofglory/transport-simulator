@@ -3,6 +3,8 @@ import type { WorldLayerContext } from './WorldLayerContext';
 
 /** Builds the ground/terrain relief that follows the route corridor. */
 export class RouteLayer {
+  /** All meshes go under this group; the world adds it to the scene. */
+  readonly root = new THREE.Group();
   constructor(private readonly ctx: WorldLayerContext) {}
 
   /** Adds the ground plane to the scene and returns it (for visibility toggling). */
@@ -28,7 +30,7 @@ export class RouteLayer {
     ground.receiveShadow = true;
     ground.renderOrder = -100;
     ground.name = 'Untextured terrain relief';
-    this.ctx.scene.add(ground);
+    this.root.add(ground);
 
     if (this.ctx.routeGeoPoints().length >= 2) return ground;
 
@@ -43,7 +45,7 @@ export class RouteLayer {
       road.rotation.x = -Math.PI / 2;
       road.rotation.z = yaw + Math.PI / 2;
       road.position.set(p.x, 0.01, p.z);
-      this.ctx.scene.add(road);
+      this.root.add(road);
     }
     return ground;
   }

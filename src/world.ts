@@ -101,9 +101,13 @@ export class TransitWorld {
     // Scene layers build their meshes from shared route geometry; TransitWorld
     // coordinates them and owns the vehicle, scenery streaming, and frame loop.
     const layerContext = this.createLayerContext();
-    const ground = new RouteLayer(layerContext).build();
-    new GuidewayLayer(layerContext).build();
-    new StationLayer(layerContext).build();
+    const routeLayer = new RouteLayer(layerContext);
+    const ground = routeLayer.build();
+    const guidewayLayer = new GuidewayLayer(layerContext);
+    guidewayLayer.build();
+    const stationLayer = new StationLayer(layerContext);
+    stationLayer.build();
+    this.scene.add(routeLayer.root, guidewayLayer.root, stationLayer.root);
     this.activeVehicle = new ActiveVehicleSystem({
       scene: this.scene,
       route: this.route,
@@ -117,6 +121,7 @@ export class TransitWorld {
     this.activeVehicle.updateExteriorLights(this.lightingSystem.daylightFactor());
     this.opposingLayer = new OpposingTrafficLayer(layerContext);
     this.opposingLayer.build(this.activeVehicle.root);
+    this.scene.add(this.opposingLayer.root);
     this.environment.buildScenery(layerContext, ground, this.geoPointAt(0));
     this.scene.add(this.seasonalObjects);
 
@@ -314,7 +319,6 @@ export class TransitWorld {
   /** Bundles shared route geometry/sampling helpers for the scene layers. */
   private createLayerContext(): WorldLayerContext {
     return {
-      scene: this.scene,
       curve: this.curve,
       route: this.route,
       guidewayKind: this.guidewayKind,
