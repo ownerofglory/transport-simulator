@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CameraController, type CameraMode } from '../../world/CameraController';
+import type { CameraRig } from '../cameras/CameraRig';
 import type { EngineSystem } from '../core/EngineSystem';
 
 /** Per-frame follow input for the active vehicle (mirrors CameraController.update). */
@@ -39,6 +40,11 @@ export class CameraSystem implements EngineSystem {
   /** Smooths the camera toward the active-vehicle pose for the current mode. */
   follow(input: CameraFollowInput): void {
     this.controller.update(input);
+  }
+
+  /** Registers a new camera rig; existing rigs and this class stay untouched. */
+  registerRig(rig: CameraRig): void {
+    this.controller.registerRig(rig);
   }
 
   cycle(): CameraMode {

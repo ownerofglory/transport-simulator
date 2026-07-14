@@ -1,9 +1,13 @@
 import * as THREE from 'three';
 import type { InteriorCameraProfile } from '../domain/transport';
+import type { CameraRig } from '../engine/cameras/CameraRig';
+import { ChaseCameraRig } from '../engine/cameras/ChaseCameraRig';
+import { PassengerCameraRig } from '../engine/cameras/PassengerCameraRig';
+import { CabCameraRig } from '../engine/cameras/CabCameraRig';
 
 export type CameraMode = 'passenger' | 'cab' | 'chase';
 
-type CameraUpdateInput = {
+export type CameraUpdateInput = {
   position: THREE.Vector3;
   tangent: THREE.Vector3;
   underground: boolean;
@@ -26,7 +30,20 @@ export class CameraController {
   // Smoothed yaw offset for passenger/cab look-left/look-right controls.
   private currentLookYaw = 0;
 
-  constructor(private readonly camera: THREE.PerspectiveCamera) {}
+  // Registered camera rigs keyed by mode; new rigs plug in without touching
+  // existing ones or the shared smoothing below.
+  private readonly rigs = new Map<CameraMode, CameraRig>();
+
+  constructor(private readonly camera: THREE.PerspectiveCamera) {
+    for (const rig of [new ChaseCameraRig(), new PassengerCameraRig(), new CabCameraRig()]) {
+      this.registerRig(rig);
+    }
+  }
+
+  /** Registers (or replaces) a camera rig for its mode. */
+  registerRig(rig: CameraRig): void {
+    this.rigs.set(rig.id, rig);
+  }
 
   /** Cycles through exterior chase, passenger interior, and cab views. */
   cycle(): CameraMode {
@@ -66,93 +83,14 @@ export class CameraController {
       this.projectionDirty = false;
     }
 
-    // Horizontal route normal used for passenger offsets and forward-looking bias.
-    const normal = new THREE.Vector3(input.tangent.z, 0, -input.tangent.x).normalize();
+    const rig = this.rigs.get(this.mode) ?? this.rigs.get('chase')!;
+    const pose = rig.pose(input);
+    const camPos = pose.position;
+    let lookAt = pose.target;
+    const cameraUp = pose.up;
 
-    let camPos: THREE.Vector3;
-    let lookAt: THREE.Vector3;
-
-    // Default world up; interior cameras may inherit the vehicle car's up vector.
-    let cameraUp = new THREE.Vector3(0, 1, 0);
-
-    if (this.mode === 'passenger') {
-      const anchoredInterior = input.interiorCameraProfile === 'bus' || input.interiorCameraProfile === 's-bahn' || input.interiorCameraProfile === 'tram';
-
-      if (anchoredInterior) {
-        // Anchor interior cameras to a car mesh so articulated vehicles turn correctly.
-        input.train.updateMatrixWorld(true);
-
-        const midCar = input.trainCars[2] ?? input.trainCars[Math.floor(input.trainCars.length / 2)] ?? input.trainCars[0];
-        const passengerCar = input.interiorCameraProfile === 's-bahn'
-          ? midCar // middle S-Bahn car gives a stable passenger view.
-          : input.interiorCameraProfile === 'tram'
-            ? midCar // middle tram section avoids front cab obstruction; falls back if fewer than 3 cars.
-            : input.trainCars[0]; // bus has one body group.
-
-        const customCameraLocal = passengerCar.userData.passengerCameraLocal as [number, number, number] | undefined;
-        const customLookAtLocal = passengerCar.userData.passengerLookAtLocal as [number, number, number] | undefined;
-        const localZ = input.interiorCameraProfile === 's-bahn'
-          ? -2 // S-Bahn passenger seat position within selected car.
-          : input.interiorCameraProfile === 'tram'
-            ? -0.6 // tram interior camera near articulated center section.
-            : -4.4; // bus passenger camera further back from the driver area.
-
-        camPos = passengerCar.localToWorld(new THREE.Vector3(
-          customCameraLocal?.[0] ?? 0.16,
-          customCameraLocal?.[1] ?? 2.3,
-          customCameraLocal?.[2] ?? localZ
-        ));
-        lookAt = passengerCar.localToWorld(new THREE.Vector3(
-          customLookAtLocal?.[0] ?? 0,
-          customLookAtLocal?.[1] ?? 2.25,
-          customLookAtLocal?.[2] ?? (input.interiorCameraProfile === 'tram' ? 26 : 70)
-        ));
-
-        cameraUp = new THREE.Vector3(0, 1, 0)
-          .applyQuaternion(passengerCar.getWorldQuaternion(new THREE.Quaternion()))
-          .normalize();
-      } else {
-        // Fallback passenger camera for vehicles without a detailed anchored interior.
-        camPos = input.position.clone()
-          .add(input.tangent.clone().multiplyScalar(input.passengerOffsetM))
-          .add(normal.clone().multiplyScalar(0.08)) // tiny side offset to avoid exact centerline.
-          .add(new THREE.Vector3(0, 2.3, 0)); // passenger eye height.
-
-        lookAt = input.position.clone()
-          .add(input.tangent.clone().multiplyScalar(85)) // far forward look target.
-          .add(normal.clone().multiplyScalar(1.5)) // small side bias so the view feels seated.
-          .add(new THREE.Vector3(0, 2.25, 0)); // passenger eye-level target.
-      }
-    } else if (this.mode === 'cab') {
-      camPos = input.position.clone()
-        .add(input.tangent.clone().multiplyScalar(input.trainHalfLengthM - 1.75)) // just behind the vehicle nose.
-        .add(new THREE.Vector3(0, 2.65, 0)); // cab eye height.
-
-      lookAt = input.position.clone()
-        .add(input.tangent.clone().multiplyScalar(120)) // long forward target for driving view.
-        .add(new THREE.Vector3(0, 2.2, 0)); // slightly lower than cab eye height.
-    } else if (input.underground) {
-      camPos = input.position.clone()
-        .add(input.tangent.clone().multiplyScalar(-(input.trainHalfLengthM + 22))) // closer chase camera in tunnels.
-        .add(new THREE.Vector3(0, 4.6, 0)); // low ceiling-safe camera height.
-
-      lookAt = input.position.clone()
-        .add(input.tangent.clone().multiplyScalar(12)) // look slightly ahead of train.
-        .add(new THREE.Vector3(0, 1.8, 0)); // target near vehicle body height.
-    } else {
-      camPos = input.position.clone()
-        .add(input.tangent.clone().multiplyScalar(-(input.trainHalfLengthM + 14))) // exterior chase distance behind train.
-        .add(new THREE.Vector3(0, 16, 0)); // elevated outdoor chase height.
-
-      lookAt = input.position.clone().add(new THREE.Vector3(0, 2, 0)); // target near vehicle center mass.
-    }
-
-    const lookYawTarget = this.lookDirection * (this.mode === 'chase' ? Math.PI * 0.18 : Math.PI * 0.34); // chase gets a gentler side-look than interior views.
-    this.currentLookYaw = THREE.MathUtils.lerp(
-      this.currentLookYaw,
-      lookYawTarget,
-      this.mode === 'chase' ? 0.18 : 0.12 // faster reset in chase, gentler interior look smoothing.
-    );
+    const lookYawTarget = this.lookDirection * rig.lookYawAmount;
+    this.currentLookYaw = THREE.MathUtils.lerp(this.currentLookYaw, lookYawTarget, rig.lookYawFactor);
 
     if (Math.abs(this.currentLookYaw) > 0.001) {
       const viewDirection = lookAt.clone().sub(camPos);
@@ -163,7 +101,7 @@ export class CameraController {
       }
     }
 
-    this.camera.position.lerp(camPos, this.mode === 'chase' ? 0.12 : 0.32); // smoother chase, snappier interior.
+    this.camera.position.lerp(camPos, rig.positionSmoothing);
     this.camera.up.lerp(cameraUp, 0.32).normalize(); // blend up-vector to avoid abrupt banking changes.
     this.camera.lookAt(lookAt);
   }
