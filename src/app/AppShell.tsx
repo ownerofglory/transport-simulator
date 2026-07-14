@@ -102,13 +102,15 @@ export function AppShell() {
     if (!runtime) return;
     const target = document.querySelector<HTMLElement>('.simulator-viewport');
     if (!target) return;
+    // Physical events become semantic EngineInputEvents routed through the
+    // active workspace (simulation/photo), which decides what to do with them.
     const input = new InputController(target, {
-      onThrottle: (held) => runtime.input.setThrottle(held ? 1 : 0),
-      onBrake: (held) => runtime.input.setBrake(held ? 1 : 0),
-      onLook: (left, right) => runtime.input.setLook(left, right),
-      onZoom: (delta) => runtime.adjustZoom(delta),
-      onPhotoToggle: () => runtime.togglePhotoMode(),
-      onPhotoExit: () => runtime.exitPhotoMode()
+      onThrottle: (held) => runtime.handleInput({ type: 'throttle', value: held ? 1 : 0 }),
+      onBrake: (held) => runtime.handleInput({ type: 'brake', value: held ? 1 : 0 }),
+      onLook: (left, right) => runtime.handleInput({ type: 'look', left, right }),
+      onZoom: (delta) => runtime.handleInput({ type: 'zoom', delta }),
+      onPhotoToggle: () => runtime.handleInput({ type: 'photo-toggle' }),
+      onPhotoExit: () => runtime.handleInput({ type: 'photo-exit' })
     });
     return () => input.dispose();
   }, [runtime]);

@@ -12,6 +12,10 @@ import { RuntimeMachine } from '../engine/runtime/RuntimeMachine';
 import { worldKey } from '../engine/runtime/worldKey';
 import { TransitEngine } from '../engine/core/TransitEngine';
 import { LegacyWorldSystem } from '../engine/core/LegacyWorldSystem';
+import { WorkspaceManager } from '../engine/workspace/WorkspaceManager';
+import { SimulationWorkspace } from '../engine/workspace/SimulationWorkspace';
+import { PhotoWorkspace } from '../engine/workspace/PhotoWorkspace';
+import type { EngineInputEvent } from '../engine/workspace/EngineInputEvent';
 
 /** Everything needed to (re)build the world and initialize the simulator. */
 export type RouteSession = {
@@ -29,6 +33,8 @@ export type RouteSession = {
 export type SimulatorCommands = {
   /** Transient held input (throttle/brake/look); written to directly, never via React. */
   readonly input: InputState;
+  /** Routes a semantic input event through the active workspace. */
+  handleInput(event: EngineInputEvent): boolean;
   loadRoute(session: RouteSession): void;
   setStartStation(session: RouteSession): void;
   setRideMode(session: RouteSession): void;
@@ -64,6 +70,10 @@ export class SimulatorRuntime implements SimulatorCommands {
   private session: RouteSession | null = null;
   private journeyLegs: DemoRoute[] = [];
   private journeyLegIndex = 0;
+  // Input is routed through the active workspace (simulation ↔ photo).
+  private readonly workspaces = new WorkspaceManager();
+  private readonly simulationWorkspace = new SimulationWorkspace(this);
+  private readonly photoWorkspace = new PhotoWorkspace(this);
   private photoActive = false;
   private photoLabelHandler: ((label: string) => void) | null = null;
   private photoModeHandler: ((active: boolean) => void) | null = null;
@@ -76,6 +86,8 @@ export class SimulatorRuntime implements SimulatorCommands {
   ) {
     // Held input goes straight to the simulator/world, never through React.
     this.input.onChange(() => this.applyInput());
+    // Start in the driving workspace; photo mode swaps in the photo workspace.
+    void this.workspaces.activate(this.simulationWorkspace);
     this.loop = new SimulatorLoop({
       turnaroundMs: 4000,
       getPaused: () => this.machine.matches('paused'),
@@ -226,6 +238,11 @@ export class SimulatorRuntime implements SimulatorCommands {
     }
   }
 
+  /** Routes a semantic input event through the active workspace (simulation/photo). */
+  handleInput(event: EngineInputEvent): boolean {
+    return this.workspaces.handleInput(event);
+  }
+
   cycleCamera(): CameraMode | undefined {
     return this.world?.cycleCamera();
   }
@@ -268,6 +285,7 @@ export class SimulatorRuntime implements SimulatorCommands {
     document.body.classList.toggle('photo-mode', this.photoActive);
     if (result) this.photoLabelHandler?.(result.label);
     this.photoModeHandler?.(this.photoActive);
+    void this.workspaces.activate(this.photoWorkspace);
     this.renderNow();
   }
 
@@ -277,6 +295,7 @@ export class SimulatorRuntime implements SimulatorCommands {
     document.body.classList.remove('photo-mode');
     if (result) this.photoLabelHandler?.(result.label);
     this.photoModeHandler?.(this.photoActive);
+    void this.workspaces.activate(this.simulationWorkspace);
     this.renderNow();
   }
 
