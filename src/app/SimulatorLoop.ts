@@ -4,7 +4,7 @@ import type { SimulatorState } from '../simulator/simulator-types';
 // rate; the per-frame visual/render pass stays variable. MAX_FRAME_DELTA caps
 // catch-up after a tab stall so the sim can't spiral.
 const FIXED_STEP = 1 / 60;
-const MAX_FRAME_DELTA = 0.25;
+const MAX_FRAME_DELTA = 0.05;
 // Preserve the prior per-frame visual dt clamp for camera smoothing/doors.
 const MAX_VISUAL_DELTA = 0.05;
 
@@ -26,6 +26,8 @@ export class SimulatorLoop {
   private lastClockUpdateMs = 0;
   private terminalReachedAt: number | null = null;
   private state: SimulatorState | null = null;
+  private previousState: SimulatorState | null = null;
+  private visualState: SimulatorState | null = null;
   // Leftover simulation time not yet consumed by a fixed step.
   private accumulator = 0;
 
@@ -49,6 +51,8 @@ export class SimulatorLoop {
   /** Replaces the active simulator state and clears any terminal turnaround timer. */
   setState(state: SimulatorState | null): void {
     this.state = state;
+    this.previousState = state;
+    this.visualState = state ? { ...state } : null;
     this.terminalReachedAt = null;
     this.accumulator = 0;
   }
@@ -75,6 +79,7 @@ export class SimulatorLoop {
         // independent of frame rate.
         this.accumulator += frameDelta;
         while (this.accumulator >= FIXED_STEP) {
+          this.previousState = this.state;
           this.state = this.options.step(FIXED_STEP);
           this.accumulator -= FIXED_STEP;
         }
@@ -82,7 +87,7 @@ export class SimulatorLoop {
 
       // Variable per-frame visual/render pass (runs even while paused so
       // camera/UI stay in sync).
-      this.options.onState(this.state, Math.min(frameDelta, MAX_VISUAL_DELTA));
+      this.options.onState(this.interpolatedState(), Math.min(frameDelta, MAX_VISUAL_DELTA));
 
       if (this.state.tripComplete) {
         this.terminalReachedAt ??= now;
@@ -99,4 +104,18 @@ export class SimulatorLoop {
 
     this.frameHandle = requestAnimationFrame(this.frame);
   };
+
+  /** Smooths visual motion between deterministic simulation ticks. */
+  private interpolatedState(): SimulatorState {
+    const current = this.state!;
+    const previous = this.previousState ?? current;
+    const alpha = Math.min(1, this.accumulator / FIXED_STEP);
+    const output = this.visualState ?? { ...current };
+    Object.assign(output, current, {
+      distanceM: previous.distanceM + (current.distanceM - previous.distanceM) * alpha,
+      speedMps: previous.speedMps + (current.speedMps - previous.speedMps) * alpha
+    });
+    this.visualState = output;
+    return output;
+  }
 }
