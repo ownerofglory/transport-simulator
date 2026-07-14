@@ -1,5 +1,13 @@
 import type { SimulatorState } from '../simulator/simulator-types';
 
+// Deterministic simulation advances in fixed 1/60 s steps regardless of frame
+// rate; the per-frame visual/render pass stays variable. MAX_FRAME_DELTA caps
+// catch-up after a tab stall so the sim can't spiral.
+const FIXED_STEP = 1 / 60;
+const MAX_FRAME_DELTA = 0.25;
+// Preserve the prior per-frame visual dt clamp for camera smoothing/doors.
+const MAX_VISUAL_DELTA = 0.05;
+
 type LoopOptions = {
   turnaroundMs: number;
   getPaused: () => boolean;
@@ -18,6 +26,8 @@ export class SimulatorLoop {
   private lastClockUpdateMs = 0;
   private terminalReachedAt: number | null = null;
   private state: SimulatorState | null = null;
+  // Leftover simulation time not yet consumed by a fixed step.
+  private accumulator = 0;
 
   constructor(private readonly options: LoopOptions) {}
 
@@ -25,6 +35,7 @@ export class SimulatorLoop {
   start(): void {
     if (this.frameHandle) return;
     this.lastFrame = performance.now();
+    this.accumulator = 0;
     this.frameHandle = requestAnimationFrame(this.frame);
   }
 
@@ -39,6 +50,7 @@ export class SimulatorLoop {
   setState(state: SimulatorState | null): void {
     this.state = state;
     this.terminalReachedAt = null;
+    this.accumulator = 0;
   }
 
   /** Returns the latest simulator state known to the loop. */
@@ -48,8 +60,7 @@ export class SimulatorLoop {
 
   /** Per-frame callback used by requestAnimationFrame. */
   private readonly frame = (now: number): void => {
-    // Clamp frame delta to 50 ms so tab stalls do not create huge simulation jumps.
-    const dt = Math.min((now - this.lastFrame) / 1000, 0.05);
+    const frameDelta = Math.min((now - this.lastFrame) / 1000, MAX_FRAME_DELTA);
     this.lastFrame = now;
 
     if (this.state) {
@@ -60,11 +71,18 @@ export class SimulatorLoop {
       }
 
       if (!this.options.getPaused()) {
-        this.state = this.options.step(dt);
+        // Advance the deterministic simulation in fixed steps so its behavior is
+        // independent of frame rate.
+        this.accumulator += frameDelta;
+        while (this.accumulator >= FIXED_STEP) {
+          this.state = this.options.step(FIXED_STEP);
+          this.accumulator -= FIXED_STEP;
+        }
       }
 
-      // Notify render/HUD code even while paused so camera/UI can stay in sync.
-      this.options.onState(this.state, dt);
+      // Variable per-frame visual/render pass (runs even while paused so
+      // camera/UI stay in sync).
+      this.options.onState(this.state, Math.min(frameDelta, MAX_VISUAL_DELTA));
 
       if (this.state.tripComplete) {
         this.terminalReachedAt ??= now;
