@@ -914,11 +914,11 @@ class ProceduralTransitVehicleFactory {
   }
 
   createUlmTramVehicle(): VehicleInstance {
-    const shell = new THREE.MeshStandardMaterial({ color: 0xf1f3f4, roughness: 0.42, metalness: 0.16 });
-    const lightGrey = new THREE.MeshStandardMaterial({ color: 0xc6ccd2, roughness: 0.52, metalness: 0.12 });
+    const shell = new THREE.MeshStandardMaterial({ color: 0xf4f5f3, roughness: 0.42, metalness: 0.16 });
+    const lightGrey = new THREE.MeshStandardMaterial({ color: 0xb8bec2, roughness: 0.52, metalness: 0.12 });
     const glossyBlack = new THREE.MeshStandardMaterial({ color: 0x161b1f, roughness: 0.18, metalness: 0.32 });
-    const blue = new THREE.MeshStandardMaterial({ color: 0x76b8e8, roughness: 0.34, metalness: 0.08 });
-    const doorBlue = new THREE.MeshStandardMaterial({ color: 0x3e8ec7, roughness: 0.36, metalness: 0.1 });
+    const blue = new THREE.MeshStandardMaterial({ color: 0x60b5e5, roughness: 0.34, metalness: 0.08 });
+    const doorBlue = new THREE.MeshStandardMaterial({ color: 0x0066a8, roughness: 0.36, metalness: 0.1 });
     const glass = new THREE.MeshStandardMaterial({ color: 0x9bc8d8, transparent: true, opacity: 0.42, roughness: 0.06, side: THREE.DoubleSide });
     const floor = new THREE.MeshStandardMaterial({ color: 0x72787d, roughness: 0.92 });
     const ceiling = new THREE.MeshStandardMaterial({ color: 0xe1e3e4, roughness: 0.86 });
@@ -944,19 +944,18 @@ class ProceduralTransitVehicleFactory {
       car.name = `Articulated car Ulm Avenio section ${section.center}`;
       car.userData.centerOffsetM = section.center;
 
-      const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.46, 0.34, section.length - 0.1), lightGrey);
+      const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.42, 0.34, section.length - 0.1), glossyBlack);
       skirt.position.y = 0.56;
       car.add(skirt);
       this.passengerShells.push(skirt);
 
-      const body = new THREE.Mesh(new THREE.BoxGeometry(2.36, 2.56, section.length), shell);
-      body.position.y = 1.78;
+      const body = new THREE.Mesh(this.makeModernTramBody(2.4, 3.22, section.length), shell);
       body.castShadow = true;
       car.add(body);
       this.passengerShells.push(body);
 
-      const roof = new THREE.Mesh(new THREE.BoxGeometry(2.08, 0.2, section.length - 0.1), lightGrey);
-      roof.position.y = 3.14;
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(1.86, 0.11, section.length - 0.24), lightGrey);
+      roof.position.y = 3.25;
       car.add(roof);
       this.passengerShells.push(roof);
 
@@ -974,12 +973,18 @@ class ProceduralTransitVehicleFactory {
           car.add(win);
         }
 
-        if (section.end === 0 || (section.end < 0 && side < 0) || (section.end > 0 && side > 0)) {
-          const doorZ = section.length > 6 ? 0.55 : 0;
-          this.addSlidingVehicleDoor(car, side * 1.245, doorZ, doorBlue, glass, glossyBlack, 1.48, 1.95);
-          const blueAccent = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.08, 1.62), blue);
-          blueAccent.position.set(side * 1.215, 1.75, doorZ);
-          car.add(blueAccent);
+        const lowerStripe = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.18, section.length - 0.16), doorBlue);
+        lowerStripe.position.set(side * 1.215, 0.9, 0);
+        car.add(lowerStripe);
+
+        // Avenio M is bidirectional; every module carries passenger access on
+        // both sides. Slim blue jambs match the SWU livery without hiding the body.
+        const doorZ = section.length > 6 ? 0.55 : 0;
+        this.addSlidingVehicleDoor(car, side * 1.245, doorZ, shell, glass, glossyBlack, 1.48, 1.95);
+        for (const edge of [-0.78, 0.78]) {
+          const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.08, 0.08), doorBlue);
+          jamb.position.set(side * 1.215, 1.75, doorZ + edge);
+          car.add(jamb);
         }
       }
 
@@ -989,12 +994,7 @@ class ProceduralTransitVehicleFactory {
       const interiorCeiling = new THREE.Mesh(new THREE.BoxGeometry(2.06, 0.08, section.length - 0.34), ceiling);
       interiorCeiling.position.y = 2.98;
       car.add(interiorCeiling);
-      this.addOpaqueTransitInterior(car, section.length - 0.34, 1.08, ceiling, (side) => {
-        if (section.end === 0 || (section.end < 0 && side < 0) || (section.end > 0 && side > 0)) {
-          return [section.length > 6 ? 0.55 : 0];
-        }
-        return [];
-      });
+      this.addOpaqueTransitInterior(car, section.length - 0.34, 1.08, ceiling, () => [section.length > 6 ? 0.55 : 0]);
 
       for (const z of section.length > 6 ? [-1.55, 1.55] : [-1.0, 1.0]) {
         for (const x of [-0.74, 0.74]) {
@@ -1012,38 +1012,38 @@ class ProceduralTransitVehicleFactory {
 
       if (section.end !== 0) {
         const cabDirection = section.end;
-        const frontPanel = new THREE.Mesh(this.makeCabNose(blue).geometry.clone(), blue);
-        frontPanel.scale.set(1.02, 1.02, 0.82);
-        frontPanel.position.set(0, 1.86, cabDirection * (section.length / 2 - 0.18));
+        const frontPanel = this.makeAvenioCabNose(blue);
+        frontPanel.position.set(0, 1.84, cabDirection * (section.length / 2 - 0.2));
         if (cabDirection > 0) frontPanel.rotation.y = Math.PI;
         car.add(frontPanel);
         this.cabShells.push(frontPanel);
 
-        const face = new THREE.Mesh(new THREE.BoxGeometry(2.1, 1.92, 0.12), glossyBlack);
-        face.position.set(0, 2.12, cabDirection * (section.length / 2 + 0.12));
+        const face = new THREE.Mesh(this.makeAvenioCabMask(), glossyBlack);
+        face.position.set(0, 2.14, cabDirection * (section.length / 2 + 0.4));
+        if (cabDirection < 0) face.rotation.y = Math.PI;
         car.add(face);
         this.cabShells.push(face);
 
-        const windscreen = new THREE.Mesh(new THREE.BoxGeometry(1.76, 0.94, 0.08), glass);
-        windscreen.position.set(0, 2.44, cabDirection * (section.length / 2 + 0.16));
-        windscreen.rotation.x = cabDirection * -0.22;
+        const windscreen = new THREE.Mesh(this.makeAvenioWindscreen(), glass);
+        windscreen.position.set(0, 2.42, cabDirection * (section.length / 2 + 0.44));
+        if (cabDirection < 0) windscreen.rotation.y = Math.PI;
         car.add(windscreen);
 
         const routeDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.58, 0.34), ledPanel);
-        routeDisplay.position.set(0, 2.98, cabDirection * (section.length / 2 + 0.2));
+        routeDisplay.position.set(0, 2.98, cabDirection * (section.length / 2 + 0.48));
         if (cabDirection < 0) routeDisplay.rotation.y = Math.PI;
         routeDisplay.renderOrder = 20;
         car.add(routeDisplay);
         this.cabDisplays.push(routeDisplay);
 
-        const lowerMask = new THREE.Mesh(new THREE.BoxGeometry(2.18, 0.34, 0.1), lightGrey);
-        lowerMask.position.set(0, 0.84, cabDirection * (section.length / 2 + 0.11));
+        const lowerMask = new THREE.Mesh(new THREE.BoxGeometry(2.18, 0.34, 0.1), doorBlue);
+        lowerMask.position.set(0, 0.84, cabDirection * (section.length / 2 + 0.36));
         car.add(lowerMask);
 
         const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf8f4d0, emissiveIntensity: 2.0 });
         for (const x of [-0.66, 0.66]) {
-          const headlight = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.06, 0.08), headlightMat);
-          headlight.position.set(x, 1.1, cabDirection * (section.length / 2 + 0.22));
+          const headlight = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.07, 0.08), headlightMat);
+          headlight.position.set(x, 1.1, cabDirection * (section.length / 2 + 0.46));
           car.add(headlight);
         }
       } else {
@@ -1071,9 +1071,11 @@ class ProceduralTransitVehicleFactory {
       this.root.add(bogie);
     }
 
-    const roofHvac = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.22, 7.8), lightGrey);
-    roofHvac.position.set(0, 3.36, -0.4);
-    this.root.add(roofHvac);
+    for (const z of [-6.2, 0, 6.2]) {
+      const roofHvac = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.18, 2.9), lightGrey);
+      roofHvac.position.set(0, 3.39, z);
+      this.root.add(roofHvac);
+    }
     this.addPantograph(new THREE.Vector3(0, 3.58, 2.2), metal);
 
     this.trainHalfLengthM = 15.6;
@@ -1424,14 +1426,14 @@ class ProceduralTransitVehicleFactory {
 
   createFreiburgTramVehicle(): VehicleInstance {
     const shell = new THREE.MeshStandardMaterial({ color: 0xf7f8f4, roughness: 0.42, metalness: 0.12 });
-    const green = new THREE.MeshStandardMaterial({ color: 0x1e8f4f, roughness: 0.34, metalness: 0.06 });
-    const darkGreen = new THREE.MeshStandardMaterial({ color: 0x12653a, roughness: 0.36, metalness: 0.06 });
+    const red = new THREE.MeshStandardMaterial({ color: 0xd51e2b, roughness: 0.34, metalness: 0.06 });
+    const darkRed = new THREE.MeshStandardMaterial({ color: 0xa81420, roughness: 0.36, metalness: 0.06 });
     const black = new THREE.MeshStandardMaterial({ color: 0x171c1c, roughness: 0.2, metalness: 0.3 });
     const silver = new THREE.MeshStandardMaterial({ color: 0xc4cbc6, roughness: 0.48, metalness: 0.18 });
     const glass = new THREE.MeshStandardMaterial({ color: 0x9ac5d1, transparent: true, opacity: 0.42, roughness: 0.05, side: THREE.DoubleSide });
     const floor = new THREE.MeshStandardMaterial({ color: 0x707673, roughness: 0.92 });
     const ceiling = new THREE.MeshStandardMaterial({ color: 0xe4e7e1, roughness: 0.86 });
-    const seat = new THREE.MeshStandardMaterial({ color: 0x2f6e47, roughness: 0.88 });
+    const seat = new THREE.MeshStandardMaterial({ color: 0x384f67, roughness: 0.88 });
     const metal = new THREE.MeshStandardMaterial({ color: 0x9ba39d, roughness: 0.34, metalness: 0.72 });
     const ledPanel = new THREE.MeshBasicMaterial({
       map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 700, height: 128, bg: '#0f1413', fg: '#ffb300' }),
@@ -1440,13 +1442,15 @@ class ProceduralTransitVehicleFactory {
     const interiorDisplayMat = this.context.makeInteriorDisplayMaterial();
     this.glassMaterial = glass;
 
-    // Compact green-white VAG Freiburg tram inspired by the modern city fleet.
+    // Seven-module, 42-metre CAF Urbos 100 in the VAG red/white house livery.
     const sections = [
-      { center: -10.8, length: 6.4, end: -1 as -1 | 0 | 1 },
-      { center: -5.4, length: 4.6, end: 0 as -1 | 0 | 1 },
-      { center: 0, length: 5.8, end: 0 as -1 | 0 | 1 },
-      { center: 5.4, length: 4.6, end: 0 as -1 | 0 | 1 },
-      { center: 10.8, length: 6.4, end: 1 as -1 | 0 | 1 }
+      { center: -18, length: 6.8, end: -1 as -1 | 0 | 1 },
+      { center: -12, length: 4.8, end: 0 as -1 | 0 | 1 },
+      { center: -6, length: 6.0, end: 0 as -1 | 0 | 1 },
+      { center: 0, length: 4.8, end: 0 as -1 | 0 | 1 },
+      { center: 6, length: 6.0, end: 0 as -1 | 0 | 1 },
+      { center: 12, length: 4.8, end: 0 as -1 | 0 | 1 },
+      { center: 18, length: 6.8, end: 1 as -1 | 0 | 1 }
     ];
 
     for (const section of sections) {
@@ -1454,19 +1458,18 @@ class ProceduralTransitVehicleFactory {
       car.name = `Articulated car Freiburg tram section ${section.center}`;
       car.userData.centerOffsetM = section.center;
 
-      const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.46, 0.32, section.length - 0.08), darkGreen);
+      const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.44, 0.32, section.length - 0.08), darkRed);
       skirt.position.y = 0.56;
       car.add(skirt);
       this.passengerShells.push(skirt);
 
-      const body = new THREE.Mesh(new THREE.BoxGeometry(2.36, 2.58, section.length), shell);
-      body.position.y = 1.8;
+      const body = new THREE.Mesh(this.makeModernTramBody(2.4, 3.2, section.length), shell);
       body.castShadow = true;
       car.add(body);
       this.passengerShells.push(body);
 
-      const roof = new THREE.Mesh(new THREE.BoxGeometry(2.08, 0.2, section.length - 0.1), silver);
-      roof.position.y = 3.16;
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(1.86, 0.11, section.length - 0.22), silver);
+      roof.position.y = 3.23;
       car.add(roof);
       this.passengerShells.push(roof);
 
@@ -1485,12 +1488,16 @@ class ProceduralTransitVehicleFactory {
           car.add(win);
         }
 
-        if (section.end === 0 || (section.end < 0 && side < 0) || (section.end > 0 && side > 0)) {
-          const doorZ = section.length > 6 ? 0.58 : 0;
-          this.addSlidingVehicleDoor(car, side * 1.248, doorZ, green, glass, black, 1.5, 1.98);
-          const greenAccent = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.1, 1.64), green);
-          greenAccent.position.set(side * 1.218, 1.76, doorZ);
-          car.add(greenAccent);
+        const redBelt = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.24, section.length - 0.14), red);
+        redBelt.position.set(side * 1.218, 0.94, 0);
+        car.add(redBelt);
+
+        const doorZ = section.length > 6 ? 0.62 : 0;
+        this.addSlidingVehicleDoor(car, side * 1.248, doorZ, shell, glass, black, 1.5, 1.98);
+        for (const edge of [-0.8, 0.8]) {
+          const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.1, 0.08), red);
+          jamb.position.set(side * 1.218, 1.76, doorZ + edge);
+          car.add(jamb);
         }
       }
 
@@ -1500,10 +1507,7 @@ class ProceduralTransitVehicleFactory {
       const interiorCeiling = new THREE.Mesh(new THREE.BoxGeometry(2.06, 0.08, section.length - 0.34), ceiling);
       interiorCeiling.position.y = 3.0;
       car.add(interiorCeiling);
-      this.addOpaqueTransitInterior(car, section.length - 0.34, 1.08, ceiling, (side) => {
-        if (section.end === 0 || (section.end < 0 && side < 0) || (section.end > 0 && side > 0)) return [section.length > 6 ? 0.58 : 0];
-        return [];
-      });
+      this.addOpaqueTransitInterior(car, section.length - 0.34, 1.08, ceiling, () => [section.length > 6 ? 0.62 : 0]);
 
       for (const z of section.length > 6 ? [-1.52, 1.52] : [-0.98, 0.98]) {
         for (const x of [-0.74, 0.74]) {
@@ -1521,29 +1525,65 @@ class ProceduralTransitVehicleFactory {
 
       if (section.end !== 0) {
         const cabDirection = section.end;
-        const frontPanel = new THREE.Mesh(this.makeCabNose(green).geometry.clone(), green);
-        frontPanel.scale.set(1.03, 1.02, 0.84);
-        frontPanel.position.set(0, 1.88, cabDirection * (section.length / 2 - 0.16));
+        const frontPanel = this.makeUrbosCabNose(red);
+        frontPanel.position.set(0, 1.86, cabDirection * (section.length / 2 - 0.18));
         if (cabDirection > 0) frontPanel.rotation.y = Math.PI;
         car.add(frontPanel);
         this.cabShells.push(frontPanel);
 
-        const face = new THREE.Mesh(new THREE.BoxGeometry(2.12, 1.94, 0.12), black);
-        face.position.set(0, 2.14, cabDirection * (section.length / 2 + 0.12));
+        const face = new THREE.Mesh(this.makeUrbosCabMask(), black);
+        face.position.set(0, 2.12, cabDirection * (section.length / 2 + 0.42));
+        if (cabDirection < 0) face.rotation.y = Math.PI;
         car.add(face);
         this.cabShells.push(face);
 
-        const windscreen = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.98, 0.08), glass);
-        windscreen.position.set(0, 2.44, cabDirection * (section.length / 2 + 0.18));
-        windscreen.rotation.x = cabDirection * -0.18;
+        const windscreen = new THREE.Mesh(this.makeUrbosWindscreen(), glass);
+        windscreen.position.set(0, 2.44, cabDirection * (section.length / 2 + 0.46));
+        if (cabDirection < 0) windscreen.rotation.y = Math.PI;
         car.add(windscreen);
 
         const routeDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.56, 0.34), ledPanel);
-        routeDisplay.position.set(0, 3.02, cabDirection * (section.length / 2 + 0.22));
+        routeDisplay.position.set(0, 3.0, cabDirection * (section.length / 2 + 0.5));
         if (cabDirection < 0) routeDisplay.rotation.y = Math.PI;
         routeDisplay.renderOrder = 20;
         car.add(routeDisplay);
         this.cabDisplays.push(routeDisplay);
+
+        const logo = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.52, 0.22),
+          new THREE.MeshBasicMaterial({
+            map: makeLabelTexture('VAG', { width: 256, height: 108, bg: '#d51e2b', fg: '#ffffff' }),
+            side: THREE.DoubleSide
+          })
+        );
+        logo.position.set(0, 1.24, cabDirection * (section.length / 2 + 0.49));
+        if (cabDirection < 0) logo.rotation.y = Math.PI;
+        car.add(logo);
+
+        const smile = new THREE.Mesh(
+          new THREE.TubeGeometry(
+            new THREE.QuadraticBezierCurve3(
+              new THREE.Vector3(-0.76, 0, 0),
+              new THREE.Vector3(0, -0.16, 0),
+              new THREE.Vector3(0.76, 0, 0)
+            ),
+            16,
+            0.035,
+            8,
+            false
+          ),
+          shell
+        );
+        smile.position.set(0, 1.5, cabDirection * (section.length / 2 + 0.5));
+        car.add(smile);
+
+        const headlightMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2ca, emissiveIntensity: 1.8 });
+        for (const x of [-0.68, 0.68]) {
+          const headlight = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 8), headlightMaterial);
+          headlight.scale.set(1.25, 0.6, 0.35);
+          headlight.position.set(x, 0.98, cabDirection * (section.length / 2 + 0.49));
+          car.add(headlight);
+        }
       } else {
         const internalDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.72, 0.42), interiorDisplayMat);
         internalDisplay.position.set(0, 2.78, 0);
@@ -1556,22 +1596,24 @@ class ProceduralTransitVehicleFactory {
       this.root.add(car);
     }
 
-    for (const z of [-8.2, -2.7, 2.7, 8.2]) {
+    for (const z of [-15, -9, -3, 3, 9, 15]) {
       const bellows = new THREE.Mesh(new THREE.BoxGeometry(2.18, 2.22, 0.7), black);
       bellows.position.set(0, 1.82, z);
       this.root.add(bellows);
       this.passengerShells.push(bellows);
     }
-    for (const z of [-8.35, -2.8, 2.8, 8.35]) {
+    for (const z of [-17.2, -10.3, -3.4, 3.4, 10.3, 17.2]) {
       const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.02, 0.36, 1.48), black);
       bogie.position.set(0, 0.42, z);
       this.root.add(bogie);
     }
-    const roofHvac = new THREE.Mesh(new THREE.BoxGeometry(1.58, 0.22, 7.1), silver);
-    roofHvac.position.set(0, 3.36, -0.2);
-    this.root.add(roofHvac);
-    this.addPantograph(new THREE.Vector3(0, 3.58, 1.8), metal);
-    this.trainHalfLengthM = 13.4;
+    for (const z of [-12, 0, 12]) {
+      const roofHvac = new THREE.Mesh(new THREE.BoxGeometry(1.56, 0.2, 3.5), silver);
+      roofHvac.position.set(0, 3.37, z);
+      this.root.add(roofHvac);
+    }
+    this.addPantograph(new THREE.Vector3(0, 3.58, 4.2), metal);
+    this.trainHalfLengthM = 21.4;
     return this.createVehicleInstance();
   }
 
@@ -2190,6 +2232,126 @@ class ProceduralTransitVehicleFactory {
     overheadDisplayFront.position.z = overheadZ + 0.065;
     overheadDisplayFront.rotation.y = 0;
     car.add(overheadDisplayFront);
+  }
+
+  private makeModernTramBody(widthM: number, heightM: number, depthM: number): THREE.ExtrudeGeometry {
+    const halfWidth = widthM / 2;
+    const crossSection = new THREE.Shape();
+    crossSection.moveTo(-halfWidth, 0.5);
+    crossSection.lineTo(halfWidth, 0.5);
+    crossSection.lineTo(halfWidth, heightM - 0.42);
+    crossSection.quadraticCurveTo(halfWidth - 0.02, heightM - 0.18, halfWidth - 0.18, heightM);
+    crossSection.lineTo(-halfWidth + 0.18, heightM);
+    crossSection.quadraticCurveTo(-halfWidth + 0.02, heightM - 0.18, -halfWidth, heightM - 0.42);
+    crossSection.closePath();
+    const geometry = new THREE.ExtrudeGeometry(crossSection, {
+      depth: depthM,
+      bevelEnabled: true,
+      bevelSize: 0.025,
+      bevelThickness: 0.025,
+      bevelSegments: 2,
+      curveSegments: 5
+    });
+    geometry.translate(0, 0, -depthM / 2);
+    return geometry;
+  }
+
+  private makeAvenioCabNose(material: THREE.Material): THREE.Mesh {
+    const shape = new THREE.Shape();
+    shape.moveTo(-1.02, -1.3);
+    shape.quadraticCurveTo(-1.18, -0.25, -1.08, 0.82);
+    shape.quadraticCurveTo(-0.92, 1.25, -0.58, 1.38);
+    shape.lineTo(0.58, 1.38);
+    shape.quadraticCurveTo(0.92, 1.25, 1.08, 0.82);
+    shape.quadraticCurveTo(1.18, -0.25, 1.02, -1.3);
+    shape.closePath();
+    const geometry = new THREE.ExtrudeGeometry(shape, {
+      depth: 1.16,
+      bevelEnabled: true,
+      bevelThickness: 0.1,
+      bevelSize: 0.1,
+      bevelSegments: 4,
+      curveSegments: 8
+    });
+    geometry.center();
+    geometry.rotateX(Math.PI / 2);
+    return new THREE.Mesh(geometry, material);
+  }
+
+  private makeAvenioCabMask(): THREE.ExtrudeGeometry {
+    const shape = new THREE.Shape();
+    shape.moveTo(-0.98, -0.78);
+    shape.lineTo(0.98, -0.78);
+    shape.quadraticCurveTo(0.92, 0.62, 0.66, 0.94);
+    shape.quadraticCurveTo(0.5, 1.08, 0.3, 1.1);
+    shape.lineTo(-0.3, 1.1);
+    shape.quadraticCurveTo(-0.5, 1.08, -0.66, 0.94);
+    shape.quadraticCurveTo(-0.92, 0.62, -0.98, -0.78);
+    shape.closePath();
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.02, bevelSegments: 2, curveSegments: 8 });
+    geometry.translate(0, 0, -0.03);
+    return geometry;
+  }
+
+  private makeAvenioWindscreen(): THREE.ExtrudeGeometry {
+    const shape = new THREE.Shape();
+    shape.moveTo(-0.84, -0.48);
+    shape.lineTo(0.84, -0.48);
+    shape.quadraticCurveTo(0.75, 0.54, 0.5, 0.72);
+    shape.lineTo(-0.5, 0.72);
+    shape.quadraticCurveTo(-0.75, 0.54, -0.84, -0.48);
+    shape.closePath();
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.045, bevelEnabled: true, bevelSize: 0.015, bevelThickness: 0.012, bevelSegments: 2, curveSegments: 8 });
+    geometry.translate(0, 0, -0.0225);
+    return geometry;
+  }
+
+  private makeUrbosCabNose(material: THREE.Material): THREE.Mesh {
+    const shape = new THREE.Shape();
+    shape.moveTo(-0.96, -1.28);
+    shape.quadraticCurveTo(-1.2, -0.3, -1.08, 0.82);
+    shape.quadraticCurveTo(-0.95, 1.2, -0.62, 1.36);
+    shape.quadraticCurveTo(0, 1.52, 0.62, 1.36);
+    shape.quadraticCurveTo(0.95, 1.2, 1.08, 0.82);
+    shape.quadraticCurveTo(1.2, -0.3, 0.96, -1.28);
+    shape.closePath();
+    const geometry = new THREE.ExtrudeGeometry(shape, {
+      depth: 1.2,
+      bevelEnabled: true,
+      bevelThickness: 0.12,
+      bevelSize: 0.12,
+      bevelSegments: 5,
+      curveSegments: 10
+    });
+    geometry.center();
+    geometry.rotateX(Math.PI / 2);
+    return new THREE.Mesh(geometry, material);
+  }
+
+  private makeUrbosCabMask(): THREE.ExtrudeGeometry {
+    const shape = new THREE.Shape();
+    shape.moveTo(-0.92, -0.68);
+    shape.quadraticCurveTo(-1.02, 0.52, -0.7, 0.9);
+    shape.quadraticCurveTo(0, 1.14, 0.7, 0.9);
+    shape.quadraticCurveTo(1.02, 0.52, 0.92, -0.68);
+    shape.quadraticCurveTo(0, -0.86, -0.92, -0.68);
+    shape.closePath();
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.065, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.025, bevelSegments: 3, curveSegments: 10 });
+    geometry.translate(0, 0, -0.0325);
+    return geometry;
+  }
+
+  private makeUrbosWindscreen(): THREE.ExtrudeGeometry {
+    const shape = new THREE.Shape();
+    shape.moveTo(-0.78, -0.44);
+    shape.lineTo(0.78, -0.44);
+    shape.quadraticCurveTo(0.8, 0.4, 0.54, 0.66);
+    shape.quadraticCurveTo(0, 0.82, -0.54, 0.66);
+    shape.quadraticCurveTo(-0.8, 0.4, -0.78, -0.44);
+    shape.closePath();
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelSize: 0.018, bevelThickness: 0.014, bevelSegments: 2, curveSegments: 10 });
+    geometry.translate(0, 0, -0.025);
+    return geometry;
   }
 
   // Shared DT8 Tango body cross-section; depth defaults to a Stadtbahn car and is
