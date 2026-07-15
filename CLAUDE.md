@@ -15,7 +15,7 @@ Stack:
 * OpenFreeMap/OpenMapTiles/OSM scenery
 * Mapzen Terrarium terrain
 
-No Rust. No React. No backend/database/payment system unless explicitly requested.
+No Rust.  No payment system unless explicitly requested.
 
 The app is multi-city, not Stuttgart-only. Current cities include Stuttgart, Ulm, and Odessa.
 
