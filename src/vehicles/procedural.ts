@@ -1035,14 +1035,14 @@ class ProceduralTransitVehicleFactory {
         const windscreenMaterial = glass.clone();
         windscreenMaterial.depthWrite = false;
         const windscreen = new THREE.Mesh(this.makeAvenioWindscreen(), windscreenMaterial);
-        windscreen.position.set(0, 2.42, 1.605);
+        windscreen.position.set(0, 2.22, 1.605);
         windscreen.rotation.x = -0.17;
         windscreen.renderOrder = 10;
         cab.add(windscreen);
         this.cabShells.push(windscreen);
 
-        const routeDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.58, 0.34), ledPanel);
-        routeDisplay.position.set(0, 2.98, 1.49);
+        const routeDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.58, 0.28), ledPanel);
+        routeDisplay.position.set(0, 2.73, 1.72);
         routeDisplay.rotation.x = -0.17;
         routeDisplay.renderOrder = 30;
         cab.add(routeDisplay);
@@ -1570,14 +1570,14 @@ class ProceduralTransitVehicleFactory {
         const windscreenMaterial = glass.clone();
         windscreenMaterial.depthWrite = false;
         const windscreen = new THREE.Mesh(this.makeUrbosWindscreen(), windscreenMaterial);
-        windscreen.position.set(0, 2.44, 1.535);
+        windscreen.position.set(0, 2.2, 1.535);
         windscreen.rotation.x = -0.2;
         windscreen.renderOrder = 10;
         cab.add(windscreen);
         this.cabShells.push(windscreen);
 
-        const routeDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.56, 0.34), ledPanel);
-        routeDisplay.position.set(0, 2.96, 1.4);
+        const routeDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.56, 0.28), ledPanel);
+        routeDisplay.position.set(0, 2.72, 1.72);
         routeDisplay.rotation.x = -0.2;
         routeDisplay.renderOrder = 30;
         cab.add(routeDisplay);
