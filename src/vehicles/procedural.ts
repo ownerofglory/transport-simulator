@@ -944,37 +944,42 @@ class ProceduralTransitVehicleFactory {
       car.name = `Articulated car Ulm Avenio section ${section.center}`;
       car.userData.centerOffsetM = section.center;
 
-      const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.42, 0.34, section.length - 0.1), glossyBlack);
-      skirt.position.y = 0.56;
+      const cabDepth = section.end === 0 ? 0 : 1.7;
+      const bodyLength = section.length - cabDepth;
+      const bodyCenterZ = -section.end * cabDepth / 2;
+
+      const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.42, 0.34, bodyLength - 0.1), glossyBlack);
+      skirt.position.set(0, 0.56, bodyCenterZ);
       car.add(skirt);
       this.passengerShells.push(skirt);
 
-      const body = new THREE.Mesh(this.makeModernTramBody(2.4, 3.22, section.length), shell);
+      const body = new THREE.Mesh(this.makeModernTramBody(2.4, 3.22, bodyLength), shell);
+      body.position.z = bodyCenterZ;
       body.castShadow = true;
       car.add(body);
       this.passengerShells.push(body);
 
-      const roof = new THREE.Mesh(new THREE.BoxGeometry(1.86, 0.11, section.length - 0.24), lightGrey);
-      roof.position.y = 3.25;
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(1.86, 0.11, bodyLength - 0.24), lightGrey);
+      roof.position.set(0, 3.25, bodyCenterZ);
       car.add(roof);
       this.passengerShells.push(roof);
 
       for (const side of [-1, 1] as const) {
-        const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.12, section.length - 0.2), glossyBlack);
-        band.position.set(side * 1.22, 2.28, 0);
+        const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.12, bodyLength - 0.2), glossyBlack);
+        band.position.set(side * 1.22, 2.28, bodyCenterZ);
         car.add(band);
         this.windowBands.push(band);
 
-        const windowCount = section.length > 6 ? 3 : 2;
+        const windowCount = bodyLength > 6 ? 3 : 2;
         for (let index = 0; index < windowCount; index++) {
-          const z = -section.length * 0.28 + (index * (section.length * 0.56)) / Math.max(1, windowCount - 1);
+          const z = bodyCenterZ - bodyLength * 0.28 + (index * (bodyLength * 0.56)) / Math.max(1, windowCount - 1);
           const win = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.88, windowCount === 3 && index === 1 ? 1.25 : 0.98), glass);
           win.position.set(side * 1.24, 2.28, z);
           car.add(win);
         }
 
-        const lowerStripe = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.18, section.length - 0.16), doorBlue);
-        lowerStripe.position.set(side * 1.215, 0.9, 0);
+        const lowerStripe = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.18, bodyLength - 0.16), doorBlue);
+        lowerStripe.position.set(side * 1.215, 0.9, bodyCenterZ);
         car.add(lowerStripe);
 
         // Avenio M is bidirectional; every module carries passenger access on
@@ -1011,40 +1016,50 @@ class ProceduralTransitVehicleFactory {
       car.add(pole);
 
       if (section.end !== 0) {
-        const cabDirection = section.end;
-        const frontPanel = this.makeAvenioCabNose(blue);
-        frontPanel.position.set(0, 1.84, cabDirection * (section.length / 2 - 0.2));
-        if (cabDirection > 0) frontPanel.rotation.y = Math.PI;
-        car.add(frontPanel);
-        this.cabShells.push(frontPanel);
+        const cab = new THREE.Group();
+        cab.position.z = section.end * (section.length / 2 - cabDepth);
+        if (section.end < 0) cab.rotation.y = Math.PI;
+        car.add(cab);
+
+        const cabShell = new THREE.Mesh(this.makeAvenioCabNose(), shell);
+        cabShell.castShadow = true;
+        cab.add(cabShell);
+        this.cabShells.push(cabShell);
 
         const face = new THREE.Mesh(this.makeAvenioCabMask(), glossyBlack);
-        face.position.set(0, 2.14, cabDirection * (section.length / 2 + 0.4));
-        if (cabDirection < 0) face.rotation.y = Math.PI;
-        car.add(face);
+        face.position.set(0, 2.14, 1.58);
+        face.rotation.x = -0.17;
+        cab.add(face);
         this.cabShells.push(face);
 
-        const windscreen = new THREE.Mesh(this.makeAvenioWindscreen(), glass);
-        windscreen.position.set(0, 2.42, cabDirection * (section.length / 2 + 0.44));
-        if (cabDirection < 0) windscreen.rotation.y = Math.PI;
-        car.add(windscreen);
+        const windscreenMaterial = glass.clone();
+        windscreenMaterial.depthWrite = false;
+        const windscreen = new THREE.Mesh(this.makeAvenioWindscreen(), windscreenMaterial);
+        windscreen.position.set(0, 2.42, 1.605);
+        windscreen.rotation.x = -0.17;
+        windscreen.renderOrder = 10;
+        cab.add(windscreen);
+        this.cabShells.push(windscreen);
 
         const routeDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.58, 0.34), ledPanel);
-        routeDisplay.position.set(0, 2.98, cabDirection * (section.length / 2 + 0.48));
-        if (cabDirection < 0) routeDisplay.rotation.y = Math.PI;
-        routeDisplay.renderOrder = 20;
-        car.add(routeDisplay);
+        routeDisplay.position.set(0, 2.98, 1.49);
+        routeDisplay.rotation.x = -0.17;
+        routeDisplay.renderOrder = 30;
+        cab.add(routeDisplay);
         this.cabDisplays.push(routeDisplay);
 
-        const lowerMask = new THREE.Mesh(new THREE.BoxGeometry(2.18, 0.34, 0.1), doorBlue);
-        lowerMask.position.set(0, 0.84, cabDirection * (section.length / 2 + 0.36));
-        car.add(lowerMask);
+        const lowerMask = new THREE.Mesh(this.makeCabAccentPanel(1.98, 1.82, 0.55), blue);
+        lowerMask.position.set(0, 1.3, 1.735);
+        lowerMask.rotation.x = -0.06;
+        cab.add(lowerMask);
+        this.cabShells.push(lowerMask);
 
         const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf8f4d0, emissiveIntensity: 2.0 });
         for (const x of [-0.66, 0.66]) {
-          const headlight = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.07, 0.08), headlightMat);
-          headlight.position.set(x, 1.1, cabDirection * (section.length / 2 + 0.46));
-          car.add(headlight);
+          const headlight = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.045, 16), headlightMat);
+          headlight.rotation.x = Math.PI / 2;
+          headlight.position.set(x, 1.23, 1.78);
+          cab.add(headlight);
         }
       } else {
         const internalDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.42), interiorDisplayMat);
@@ -1458,38 +1473,43 @@ class ProceduralTransitVehicleFactory {
       car.name = `Articulated car Freiburg tram section ${section.center}`;
       car.userData.centerOffsetM = section.center;
 
-      const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.44, 0.32, section.length - 0.08), darkRed);
-      skirt.position.y = 0.56;
+      const cabDepth = section.end === 0 ? 0 : 1.8;
+      const bodyLength = section.length - cabDepth;
+      const bodyCenterZ = -section.end * cabDepth / 2;
+
+      const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.44, 0.32, bodyLength - 0.08), darkRed);
+      skirt.position.set(0, 0.56, bodyCenterZ);
       car.add(skirt);
       this.passengerShells.push(skirt);
 
-      const body = new THREE.Mesh(this.makeModernTramBody(2.4, 3.2, section.length), shell);
+      const body = new THREE.Mesh(this.makeModernTramBody(2.4, 3.2, bodyLength), shell);
+      body.position.z = bodyCenterZ;
       body.castShadow = true;
       car.add(body);
       this.passengerShells.push(body);
 
-      const roof = new THREE.Mesh(new THREE.BoxGeometry(1.86, 0.11, section.length - 0.22), silver);
-      roof.position.y = 3.23;
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(1.86, 0.11, bodyLength - 0.22), silver);
+      roof.position.set(0, 3.23, bodyCenterZ);
       car.add(roof);
       this.passengerShells.push(roof);
 
       for (const side of [-1, 1] as const) {
-        const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.14, section.length - 0.18), black);
-        band.position.set(side * 1.23, 2.3, 0);
+        const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.14, bodyLength - 0.18), black);
+        band.position.set(side * 1.23, 2.3, bodyCenterZ);
         car.add(band);
         this.windowBands.push(band);
 
-        const windowCount = section.length > 6 ? 3 : 2;
+        const windowCount = bodyLength > 6 ? 3 : 2;
         for (let index = 0; index < windowCount; index++) {
-          const z = -section.length * 0.27 + (index * (section.length * 0.54)) / Math.max(1, windowCount - 1);
+          const z = bodyCenterZ - bodyLength * 0.27 + (index * (bodyLength * 0.54)) / Math.max(1, windowCount - 1);
           const windowLength = windowCount === 3 && index === 1 ? 1.32 : 1.0;
           const win = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.9, windowLength), glass);
           win.position.set(side * 1.245, 2.3, z);
           car.add(win);
         }
 
-        const redBelt = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.24, section.length - 0.14), red);
-        redBelt.position.set(side * 1.218, 0.94, 0);
+        const redBelt = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.24, bodyLength - 0.14), red);
+        redBelt.position.set(side * 1.218, 0.94, bodyCenterZ);
         car.add(redBelt);
 
         const doorZ = section.length > 6 ? 0.62 : 0;
@@ -1524,29 +1544,43 @@ class ProceduralTransitVehicleFactory {
       car.add(pole);
 
       if (section.end !== 0) {
-        const cabDirection = section.end;
-        const frontPanel = this.makeUrbosCabNose(red);
-        frontPanel.position.set(0, 1.86, cabDirection * (section.length / 2 - 0.18));
-        if (cabDirection > 0) frontPanel.rotation.y = Math.PI;
-        car.add(frontPanel);
-        this.cabShells.push(frontPanel);
+        const cab = new THREE.Group();
+        cab.position.z = section.end * (section.length / 2 - cabDepth);
+        if (section.end < 0) cab.rotation.y = Math.PI;
+        car.add(cab);
+
+        const cabShell = new THREE.Mesh(this.makeUrbosCabNose(), shell);
+        cabShell.castShadow = true;
+        cab.add(cabShell);
+        this.cabShells.push(cabShell);
+
+        const redSurround = new THREE.Mesh(this.makeUrbosCabMask(), red);
+        redSurround.position.set(0, 2.13, 1.48);
+        redSurround.rotation.x = -0.2;
+        redSurround.scale.set(1.1, 1.08, 1);
+        cab.add(redSurround);
+        this.cabShells.push(redSurround);
 
         const face = new THREE.Mesh(this.makeUrbosCabMask(), black);
-        face.position.set(0, 2.12, cabDirection * (section.length / 2 + 0.42));
-        if (cabDirection < 0) face.rotation.y = Math.PI;
-        car.add(face);
+        face.position.set(0, 2.12, 1.505);
+        face.rotation.x = -0.2;
+        cab.add(face);
         this.cabShells.push(face);
 
-        const windscreen = new THREE.Mesh(this.makeUrbosWindscreen(), glass);
-        windscreen.position.set(0, 2.44, cabDirection * (section.length / 2 + 0.46));
-        if (cabDirection < 0) windscreen.rotation.y = Math.PI;
-        car.add(windscreen);
+        const windscreenMaterial = glass.clone();
+        windscreenMaterial.depthWrite = false;
+        const windscreen = new THREE.Mesh(this.makeUrbosWindscreen(), windscreenMaterial);
+        windscreen.position.set(0, 2.44, 1.535);
+        windscreen.rotation.x = -0.2;
+        windscreen.renderOrder = 10;
+        cab.add(windscreen);
+        this.cabShells.push(windscreen);
 
         const routeDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.56, 0.34), ledPanel);
-        routeDisplay.position.set(0, 3.0, cabDirection * (section.length / 2 + 0.5));
-        if (cabDirection < 0) routeDisplay.rotation.y = Math.PI;
-        routeDisplay.renderOrder = 20;
-        car.add(routeDisplay);
+        routeDisplay.position.set(0, 2.96, 1.4);
+        routeDisplay.rotation.x = -0.2;
+        routeDisplay.renderOrder = 30;
+        cab.add(routeDisplay);
         this.cabDisplays.push(routeDisplay);
 
         const logo = new THREE.Mesh(
@@ -1556,9 +1590,9 @@ class ProceduralTransitVehicleFactory {
             side: THREE.DoubleSide
           })
         );
-        logo.position.set(0, 1.24, cabDirection * (section.length / 2 + 0.49));
-        if (cabDirection < 0) logo.rotation.y = Math.PI;
-        car.add(logo);
+        logo.position.set(0, 1.14, 1.725);
+        logo.rotation.x = -0.04;
+        cab.add(logo);
 
         const smile = new THREE.Mesh(
           new THREE.TubeGeometry(
@@ -1574,15 +1608,15 @@ class ProceduralTransitVehicleFactory {
           ),
           shell
         );
-        smile.position.set(0, 1.5, cabDirection * (section.length / 2 + 0.5));
-        car.add(smile);
+        smile.position.set(0, 0.99, 1.735);
+        cab.add(smile);
 
         const headlightMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2ca, emissiveIntensity: 1.8 });
         for (const x of [-0.68, 0.68]) {
           const headlight = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 8), headlightMaterial);
           headlight.scale.set(1.25, 0.6, 0.35);
-          headlight.position.set(x, 0.98, cabDirection * (section.length / 2 + 0.49));
-          car.add(headlight);
+          headlight.position.set(x, 1.55, 1.68);
+          cab.add(headlight);
         }
       } else {
         const internalDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.72, 0.42), interiorDisplayMat);
@@ -2256,26 +2290,13 @@ class ProceduralTransitVehicleFactory {
     return geometry;
   }
 
-  private makeAvenioCabNose(material: THREE.Material): THREE.Mesh {
-    const shape = new THREE.Shape();
-    shape.moveTo(-1.02, -1.3);
-    shape.quadraticCurveTo(-1.18, -0.25, -1.08, 0.82);
-    shape.quadraticCurveTo(-0.92, 1.25, -0.58, 1.38);
-    shape.lineTo(0.58, 1.38);
-    shape.quadraticCurveTo(0.92, 1.25, 1.08, 0.82);
-    shape.quadraticCurveTo(1.18, -0.25, 1.02, -1.3);
-    shape.closePath();
-    const geometry = new THREE.ExtrudeGeometry(shape, {
-      depth: 1.16,
-      bevelEnabled: true,
-      bevelThickness: 0.1,
-      bevelSize: 0.1,
-      bevelSegments: 4,
-      curveSegments: 8
-    });
-    geometry.center();
-    geometry.rotateX(Math.PI / 2);
-    return new THREE.Mesh(geometry, material);
+  private makeAvenioCabNose(): THREE.BufferGeometry {
+    return this.makeTaperedTramCab([
+      { zBottom: 0, zShoulder: 0, zTop: 0, bottom: 0.5, shoulder: 2.8, top: 3.22, bottomHalf: 1.2, half: 1.2, roofHalf: 1.02 },
+      { zBottom: 0.72, zShoulder: 0.72, zTop: 0.68, bottom: 0.48, shoulder: 2.78, top: 3.18, bottomHalf: 1.17, half: 1.15, roofHalf: 0.94 },
+      { zBottom: 1.38, zShoulder: 1.34, zTop: 1.24, bottom: 0.47, shoulder: 2.68, top: 3.08, bottomHalf: 1.08, half: 1.04, roofHalf: 0.82 },
+      { zBottom: 1.78, zShoulder: 1.68, zTop: 1.48, bottom: 0.5, shoulder: 2.5, top: 2.96, bottomHalf: 0.98, half: 0.94, roofHalf: 0.7 }
+    ]);
   }
 
   private makeAvenioCabMask(): THREE.ExtrudeGeometry {
@@ -2295,37 +2316,24 @@ class ProceduralTransitVehicleFactory {
 
   private makeAvenioWindscreen(): THREE.ExtrudeGeometry {
     const shape = new THREE.Shape();
-    shape.moveTo(-0.84, -0.48);
-    shape.lineTo(0.84, -0.48);
-    shape.quadraticCurveTo(0.75, 0.54, 0.5, 0.72);
-    shape.lineTo(-0.5, 0.72);
-    shape.quadraticCurveTo(-0.75, 0.54, -0.84, -0.48);
+    shape.moveTo(-0.84, -0.52);
+    shape.lineTo(0.84, -0.52);
+    shape.quadraticCurveTo(0.78, 0.18, 0.58, 0.32);
+    shape.lineTo(-0.58, 0.32);
+    shape.quadraticCurveTo(-0.78, 0.18, -0.84, -0.52);
     shape.closePath();
     const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.045, bevelEnabled: true, bevelSize: 0.015, bevelThickness: 0.012, bevelSegments: 2, curveSegments: 8 });
     geometry.translate(0, 0, -0.0225);
     return geometry;
   }
 
-  private makeUrbosCabNose(material: THREE.Material): THREE.Mesh {
-    const shape = new THREE.Shape();
-    shape.moveTo(-0.96, -1.28);
-    shape.quadraticCurveTo(-1.2, -0.3, -1.08, 0.82);
-    shape.quadraticCurveTo(-0.95, 1.2, -0.62, 1.36);
-    shape.quadraticCurveTo(0, 1.52, 0.62, 1.36);
-    shape.quadraticCurveTo(0.95, 1.2, 1.08, 0.82);
-    shape.quadraticCurveTo(1.2, -0.3, 0.96, -1.28);
-    shape.closePath();
-    const geometry = new THREE.ExtrudeGeometry(shape, {
-      depth: 1.2,
-      bevelEnabled: true,
-      bevelThickness: 0.12,
-      bevelSize: 0.12,
-      bevelSegments: 5,
-      curveSegments: 10
-    });
-    geometry.center();
-    geometry.rotateX(Math.PI / 2);
-    return new THREE.Mesh(geometry, material);
+  private makeUrbosCabNose(): THREE.BufferGeometry {
+    return this.makeTaperedTramCab([
+      { zBottom: 0, zShoulder: 0, zTop: 0, bottom: 0.5, shoulder: 2.78, top: 3.2, bottomHalf: 1.2, half: 1.2, roofHalf: 1.02 },
+      { zBottom: 0.74, zShoulder: 0.74, zTop: 0.68, bottom: 0.48, shoulder: 2.76, top: 3.16, bottomHalf: 1.17, half: 1.14, roofHalf: 0.93 },
+      { zBottom: 1.42, zShoulder: 1.38, zTop: 1.24, bottom: 0.46, shoulder: 2.64, top: 3.04, bottomHalf: 1.06, half: 1.0, roofHalf: 0.78 },
+      { zBottom: 1.84, zShoulder: 1.66, zTop: 1.4, bottom: 0.54, shoulder: 2.42, top: 2.9, bottomHalf: 0.94, half: 0.9, roofHalf: 0.62 }
+    ]);
   }
 
   private makeUrbosCabMask(): THREE.ExtrudeGeometry {
@@ -2343,14 +2351,85 @@ class ProceduralTransitVehicleFactory {
 
   private makeUrbosWindscreen(): THREE.ExtrudeGeometry {
     const shape = new THREE.Shape();
-    shape.moveTo(-0.78, -0.44);
-    shape.lineTo(0.78, -0.44);
-    shape.quadraticCurveTo(0.8, 0.4, 0.54, 0.66);
-    shape.quadraticCurveTo(0, 0.82, -0.54, 0.66);
-    shape.quadraticCurveTo(-0.8, 0.4, -0.78, -0.44);
+    shape.moveTo(-0.78, -0.5);
+    shape.lineTo(0.78, -0.5);
+    shape.quadraticCurveTo(0.8, 0.18, 0.56, 0.3);
+    shape.quadraticCurveTo(0, 0.4, -0.56, 0.3);
+    shape.quadraticCurveTo(-0.8, 0.18, -0.78, -0.5);
     shape.closePath();
     const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelSize: 0.018, bevelThickness: 0.014, bevelSegments: 2, curveSegments: 10 });
     geometry.translate(0, 0, -0.025);
+    return geometry;
+  }
+
+  private makeCabAccentPanel(widthBottom: number, widthTop: number, height: number): THREE.ExtrudeGeometry {
+    const shape = new THREE.Shape();
+    shape.moveTo(-widthBottom / 2, -height / 2);
+    shape.lineTo(widthBottom / 2, -height / 2);
+    shape.lineTo(widthTop / 2, height / 2);
+    shape.lineTo(-widthTop / 2, height / 2);
+    shape.closePath();
+    const geometry = new THREE.ExtrudeGeometry(shape, {
+      depth: 0.045,
+      bevelEnabled: true,
+      bevelSize: 0.025,
+      bevelThickness: 0.018,
+      bevelSegments: 2
+    });
+    geometry.translate(0, 0, -0.0225);
+    return geometry;
+  }
+
+  private makeTaperedTramCab(
+    rings: Array<{
+      zBottom: number;
+      zShoulder: number;
+      zTop: number;
+      bottom: number;
+      shoulder: number;
+      top: number;
+      bottomHalf: number;
+      half: number;
+      roofHalf: number;
+    }>
+  ): THREE.BufferGeometry {
+    const vertices: number[] = [];
+    const indices: number[] = [];
+    const pointsPerRing = 6;
+
+    for (const ring of rings) {
+      vertices.push(
+        -ring.bottomHalf, ring.bottom, ring.zBottom,
+        ring.bottomHalf, ring.bottom, ring.zBottom,
+        ring.half, ring.shoulder, ring.zShoulder,
+        ring.roofHalf, ring.top, ring.zTop,
+        -ring.roofHalf, ring.top, ring.zTop,
+        -ring.half, ring.shoulder, ring.zShoulder
+      );
+    }
+
+    for (let ringIndex = 0; ringIndex < rings.length - 1; ringIndex++) {
+      const current = ringIndex * pointsPerRing;
+      const next = (ringIndex + 1) * pointsPerRing;
+      for (let point = 0; point < pointsPerRing; point++) {
+        const following = (point + 1) % pointsPerRing;
+        indices.push(current + point, current + following, next + following);
+        indices.push(current + point, next + following, next + point);
+      }
+    }
+
+    for (let point = 1; point < pointsPerRing - 1; point++) {
+      indices.push(0, point + 1, point);
+    }
+    const front = (rings.length - 1) * pointsPerRing;
+    for (let point = 1; point < pointsPerRing - 1; point++) {
+      indices.push(front, front + point, front + point + 1);
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
     return geometry;
   }
 
