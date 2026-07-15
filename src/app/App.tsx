@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AppProvider } from './AppProvider';
 import { AppShell } from './AppShell';
+import { DisclaimerModal } from './DisclaimerModal';
 
 /** Surfaces render errors in the existing loading overlay instead of a blank page. */
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -24,6 +25,7 @@ export function App() {
     <AppErrorBoundary>
       <AppProvider>
         <AppShell />
+        <DisclaimerModal />
       </AppProvider>
     </AppErrorBoundary>
   );

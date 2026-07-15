@@ -492,6 +492,158 @@ body.photo-capture .photo-overlay {
   display: none;
 }
 
+/* ---- First-start disclaimer ---- */
+
+.disclaimer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 24px;
+  background: rgba(4, 7, 11, 0.78);
+  backdrop-filter: blur(6px);
+}
+
+.disclaimer-modal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: 100%;
+  box-sizing: border-box;
+  padding: 28px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: rgba(12, 17, 24, 0.98);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.56);
+}
+
+.disclaimer-kicker {
+  margin-bottom: 8px;
+  color: #ffdf00;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.disclaimer-modal h2 {
+  margin: 0 36px 14px 0;
+  font-size: 24px;
+}
+
+.disclaimer-copy {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 14px;
+  line-height: 1.55;
+  scrollbar-width: thin;
+}
+
+.disclaimer-copy p {
+  margin: 0 0 12px;
+}
+
+.disclaimer-copy p:last-child {
+  margin-bottom: 22px;
+}
+
+.disclaimer-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 34px;
+  min-width: 34px;
+  padding: 4px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.disclaimer-acknowledge {
+  flex: none;
+  width: 100%;
+  min-height: 44px;
+  border-color: rgba(255, 223, 0, 0.75);
+  color: #151a1d;
+  background: #ffdf00;
+}
+
+.disclaimer-acknowledge:hover {
+  background: #ffe638;
+}
+
+@media (max-width: 560px) {
+  .disclaimer-backdrop {
+    padding:
+      max(16px, env(safe-area-inset-top))
+      max(16px, env(safe-area-inset-right))
+      max(16px, env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
+  }
+
+  .disclaimer-modal {
+    padding: 20px 18px 18px;
+    border-radius: 10px;
+  }
+
+  .disclaimer-modal h2 {
+    margin-right: 48px;
+    font-size: 20px;
+    line-height: 1.2;
+  }
+
+  .disclaimer-copy {
+    padding-right: 4px;
+    font-size: 13.5px;
+  }
+
+  .disclaimer-close {
+    top: 10px;
+    right: 10px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    padding: 8px;
+  }
+
+  .disclaimer-acknowledge {
+    min-height: 48px;
+  }
+}
+
+@media (max-height: 560px) {
+  .disclaimer-modal {
+    padding-top: 18px;
+    padding-bottom: 16px;
+  }
+
+  .disclaimer-kicker {
+    margin-bottom: 4px;
+  }
+
+  .disclaimer-modal h2 {
+    margin-bottom: 10px;
+  }
+
+  .disclaimer-copy {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .disclaimer-copy p {
+    margin-bottom: 8px;
+  }
+
+  .disclaimer-copy p:last-child {
+    margin-bottom: 14px;
+  }
+}
+
 /* ---- Realtime tool modals ---- */
 
 .rt-modal-backdrop {
