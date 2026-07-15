@@ -45,11 +45,23 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Vehicle
     const car = new THREE.Group();
     car.name = `${config.formation.sectionNamePrefix} ${index + 1}`;
     car.userData.centerOffsetM = center;
-    const body = new THREE.Mesh(new THREE.BoxGeometry(3.02, 3.3, 16.15), m.shell);
-    body.position.y = 2.05;
+    const body = new THREE.Mesh(makeSBahn430Body(16.15), m.shell);
     body.castShadow = true;
     car.add(body);
     passengerShells.push(body);
+
+    // The BR 430 roof rolls inward above the window band; a low central HVAC
+    // pod leaves the curved shoulders visible instead of reading as a box.
+    const roofPod = new THREE.Mesh(new THREE.BoxGeometry(1.68, 0.18, 4.8), m.metal);
+    roofPod.position.set(0, 3.77, index % 2 === 0 ? 0.65 : -0.65);
+    roofPod.castShadow = true;
+    car.add(roofPod);
+    passengerShells.push(roofPod);
+    for (let slat = -7; slat <= 7; slat++) {
+      const grille = new THREE.Mesh(new THREE.BoxGeometry(1.46, 0.025, 0.055), m.dark);
+      grille.position.set(0, 3.875, roofPod.position.z + slat * 0.28);
+      car.add(grille);
+    }
     const lowerRed = new THREE.Mesh(new THREE.BoxGeometry(3.08, 0.28, 16.22), m.accent);
     lowerRed.position.y = 0.62;
     car.add(lowerRed);
@@ -221,6 +233,33 @@ function makeSBahnMaterials(configMaterials: SBahnBlueprintConfig['materials']):
     materials[role] = makeStandardMaterial(configMaterials[role]);
   }
   return materials;
+}
+
+function makeSBahn430Body(lengthM: number): THREE.ExtrudeGeometry {
+  // Aluminium body profile: nearly vertical sides up to the cant rail, then
+  // broad curved shoulders and a shallow crown around the rooftop equipment.
+  const crossSection = new THREE.Shape();
+  crossSection.moveTo(-1.51, 0.4);
+  crossSection.lineTo(1.51, 0.4);
+  crossSection.lineTo(1.51, 3.02);
+  crossSection.quadraticCurveTo(1.49, 3.25, 1.35, 3.43);
+  crossSection.quadraticCurveTo(1.16, 3.64, 0.72, 3.69);
+  crossSection.quadraticCurveTo(0.34, 3.73, 0, 3.73);
+  crossSection.quadraticCurveTo(-0.34, 3.73, -0.72, 3.69);
+  crossSection.quadraticCurveTo(-1.16, 3.64, -1.35, 3.43);
+  crossSection.quadraticCurveTo(-1.49, 3.25, -1.51, 3.02);
+  crossSection.closePath();
+
+  const geometry = new THREE.ExtrudeGeometry(crossSection, {
+    depth: lengthM,
+    bevelEnabled: true,
+    bevelThickness: 0.025,
+    bevelSize: 0.025,
+    bevelSegments: 2,
+    curveSegments: 8
+  });
+  geometry.translate(0, 0, -lengthM / 2);
+  return geometry;
 }
 
 function makeSBahn430Nose(): THREE.ExtrudeGeometry {
