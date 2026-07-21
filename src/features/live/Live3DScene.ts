@@ -3,15 +3,18 @@ import { OsmSceneStreamer } from '../../osm-scene';
 import { makeProjection, type LatLon, type Projection } from './liveProjection';
 import type { LiveVehicleStore, TrackedVehicle } from './LiveVehicleStore';
 import { LiveVehicleModels } from './LiveVehicleModels';
+import { LiveTerrain } from './LiveTerrain';
 import { LiveTunnelIndex } from './LiveTunnelIndex';
 import { LiveTunnelLayer, TUNNEL_DEPTH_M } from './LiveTunnelLayer';
 import { ALL_LIVE_MODES, modeColor, type LiveMode } from './liveTypes';
 import type { BBox } from './viewport';
 
-// Free-flight 3D view over the live network (concept §2.2/§4), milestone 1:
-// reused OSM scenery on flat ground with vehicles as mode-colored blocks. Terrain
-// relief and procedural vehicle models are later milestones — surfaceHeight is a
-// flat 0 here, which keeps buildings and vehicles perfectly aligned.
+// Free-flight 3D view over the live network (concept §2.2/§4): reused OSM scenery
+// on Mapzen terrain relief (LiveTerrain), with near vehicles as full procedural
+// models (LiveVehicleModels) and the rest as mode-colored instanced blocks, plus
+// tunnel glows/linings for underground runs. Everything is placed at terrain
+// height via LiveTerrain.heightAt so buildings, vehicles and follow camera share
+// the same ground.
 
 const DEG = Math.PI / 180;
 
@@ -60,6 +63,7 @@ export class Live3DScene {
   private readonly models: LiveVehicleModels;
   private readonly tunnelIndex = new LiveTunnelIndex();
   private readonly tunnels: LiveTunnelLayer;
+  private readonly terrain: LiveTerrain;
   private readonly ground: THREE.Mesh;
   private followRunId: string | null = null;
 
@@ -100,20 +104,18 @@ export class Live3DScene {
     sun.position.set(1500, 3000, 1200);
     this.scene.add(sun);
 
-    // A large base ground so there is no void before OSM tiles stream in.
-    this.ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(40_000, 40_000),
-      new THREE.MeshLambertMaterial({ color: 0x6f7d5a })
-    );
-    this.ground.rotation.x = -Math.PI / 2;
-    this.ground.position.y = -0.2;
+    // Terrain relief around the fixed origin doubles as the base ground (so there
+    // is no void before OSM tiles stream in) and the height source for everything
+    // placed in the scene.
+    this.terrain = new LiveTerrain(this.projection);
+    this.ground = this.terrain.mesh;
     this.scene.add(this.ground);
 
-    // Reused OSM scenery streamer; flat surface height for M1.
+    // Reused OSM scenery streamer, placed on the terrain via the shared sampler.
     this.streamer = new OsmSceneStreamer(
       this.scene,
       (lat, lon) => this.projection.project(lat, lon),
-      () => Promise.resolve(0)
+      (lat, lon) => this.terrain.surfaceHeight(lat, lon)
     );
 
     // One instanced block mesh per mode (≤5 draw calls for the whole fleet).
@@ -140,7 +142,7 @@ export class Live3DScene {
     }
 
     this.models = new LiveVehicleModels(this.scene, this.projection);
-    this.tunnels = new LiveTunnelLayer(this.projection, this.tunnelIndex);
+    this.tunnels = new LiveTunnelLayer(this.projection, this.tunnelIndex, (x, z) => this.terrain.heightAt(x, z));
     this.scene.add(this.tunnels.group);
 
     this.attachControls();
@@ -202,7 +204,13 @@ export class Live3DScene {
     this.updateFollow(dt);
     const vehicles = this.opts.store.list();
     this.tunnels.update(vehicles);
-    const modeled = this.models.update(this.opts.store, this.target, this.altitudeM, (vehicle) => this.tunnelIndex.isInTunnel(vehicle));
+    const modeled = this.models.update(
+      this.opts.store,
+      this.target,
+      this.altitudeM,
+      (vehicle) => this.tunnelIndex.isInTunnel(vehicle),
+      (x, z) => this.terrain.heightAt(x, z)
+    );
     this.syncVehicles(modeled);
 
     // Stream scenery around the camera focus (streamer no-ops unless the center
@@ -260,7 +268,7 @@ export class Live3DScene {
 
   private placeInstance(mesh: THREE.InstancedMesh, index: number, v: TrackedVehicle): void {
     const p = this.projection.project(v.render.lat, v.render.lon);
-    this.dummy.position.set(p.x, CAR_H / 2 + 0.4, p.z);
+    this.dummy.position.set(p.x, this.terrain.heightAt(p.x, p.z) + CAR_H / 2 + 0.4, p.z);
     // Bearing is clockwise from north (+z); box forward is +z, so rotate by -bearing.
     this.dummy.rotation.set(0, -v.bearing * DEG, 0);
     this.dummy.updateMatrix();
@@ -269,7 +277,7 @@ export class Live3DScene {
 
   private placeTunnelGlow(mesh: THREE.InstancedMesh, index: number, v: TrackedVehicle): void {
     const p = this.projection.project(v.render.lat, v.render.lon);
-    this.dummy.position.set(p.x, 0.35, p.z);
+    this.dummy.position.set(p.x, this.terrain.heightAt(p.x, p.z) + 0.35, p.z);
     this.dummy.rotation.set(-Math.PI / 2, 0, 0);
     this.dummy.updateMatrix();
     mesh.setMatrixAt(index, this.dummy.matrix);
@@ -384,7 +392,8 @@ export class Live3DScene {
     this.polar = underground ? 1.55 : 0.82;
     this.azimuth = Math.PI - vehicle.bearing * DEG;
     const p = this.projection.project(vehicle.render.lat, vehicle.render.lon);
-    this.target.set(p.x, underground ? -TUNNEL_DEPTH_M : 0, p.z);
+    const surface = this.terrain.heightAt(p.x, p.z);
+    this.target.set(p.x, surface - (underground ? TUNNEL_DEPTH_M : 0), p.z);
     this.cameraDirty = true;
     this.updateCamera();
   }
@@ -395,7 +404,7 @@ export class Live3DScene {
     if (!vehicle) return;
     const underground = this.tunnelIndex.isInTunnel(vehicle);
     const p = this.projection.project(vehicle.render.lat, vehicle.render.lon);
-    p.y = underground ? -TUNNEL_DEPTH_M : 0;
+    p.y = this.terrain.heightAt(p.x, p.z) - (underground ? TUNNEL_DEPTH_M : 0);
     this.target.lerp(p, 1 - Math.exp(-dt / 0.28));
     this.azimuth = THREE.MathUtils.lerp(this.azimuth, Math.PI - vehicle.bearing * DEG, 1 - Math.exp(-dt / 0.4));
     this.distance = THREE.MathUtils.lerp(this.distance, underground ? 42 : 180, 1 - Math.exp(-dt / 0.5));
@@ -439,7 +448,7 @@ export class Live3DScene {
     let closest: { runId: string; distance: number } | null = null;
     for (const vehicle of this.opts.store.list()) {
       const world = this.projection.project(vehicle.render.lat, vehicle.render.lon);
-      world.y = this.tunnelIndex.isInTunnel(vehicle) ? 0.4 : CAR_H / 2;
+      world.y = this.terrain.heightAt(world.x, world.z) + (this.tunnelIndex.isInTunnel(vehicle) ? 0.4 : CAR_H / 2);
       world.project(this.camera);
       if (world.z < -1 || world.z > 1) continue;
       const x = rect.left + ((world.x + 1) * rect.width) / 2;

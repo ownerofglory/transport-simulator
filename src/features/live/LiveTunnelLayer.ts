@@ -17,7 +17,8 @@ export class LiveTunnelLayer {
 
   constructor(
     private readonly projection: Projection,
-    private readonly index: LiveTunnelIndex
+    private readonly index: LiveTunnelIndex,
+    private readonly groundHeightAt: (x: number, z: number) => number = () => 0
   ) {
     this.group.name = 'Live route tunnel linings';
   }
@@ -54,7 +55,7 @@ export class LiveTunnelLayer {
       const routePoints = points.slice(Math.max(0, start - 1), Math.min(points.length, end + 2));
       const curvePoints = routePoints.map(([lat, lon]) => {
         const p = this.projection.project(lat, lon);
-        p.y = -TUNNEL_DEPTH_M;
+        p.y = this.groundHeightAt(p.x, p.z) - TUNNEL_DEPTH_M;
         return p;
       });
       if (curvePoints.length < 2) continue;

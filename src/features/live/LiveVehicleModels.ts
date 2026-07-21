@@ -54,7 +54,8 @@ export class LiveVehicleModels {
     store: LiveVehicleStore,
     target: THREE.Vector3,
     altitudeM: number,
-    isInTunnel: (vehicle: TrackedVehicle) => boolean
+    isInTunnel: (vehicle: TrackedVehicle) => boolean,
+    groundHeightAt: (x: number, z: number) => number
   ): Set<string> {
     const modeled = new Set<string>();
 
@@ -86,7 +87,8 @@ export class LiveVehicleModels {
         const kind = kindForMode(hit.v.data.mode);
         const group = this.acquireModel(kind, usedByKind);
         if (!group) continue;
-        group.position.set(hit.x, isInTunnel(hit.v) ? -4.7 : 0.3, hit.z);
+        const ground = groundHeightAt(hit.x, hit.z);
+        group.position.set(hit.x, ground + (isInTunnel(hit.v) ? -4.7 : 0.3), hit.z);
         group.rotation.set(0, -hit.v.bearing * DEG, 0);
         group.userData.liveRunId = hit.v.runId;
         group.visible = true;
@@ -108,7 +110,7 @@ export class LiveVehicleModels {
         const sprite = this.acquireLabel(labelCount, line, hit.v.data.mode);
         // Underground vehicles are represented at the surface by their label,
         // matching the subdued tunnel-glow treatment in the live-mode concept.
-        sprite.position.set(hit.x, 9, hit.z);
+        sprite.position.set(hit.x, groundHeightAt(hit.x, hit.z) + 9, hit.z);
         sprite.userData.liveRunId = hit.v.runId;
         sprite.visible = true;
         labelCount++;
