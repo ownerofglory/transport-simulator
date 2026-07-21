@@ -15,16 +15,18 @@ type Keyframe = { h: number; sky: number; sun: number; sunI: number; hemiI: numb
 
 // Hour-sorted keyframes spanning a full day. The 0:00 and 24:00 frames match so
 // the curve is continuous across midnight.
+// Night keeps a lifted ambient floor and a lighter sky so the city stays legible
+// after dark — it still reads as night, just not pitch black.
 const KEYS: Keyframe[] = [
-  { h: 0, sky: 0x0a1420, sun: 0x33405c, sunI: 0.15, hemiI: 0.25, elev: -12 },
-  { h: 5, sky: 0x1c2a3e, sun: 0x556080, sunI: 0.25, hemiI: 0.35, elev: -4 },
-  { h: 6.5, sky: 0xc9895f, sun: 0xffc08a, sunI: 0.9, hemiI: 0.6, elev: 6 },
-  { h: 8, sky: 0x8fb8dd, sun: 0xfff0dd, sunI: 1.4, hemiI: 0.85, elev: 22 },
-  { h: 12, sky: 0x9fc6e8, sun: 0xffffff, sunI: 1.75, hemiI: 1.0, elev: 60 },
-  { h: 16, sky: 0x9cc2e2, sun: 0xfff2e0, sunI: 1.45, hemiI: 0.9, elev: 30 },
-  { h: 18.5, sky: 0xd6885a, sun: 0xffb073, sunI: 0.95, hemiI: 0.6, elev: 6 },
-  { h: 20.5, sky: 0x21344c, sun: 0x54618a, sunI: 0.3, hemiI: 0.4, elev: -4 },
-  { h: 24, sky: 0x0a1420, sun: 0x33405c, sunI: 0.15, hemiI: 0.25, elev: -12 }
+  { h: 0, sky: 0x1c2c44, sun: 0x6474a0, sunI: 0.45, hemiI: 0.62, elev: -10 },
+  { h: 5, sky: 0x2a3a54, sun: 0x7482a6, sunI: 0.55, hemiI: 0.66, elev: -3 },
+  { h: 6.5, sky: 0xc9895f, sun: 0xffc08a, sunI: 0.95, hemiI: 0.72, elev: 6 },
+  { h: 8, sky: 0x8fb8dd, sun: 0xfff0dd, sunI: 1.4, hemiI: 0.9, elev: 22 },
+  { h: 12, sky: 0x9fc6e8, sun: 0xffffff, sunI: 1.75, hemiI: 1.05, elev: 60 },
+  { h: 16, sky: 0x9cc2e2, sun: 0xfff2e0, sunI: 1.45, hemiI: 0.95, elev: 30 },
+  { h: 18.5, sky: 0xd6885a, sun: 0xffb073, sunI: 1.0, hemiI: 0.78, elev: 6 },
+  { h: 20.5, sky: 0x33475f, sun: 0x7d8ab4, sunI: 0.55, hemiI: 0.68, elev: -3 },
+  { h: 24, sky: 0x1c2c44, sun: 0x6474a0, sunI: 0.45, hemiI: 0.62, elev: -10 }
 ];
 
 function lerp(a: number, b: number, t: number): number {
