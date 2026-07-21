@@ -4,6 +4,10 @@ import type { TrackedVehicle } from './LiveVehicleStore';
 import { LiveTunnelIndex } from './LiveTunnelIndex';
 
 const TUNNEL_DEPTH_M = 5;
+// Match Explore's tunnel bore (GuidewayLayer): a wide, smooth lining so the
+// follow camera stays comfortably inside on curves instead of feeling cramped.
+const BORE_RADIUS_M = 8.2;
+const BORE_RADIAL_SEGMENTS = 18;
 
 /**
  * Builds the same route-derived lining/portals used by Explore, but only for
@@ -47,8 +51,8 @@ export class LiveTunnelLayer {
     const mask = route.tunnelMask ?? [];
     if (points.length < 2 || !mask.some(Boolean)) return;
 
-    const liningMaterial = new THREE.MeshStandardMaterial({ color: 0x5d6266, roughness: 0.92, side: THREE.BackSide });
-    const portalMaterial = new THREE.MeshStandardMaterial({ color: 0x4b5153, roughness: 0.88 });
+    const liningMaterial = new THREE.MeshStandardMaterial({ color: 0x777a78, roughness: 0.92, side: THREE.BackSide });
+    const portalMaterial = new THREE.MeshStandardMaterial({ color: 0x555957, roughness: 0.88 });
     const lightMaterial = new THREE.MeshBasicMaterial({ color: 0xffedbd });
     for (const [start, end] of ranges(mask)) {
       if (end - start < 1) continue;
@@ -61,15 +65,15 @@ export class LiveTunnelLayer {
       if (curvePoints.length < 2) continue;
       const curve = new THREE.CatmullRomCurve3(curvePoints, false, 'centripetal');
       const segments = Math.max(16, curvePoints.length * 3);
-      const lining = new THREE.Mesh(new THREE.TubeGeometry(curve, segments, 6.8, 14, false), liningMaterial);
+      const lining = new THREE.Mesh(new THREE.TubeGeometry(curve, segments, BORE_RADIUS_M, BORE_RADIAL_SEGMENTS, false), liningMaterial);
       lining.name = 'Live tunnel lining';
       this.group.add(lining);
 
-      const lights = curve.getSpacedPoints(Math.max(3, Math.floor(curve.getLength() / 40))).map((point) => point.add(new THREE.Vector3(0, 4.7, 0)));
-      if (lights.length > 1) this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lights), segments, 0.06, 5), lightMaterial));
+      const lights = curve.getSpacedPoints(Math.max(3, Math.floor(curve.getLength() / 40))).map((point) => point.add(new THREE.Vector3(0, 5.8, 0)));
+      if (lights.length > 1) this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lights), segments, 0.075, 5), lightMaterial));
 
       for (const t of [0, 1]) {
-        const portal = new THREE.Mesh(new THREE.TorusGeometry(6.8, 0.42, 8, 20), portalMaterial);
+        const portal = new THREE.Mesh(new THREE.TorusGeometry(BORE_RADIUS_M, 0.5, 8, 24), portalMaterial);
         portal.position.copy(curve.getPointAt(t));
         portal.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), curve.getTangentAt(t).normalize());
         this.group.add(portal);
