@@ -4,6 +4,7 @@ import { makeProjection, type LatLon, type Projection } from './liveProjection';
 import type { LiveVehicleStore, TrackedVehicle } from './LiveVehicleStore';
 import { LiveVehicleModels } from './LiveVehicleModels';
 import { LiveTerrain } from './LiveTerrain';
+import { daylightAt } from './liveDaylight';
 import { LiveTunnelIndex } from './LiveTunnelIndex';
 import { LiveTunnelLayer, TUNNEL_DEPTH_M } from './LiveTunnelLayer';
 import { ALL_LIVE_MODES, modeColor, type LiveMode } from './liveTypes';
@@ -65,6 +66,10 @@ export class Live3DScene {
   private readonly tunnels: LiveTunnelLayer;
   private readonly terrain: LiveTerrain;
   private readonly ground: THREE.Mesh;
+  // Lighting follows real local time (concept §2.5).
+  private readonly sun = new THREE.DirectionalLight(0xffffff, 1.6);
+  private readonly hemi = new THREE.HemisphereLight(0xdfeeff, 0x50603a, 1.0);
+  private lastLightingMs = 0;
   private followRunId: string | null = null;
 
   private raf: number | null = null;
@@ -98,11 +103,11 @@ export class Live3DScene {
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 30_000);
     this.updateCamera();
 
-    // Lighting: soft sky/ground hemisphere plus a directional sun.
-    this.scene.add(new THREE.HemisphereLight(0xdfeeff, 0x50603a, 1.0));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.6);
-    sun.position.set(1500, 3000, 1200);
-    this.scene.add(sun);
+    // Soft sky/ground hemisphere plus a directional sun, both driven by the
+    // real local time of day (updated periodically in the frame loop).
+    this.scene.add(this.hemi);
+    this.scene.add(this.sun);
+    this.applyDaylight();
 
     // Terrain relief around the fixed origin doubles as the base ground (so there
     // is no void before OSM tiles stream in) and the height source for everything
@@ -184,6 +189,25 @@ export class Live3DScene {
     return this.distance * Math.cos(this.polar);
   }
 
+  /** Drives sun/sky/fog from the real local hour (concept §2.5). */
+  private applyDaylight(): void {
+    const now = new Date();
+    const d = daylightAt(now.getHours() + now.getMinutes() / 60);
+    const sky = new THREE.Color(d.skyColor);
+    (this.scene.background as THREE.Color).copy(sky);
+    if (this.scene.fog) this.scene.fog.color.copy(sky);
+    this.sun.color.setHex(d.sunColor);
+    this.sun.intensity = d.sunIntensity;
+    this.hemi.intensity = d.hemiIntensity;
+    const el = d.elevationDeg * DEG;
+    const R = 4000;
+    this.sun.position.set(
+      Math.cos(el) * Math.sin(d.azimuthRad) * R,
+      Math.max(Math.sin(el), 0.02) * R + 100,
+      Math.cos(el) * Math.cos(d.azimuthRad) * R
+    );
+  }
+
   private updateCamera(): void {
     const s = Math.sin(this.polar) * this.distance;
     this.camera.position.set(
@@ -198,6 +222,12 @@ export class Live3DScene {
     if (this.disposed) return;
     const dt = this.lastTime ? Math.min(0.1, (time - this.lastTime) / 1000) : 0.016;
     this.lastTime = time;
+
+    // Refresh lighting occasionally; it changes slowly with wall-clock time.
+    if (time - this.lastLightingMs > 15_000) {
+      this.applyDaylight();
+      this.lastLightingMs = time;
+    }
 
     this.opts.store.tick(dt);
     // Near vehicles get full models; the rest fall back to instanced blocks.
