@@ -13,6 +13,8 @@ export type AppUrlState = {
   season: Season;
   time: 'auto' | number;
   cameraMode: CameraMode;
+  // Live-traffic workspace flag (own key; `view` above is ride/driver mode).
+  liveView?: boolean;
   realtime?: { origin: EndpointValue; destination: EndpointValue; journeyId: string };
 };
 
@@ -58,6 +60,8 @@ export function readUrlState(): Partial<AppUrlState> {
   const cameraMode = params.get('camera');
   if (cameraMode && CAMERA_MODES.has(cameraMode as CameraMode)) state.cameraMode = cameraMode as CameraMode;
 
+  if (params.get('live') === '1') state.liveView = true;
+
   const endpoint = (prefix: string): EndpointValue | null => {
     const name = params.get(`${prefix}n`);
     const lat = Number.parseFloat(params.get(`${prefix}a`) ?? '');
@@ -86,6 +90,9 @@ export function writeUrlState(state: AppState): void {
   params.set('season', state.selectedSeason);
   params.set('time', state.selectedTime === 'auto' ? 'auto' : String(state.selectedTime));
   params.set('camera', state.selectedCameraMode);
+
+  if (state.view === 'live') params.set('live', '1');
+  else params.delete('live');
 
   const realtimeKeys = ['rt', 'rfoi', 'rfon', 'rfoa', 'rfoo', 'rtoi', 'rton', 'rtoa', 'rtoo', 'rtj'];
   if (state.realtimeJourney) {

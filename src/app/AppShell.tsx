@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { routeMode, type DemoRoute } from '../route';
 import { transportModeLabel } from '../domain/transport';
 import { SimulatorCommandsContext } from '../features/simulation/useSimulatorRuntime';
@@ -11,6 +11,7 @@ import { DriverControls } from '../features/simulation/DriverControls';
 import { MiniMapPanel } from '../features/minimap/MiniMapPanel';
 import { RouteDiagramPanel } from '../features/route-diagram/RouteDiagramPanel';
 import { PhotoModeOverlay } from '../features/photo/PhotoModeOverlay';
+import { LiveEntryButton } from '../features/live/LiveEntryButton';
 import { LoadingOverlay } from './LoadingOverlay';
 import { useAppBootstrap } from './useAppBootstrap';
 import { useAppState } from './useAppState';
@@ -19,6 +20,10 @@ import type { SimulatorRuntime, RouteSession } from '../simulator/SimulatorRunti
 import { InputController } from './InputController';
 import { RuntimeBridge } from './RuntimeBridge';
 import type { DesiredRuntimeState } from '../engine/runtime/DesiredRuntimeState';
+
+// The live-traffic workspace is heavy (Leaflet + realtime tools) and Stuttgart-only,
+// so it is code-split and loaded only when the user enters Live (concept §2.1).
+const LiveView = lazy(() => import('../features/live/LiveView').then((m) => ({ default: m.LiveView })));
 
 /**
  * The React shell: owns selection/input state and drives the imperative
@@ -168,6 +173,10 @@ export function AppShell() {
                 <button onClick={() => { const mode = runtime?.cycleCamera(); if (mode) dispatch({ type: 'camera-selected', cameraMode: mode }); }}>Camera</button>
                 <button onClick={() => runtime?.enterPhotoMode()}>Photo</button>
                 <button onClick={() => session && runtime?.resetSimulation(session)}>Restart</button>
+                <LiveEntryButton
+                  eligible={!!catalog.currentCity?.liveTraffic}
+                  onEnter={() => dispatch({ type: 'view-changed', view: 'live' })}
+                />
               </div>
               <DriverControls />
             </>
@@ -186,6 +195,11 @@ export function AppShell() {
           commands={runtime}
           onExit={() => runtime.exitPhotoMode()}
         />
+      )}
+      {state.view === 'live' && catalog.currentCity?.liveTraffic && (
+        <Suspense fallback={<div className="lv-root" />}>
+          <LiveView onExit={() => dispatch({ type: 'view-changed', view: 'simulator' })} />
+        </Suspense>
       )}
     </SimulatorCommandsContext.Provider>
   );

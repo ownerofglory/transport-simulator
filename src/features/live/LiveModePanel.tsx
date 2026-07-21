@@ -1,0 +1,86 @@
+import { useEffect, useState } from 'react';
+import { ALL_LIVE_MODES, modeColor, modeLabel, type LiveMode } from './liveTypes';
+import type { LiveSummary } from './useLiveVehicles';
+
+// Freshness thresholds (§2.5): amber past ~30 s, red when the snapshot is degraded.
+const STALE_SECONDS = 30;
+
+function freshnessAgeSeconds(summary: LiveSummary, nowMs: number): number | null {
+  if (summary.snapshotAgeSeconds === null || summary.lastUpdatedMs === null) return null;
+  // Server-relative age at fetch time, plus the client time elapsed since — this
+  // keeps counting up between polls without trusting the client's absolute clock.
+  return summary.snapshotAgeSeconds + Math.max(0, Math.round((nowMs - summary.lastUpdatedMs) / 1000));
+}
+
+/**
+ * Slim Live HUD (concept §2.5): mode filter chips, data freshness, vehicle count,
+ * a real-time clock, and the always-visible exit.
+ */
+export function LiveModePanel({
+  summary,
+  userModes,
+  onToggleMode,
+  onExit
+}: {
+  summary: LiveSummary;
+  userModes: Set<LiveMode>;
+  onToggleMode: (mode: LiveMode) => void;
+  onExit: () => void;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const age = freshnessAgeSeconds(summary, now);
+  const requested = new Set(summary.modesRequested);
+  const freshnessClass = summary.degraded ? 'degraded' : age !== null && age > STALE_SECONDS ? 'stale' : 'fresh';
+  const freshnessText = summary.error
+    ? 'reconnecting…'
+    : summary.degraded
+      ? `degraded · ${age ?? '?'}s`
+      : age === null
+        ? 'connecting…'
+        : `live · updated ${age}s ago`;
+
+  const clock = new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <div className="lv-hud">
+      <div className="lv-hud-top">
+        <span className="lv-hud-title">Live · VVS</span>
+        <button className="lv-exit" onClick={onExit}>
+          Exit Live
+        </button>
+      </div>
+
+      <div className="lv-chips">
+        {ALL_LIVE_MODES.map((mode) => {
+          const on = userModes.has(mode);
+          // Enabled by the user but not currently requested because the zoom tier
+          // suppresses it — hint that zooming in will bring it back.
+          const tierHidden = on && !requested.has(mode);
+          return (
+            <button
+              key={mode}
+              className={`lv-chip ${on ? 'on' : 'off'} ${tierHidden ? 'tier-hidden' : ''}`}
+              style={{ '--c': modeColor(mode) } as React.CSSProperties}
+              title={tierHidden ? 'Zoom in to see this mode' : undefined}
+              onClick={() => onToggleMode(mode)}
+            >
+              {modeLabel(mode)}
+              {tierHidden && <span className="lv-chip-zoom">⤢</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="lv-hud-foot">
+        <span className={`lv-fresh ${freshnessClass}`}>{freshnessText}</span>
+        <span className="lv-count">{summary.count} in view</span>
+        <span className="lv-clock">{clock}</span>
+      </div>
+    </div>
+  );
+}

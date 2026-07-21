@@ -40,6 +40,11 @@ export type CityDefinition = CityCatalogEntry & {
   // Optional city-wide vehicle registry id override; lower priority than route/mode overrides.
   vehicleDesignId?: string;
 
+  // Opt-in to the live-traffic view. Present only for cities the backend covers
+  // (currently VVS/Stuttgart). Absent → the Live entry point never renders and
+  // no live-traffic code loads for that city (concept §1 scope gate).
+  liveTraffic?: { network: 'vvs' };
+
   // Fallback data keeps the app usable when generated city files fail to load.
   routeManifestFallback: RouteFeedManifest;
   demoRoutesFallback: DemoRoute[];

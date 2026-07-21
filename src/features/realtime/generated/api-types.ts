@@ -78,6 +78,52 @@ export interface JourneysResponse {
   journeys?: Journey[];
 }
 
+export interface LiveTrafficStatus {
+  enabled?: boolean;
+  positionModel?: string;
+}
+
+export interface LiveVehicle {
+  bearing?: number;
+  confidence?: LivetrafficConfidence;
+  delaySeconds?: number;
+  direction?: string;
+  distanceM?: number;
+  estimatedAt?: string;
+  lat?: number;
+  line?: string;
+  lon?: number;
+  mode?: LivetrafficVehicleMode;
+  nextStop?: string;
+  previousStop?: string;
+  routeId?: string;
+  runId?: string;
+  shapeId?: string;
+  source?: LivetrafficPositionSource;
+  status?: LivetrafficVehicleStatus;
+  tripId?: string;
+}
+
+export type LivetrafficConfidence = "low" | "medium" | "high";
+
+export type LivetrafficPositionSource =
+  | "schedule"
+  | "realtime_inferred"
+  | "measured";
+
+export type LivetrafficVehicleMode =
+  | "tram"
+  | "light-rail"
+  | "s-bahn"
+  | "bus"
+  | "rail";
+
+export type LivetrafficVehicleStatus =
+  | "not_started"
+  | "at_stop"
+  | "in_transit"
+  | "completed";
+
 export interface Location {
   id?: string;
   lat?: number;
@@ -114,4 +160,12 @@ export interface SearchJourneyRequest {
   origin?: Place;
   originId?: string;
   timeMode?: string;
+}
+
+export interface VehicleSnapshot {
+  degraded?: boolean;
+  generatedAt?: string;
+  positionModel?: string;
+  snapshotAgeSeconds?: number;
+  vehicles?: LiveVehicle[];
 }

@@ -121,6 +121,52 @@ definitions:
           $ref: '#/definitions/Journey'
         type: array
     type: object
+  LiveTrafficStatus:
+    properties:
+      enabled:
+        type: boolean
+      positionModel:
+        type: string
+    type: object
+  LiveVehicle:
+    properties:
+      bearing:
+        type: number
+      confidence:
+        $ref: '#/definitions/livetraffic.Confidence'
+      delaySeconds:
+        type: integer
+      direction:
+        type: string
+      distanceM:
+        type: number
+      estimatedAt:
+        type: string
+      lat:
+        type: number
+      line:
+        type: string
+      lon:
+        type: number
+      mode:
+        $ref: '#/definitions/livetraffic.VehicleMode'
+      nextStop:
+        type: string
+      previousStop:
+        type: string
+      routeId:
+        type: string
+      runId:
+        type: string
+      shapeId:
+        type: string
+      source:
+        $ref: '#/definitions/livetraffic.PositionSource'
+      status:
+        $ref: '#/definitions/livetraffic.VehicleStatus'
+      tripId:
+        type: string
+    type: object
   Location:
     properties:
       id:
@@ -169,6 +215,21 @@ definitions:
       timeMode:
         type: string
     type: object
+  VehicleSnapshot:
+    properties:
+      degraded:
+        type: boolean
+      generatedAt:
+        type: string
+      positionModel:
+        type: string
+      snapshotAgeSeconds:
+        type: integer
+      vehicles:
+        items:
+          $ref: '#/definitions/LiveVehicle'
+        type: array
+    type: object
   domain.LegMode:
     enum:
     - walk
@@ -193,6 +254,52 @@ definitions:
     - LocationTypeAddress
     - LocationTypePOI
     - LocationTypeCoord
+  livetraffic.Confidence:
+    enum:
+    - low
+    - medium
+    - high
+    type: string
+    x-enum-varnames:
+    - ConfidenceLow
+    - ConfidenceMedium
+    - ConfidenceHigh
+  livetraffic.PositionSource:
+    enum:
+    - schedule
+    - realtime_inferred
+    - measured
+    type: string
+    x-enum-varnames:
+    - PositionSourceSchedule
+    - PositionSourceRealtimeInferred
+    - PositionSourceMeasured
+  livetraffic.VehicleMode:
+    enum:
+    - tram
+    - light-rail
+    - s-bahn
+    - bus
+    - rail
+    type: string
+    x-enum-varnames:
+    - VehicleModeTram
+    - VehicleModeLightRail
+    - VehicleModeSBahn
+    - VehicleModeBus
+    - VehicleModeRail
+  livetraffic.VehicleStatus:
+    enum:
+    - not_started
+    - at_stop
+    - in_transit
+    - completed
+    type: string
+    x-enum-varnames:
+    - VehicleStatusNotStarted
+    - VehicleStatusAtStop
+    - VehicleStatusInTransit
+    - VehicleStatusCompleted
   respond.ErrorEnvelope:
     properties:
       error:
@@ -248,6 +355,113 @@ paths:
       summary: Search journeys
       tags:
       - journeys
+  /api/v1/live/status:
+    get:
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/LiveTrafficStatus'
+      summary: Get live traffic status
+      tags:
+      - live-traffic
+  /api/v1/live/vehicles:
+    get:
+      parameters:
+      - description: Viewport southern latitude
+        in: query
+        name: latMin
+        required: true
+        type: number
+      - description: Viewport western longitude
+        in: query
+        name: lonMin
+        required: true
+        type: number
+      - description: Viewport northern latitude
+        in: query
+        name: latMax
+        required: true
+        type: number
+      - description: Viewport eastern longitude
+        in: query
+        name: lonMax
+        required: true
+        type: number
+      - description: Comma-separated modes
+        in: query
+        name: modes
+        required: true
+        type: string
+      - description: RFC3339 timestamp for deterministic replay
+        in: query
+        name: at
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/VehicleSnapshot'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/respond.ErrorEnvelope'
+      summary: Get live vehicle snapshot
+      tags:
+      - live-traffic
+  /api/v1/live/vehicles/{runId}:
+    get:
+      parameters:
+      - description: Dated scheduled run ID
+        in: path
+        name: runId
+        required: true
+        type: string
+      - description: RFC3339 timestamp for deterministic replay
+        in: query
+        name: at
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/LiveVehicle'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/respond.ErrorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/respond.ErrorEnvelope'
+      summary: Get a live vehicle estimate
+      tags:
+      - live-traffic
+  /api/v1/live/vehicles/stream:
+    get:
+      parameters:
+      - description: Last received SSE event ID
+        in: header
+        name: Last-Event-ID
+        type: string
+      produces:
+      - text/event-stream
+      responses:
+        "200":
+          description: SSE event stream
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/respond.ErrorEnvelope'
+      summary: Stream live vehicle updates
+      tags:
+      - live-traffic
   /api/v1/locations:
     get:
       parameters:

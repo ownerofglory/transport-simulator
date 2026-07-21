@@ -15,6 +15,9 @@ import type { HudTab, Mode, Season } from './types';
  */
 export type AppState = {
   hudTab: HudTab;
+  // Top-level workspace: the route simulator vs. the live-traffic view. Live is
+  // only reachable for cities with a liveTraffic config (currently Stuttgart).
+  view: 'simulator' | 'live';
   // A synthetic route built from live realtime data, simulated in place of a
   // catalog route when set.
   realtimeRoute: DemoRoute | null;
@@ -33,6 +36,7 @@ export type AppState = {
 export function createInitialAppState(routeId: string = demoRoute.id): AppState {
   return {
     hudTab: 'simulator',
+    view: 'simulator',
     realtimeRoute: null,
     realtimeJourney: null,
     selectedCityId: 'stuttgart',

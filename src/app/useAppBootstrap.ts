@@ -57,6 +57,9 @@ export function useAppBootstrap(): BootstrapResult {
           type: 'initial-state-loaded',
           state: {
             selectedCityId: city.id,
+            // Restore Live only for a live-eligible city; otherwise fall back to
+            // the simulator view (concept §3: non-VVS ?live=1 degrades gracefully).
+            ...(url.liveView && city.liveTraffic ? { view: 'live' as const } : {}),
             ...(url.rideMode && { selectedMode: url.rideMode }),
             ...(url.season && { selectedSeason: url.season }),
             ...(url.time !== undefined && { selectedTime: url.time }),
