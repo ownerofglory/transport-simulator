@@ -249,8 +249,9 @@ export class Live3DScene {
     );
     this.syncVehicles(modeled);
 
-    // Stream scenery around the camera focus (streamer no-ops unless the center
-    // tile changed, so calling every frame is cheap).
+    // Keep terrain relief + scenery centered on the camera focus (both no-op
+    // unless the focus moved far enough, so calling every frame is cheap).
+    this.terrain.update(this.target.x, this.target.z);
     const focus = this.projection.unproject(this.target.x, this.target.z);
     this.streamer.update(focus);
 

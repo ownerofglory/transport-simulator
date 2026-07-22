@@ -2,48 +2,53 @@ import * as THREE from 'three';
 import { TerrainSampler } from '../../terrain';
 import type { Projection } from './liveProjection';
 
-// Terrain relief for the 3D view (concept §4.2 "terrain relief"). A single
-// deformed grid around the fixed scene origin gives both the visible ground mesh
-// and a fast synchronous height lookup for placing vehicles, labels, tunnels and
-// the follow camera on Stuttgart's actual topography instead of a flat plane.
+// Terrain relief for the 3D view (concept §4.2). A deformed grid provides both
+// the visible ground mesh and a fast synchronous height lookup for placing
+// vehicles, labels, tracks, tunnels and the follow camera on Stuttgart's actual
+// topography instead of a flat plane.
 //
-// The origin never moves, so the grid is sampled once and reused for the whole
-// session; beyond its span the scene fog hides the edge. All heights are relative
-// to the origin's elevation, so the origin sits at world y ≈ 0 and everything the
-// OSM streamer places (which shares this sampler via `surfaceHeight`) lines up.
+// The grid recenters on the camera focus (like the OSM streamer) so following a
+// vehicle far from the entry origin keeps the ground under it — the elevation
+// datum stays fixed at the origin, so a recentered patch still lines up with the
+// buildings the streamer places via the shared `surfaceHeight` sampler.
 
 const GRID = 96; // cells per side → (GRID+1)² sampled nodes
-const SPAN_M = 12_000; // grid covers ±6 km around the origin
+const SPAN_M = 12_000; // grid covers ±6 km around its center
 const STEP_M = SPAN_M / GRID;
+// Resample when the focus drifts more than this from the current grid center,
+// leaving a comfortable margin inside the ±6 km patch.
+const RECENTER_M = 3_000;
 
 export class LiveTerrain {
   readonly mesh: THREE.Mesh;
-  /** Resolves once the datum and heightfield are ready. */
+  /** Resolves once the datum and first heightfield are ready. */
   readonly ready: Promise<void>;
 
   private sampler: TerrainSampler | null = null;
-  private heights: Float32Array | null = null; // (GRID+1)² row-major by [iz][ix]
+  private heights: Float32Array | null = null; // (GRID+1)² by [iz][ix], relative to datum
+  private readonly center = new THREE.Vector2(0, 0); // world x/z the grid is centered on
+  private resampling = false;
 
   constructor(private readonly projection: Projection) {
     const geometry = new THREE.PlaneGeometry(SPAN_M, SPAN_M, GRID, GRID);
     geometry.rotateX(-Math.PI / 2); // lie flat in the XZ plane, +y up
     this.mesh = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ color: 0x6f7d5a }));
     this.mesh.name = 'Live terrain relief';
-    this.ready = this.build(geometry).catch((error) => {
+    this.ready = this.init().catch((error) => {
       console.warn('Live 3D: terrain relief unavailable; falling back to flat ground.', error);
     });
   }
 
   /**
    * Terrain height (world y) at a world x/z, bilinearly interpolated. Returns 0
-   * until the heightfield loads and outside the sampled grid, so callers degrade
-   * gracefully to the previous flat behavior.
+   * until the heightfield loads and outside the current grid patch, so callers
+   * degrade gracefully to flat ground.
    */
   heightAt(x: number, z: number): number {
     const h = this.heights;
     if (!h) return 0;
-    const fx = (x + SPAN_M / 2) / STEP_M;
-    const fz = (z + SPAN_M / 2) / STEP_M;
+    const fx = (x - this.center.x + SPAN_M / 2) / STEP_M;
+    const fz = (z - this.center.y + SPAN_M / 2) / STEP_M;
     if (fx < 0 || fx > GRID || fz < 0 || fz > GRID) return 0;
     const ix = Math.min(GRID - 1, Math.floor(fx));
     const iz = Math.min(GRID - 1, Math.floor(fz));
@@ -63,34 +68,52 @@ export class LiveTerrain {
     return this.sampler ? this.sampler.sample(lat, lon) : 0;
   };
 
-  private async build(geometry: THREE.PlaneGeometry): Promise<void> {
-    // Datum = elevation at the origin, so the origin sits at y ≈ 0.
+  /** Recenters the grid on a world focus if it has drifted too far (call per frame). */
+  update(focusX: number, focusZ: number): void {
+    if (!this.sampler || this.resampling) return;
+    if (Math.hypot(focusX - this.center.x, focusZ - this.center.y) < RECENTER_M) return;
+    void this.resample(focusX, focusZ);
+  }
+
+  private async init(): Promise<void> {
+    // Datum = elevation at the origin, so the origin sits at y ≈ 0 and every
+    // recentered patch shares the same vertical reference as the OSM streamer.
     const probe = new TerrainSampler(0);
     const originElevation = await probe.sample(this.projection.origin.lat, this.projection.origin.lon);
     this.sampler = new TerrainSampler(originElevation);
+    await this.resample(0, 0);
+  }
 
-    const position = geometry.attributes.position;
-    const count = position.count;
-    const samples: Promise<number>[] = [];
-    for (let i = 0; i < count; i++) {
-      const { lat, lon } = this.projection.unproject(position.getX(i), position.getZ(i));
-      samples.push(this.sampler.sample(lat, lon));
-    }
-    const elevations = await Promise.all(samples);
+  private async resample(cx: number, cz: number): Promise<void> {
+    if (!this.sampler) return;
+    this.resampling = true;
+    try {
+      const position = this.mesh.geometry.attributes.position as THREE.BufferAttribute;
+      const count = position.count;
+      // Local x/z are fixed; sample real elevation at (center + local) per vertex.
+      const samples: Promise<number>[] = [];
+      for (let i = 0; i < count; i++) {
+        const { lat, lon } = this.projection.unproject(cx + position.getX(i), cz + position.getZ(i));
+        samples.push(this.sampler.sample(lat, lon));
+      }
+      const elevations = await Promise.all(samples);
 
-    // Deform the mesh and build the height lookup, indexing by grid node so the
-    // bilinear read never depends on PlaneGeometry's internal vertex order.
-    const heights = new Float32Array((GRID + 1) * (GRID + 1));
-    const row = GRID + 1;
-    for (let i = 0; i < count; i++) {
-      const elevation = elevations[i];
-      position.setY(i, elevation);
-      const ix = Math.round((position.getX(i) + SPAN_M / 2) / STEP_M);
-      const iz = Math.round((position.getZ(i) + SPAN_M / 2) / STEP_M);
-      if (ix >= 0 && ix <= GRID && iz >= 0 && iz <= GRID) heights[iz * row + ix] = elevation;
+      const row = GRID + 1;
+      const heights = new Float32Array(row * row);
+      for (let i = 0; i < count; i++) {
+        const elevation = elevations[i];
+        position.setY(i, elevation);
+        const ix = Math.round((position.getX(i) + SPAN_M / 2) / STEP_M);
+        const iz = Math.round((position.getZ(i) + SPAN_M / 2) / STEP_M);
+        if (ix >= 0 && ix <= GRID && iz >= 0 && iz <= GRID) heights[iz * row + ix] = elevation;
+      }
+      position.needsUpdate = true;
+      this.mesh.geometry.computeVertexNormals();
+      this.mesh.position.set(cx, 0, cz);
+      this.heights = heights;
+      this.center.set(cx, cz);
+    } finally {
+      this.resampling = false;
     }
-    position.needsUpdate = true;
-    geometry.computeVertexNormals();
-    this.heights = heights;
   }
 }
