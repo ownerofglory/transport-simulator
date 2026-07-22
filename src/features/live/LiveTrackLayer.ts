@@ -16,11 +16,25 @@ const GAUGE_M = 1.5;
 const RAIL_RADIUS_M = 0.12;
 const BALLAST_HALF_WIDTH_M = 1.5;
 
+// Segment de-duplication: many routes share the same physical alignment, and
+// drawing each one stacks near-identical rails. A segment is skipped when a
+// previously drawn one already runs within DEDUP_RADIUS_M at a similar heading.
+// The radius stays under real double-track spacing (~4 m) so genuinely parallel
+// tracks still both get drawn — only true duplicates collapse.
+const DEDUP_CELL_M = 12; // spatial hash bucket (must exceed the radius)
+const DEDUP_RADIUS_M = 3;
+const DEDUP_ANGLE_RAD = (25 * Math.PI) / 180;
+const DEDUP_SAMPLE_M = 6; // sample spacing along a segment
+const DEDUP_COVER_RATIO = 0.6; // fraction of samples already covered to skip
+
 type Route = { id: string; geoPoints?: [number, number][]; tunnelMask?: boolean[] };
+type Occupancy = { x: number; z: number; ang: number };
 
 export class LiveTrackLayer {
   readonly group = new THREE.Group();
   private readonly built = new Set<string>();
+  // Spatial hash of already-drawn track samples, keyed by DEDUP_CELL_M bucket.
+  private readonly occupancy = new Map<string, Occupancy[]>();
   private readonly railMaterial = new THREE.MeshStandardMaterial({ color: 0x8a9095, metalness: 0.7, roughness: 0.3 });
   private readonly ballastMaterial = new THREE.MeshStandardMaterial({ color: 0x5c5a54, roughness: 0.96 });
 
@@ -63,22 +77,118 @@ export class LiveTrackLayer {
         return p;
       });
       if (centers.length < 2) continue;
-      const laterals = horizontalNormals(centers);
-      const segments = Math.max(8, centers.length * 2);
-
-      for (const sign of [-1, 1]) {
-        const railPoints = centers.map((c, i) => c.clone().addScaledVector(laterals[i], (sign * GAUGE_M) / 2));
-        const rail = new THREE.Mesh(
-          new THREE.TubeGeometry(new THREE.CatmullRomCurve3(railPoints, false, 'centripetal'), segments, RAIL_RADIUS_M, 6, false),
-          this.railMaterial
-        );
-        rail.name = 'Live rail';
-        this.group.add(rail);
-      }
-
-      this.group.add(new THREE.Mesh(ribbonGeometry(centers, laterals, BALLAST_HALF_WIDTH_M, -0.06), this.ballastMaterial));
+      // Drop stretches another route already laid rails on, then draw what's left
+      // as contiguous runs.
+      for (const run of this.claimRuns(centers)) this.buildRun(run);
     }
   }
+
+  /** Rails + ballast for one contiguous stretch of centerline points. */
+  private buildRun(centers: THREE.Vector3[]): void {
+    const laterals = horizontalNormals(centers);
+    const segments = Math.max(8, centers.length * 2);
+    for (const sign of [-1, 1]) {
+      const railPoints = centers.map((c, i) => c.clone().addScaledVector(laterals[i], (sign * GAUGE_M) / 2));
+      const rail = new THREE.Mesh(
+        new THREE.TubeGeometry(new THREE.CatmullRomCurve3(railPoints, false, 'centripetal'), segments, RAIL_RADIUS_M, 6, false),
+        this.railMaterial
+      );
+      rail.name = 'Live rail';
+      this.group.add(rail);
+    }
+    this.group.add(new THREE.Mesh(ribbonGeometry(centers, laterals, BALLAST_HALF_WIDTH_M, -0.06), this.ballastMaterial));
+  }
+
+  /**
+   * Splits a centerline into runs of segments that are not already covered by
+   * previously drawn track, claiming the ones it keeps. Duplicated stretches
+   * become gaps, which the route that got there first already fills.
+   */
+  private claimRuns(centers: THREE.Vector3[]): THREE.Vector3[][] {
+    const runs: THREE.Vector3[][] = [];
+    let current: THREE.Vector3[] = [];
+    for (let i = 0; i < centers.length - 1; i++) {
+      const a = centers[i];
+      const b = centers[i + 1];
+      if (this.segmentCovered(a, b)) {
+        if (current.length >= 2) runs.push(current);
+        current = [];
+        continue;
+      }
+      this.claimSegment(a, b);
+      if (current.length === 0) current.push(a);
+      current.push(b);
+    }
+    if (current.length >= 2) runs.push(current);
+    return runs;
+  }
+
+  private segmentCovered(a: THREE.Vector3, b: THREE.Vector3): boolean {
+    let total = 0;
+    let covered = 0;
+    for (const s of sampleSegment(a, b)) {
+      total++;
+      if (this.sampleCovered(s.x, s.z, s.ang)) covered++;
+    }
+    return total > 0 && covered / total >= DEDUP_COVER_RATIO;
+  }
+
+  private claimSegment(a: THREE.Vector3, b: THREE.Vector3): void {
+    for (const s of sampleSegment(a, b)) {
+      const key = cellKey(s.x, s.z);
+      const list = this.occupancy.get(key);
+      if (list) list.push({ x: s.x, z: s.z, ang: s.ang });
+      else this.occupancy.set(key, [{ x: s.x, z: s.z, ang: s.ang }]);
+    }
+  }
+
+  private sampleCovered(x: number, z: number, ang: number): boolean {
+    const cx = Math.floor(x / DEDUP_CELL_M);
+    const cz = Math.floor(z / DEDUP_CELL_M);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        const list = this.occupancy.get(`${cx + dx}/${cz + dz}`);
+        if (!list) continue;
+        for (const o of list) {
+          if (Math.hypot(o.x - x, o.z - z) <= DEDUP_RADIUS_M && angleClose(o.ang, ang)) return true;
+        }
+      }
+    }
+    return false;
+  }
+}
+
+function cellKey(x: number, z: number): string {
+  return `${Math.floor(x / DEDUP_CELL_M)}/${Math.floor(z / DEDUP_CELL_M)}`;
+}
+
+// Heading folded to [0, π): direction-agnostic, so the two directions of one
+// physical track compare as the same alignment.
+function foldAngle(dx: number, dz: number): number {
+  let ang = Math.atan2(dz, dx);
+  if (ang < 0) ang += Math.PI;
+  return ang % Math.PI;
+}
+
+function angleClose(a: number, b: number): boolean {
+  let d = Math.abs(a - b);
+  if (d > Math.PI / 2) d = Math.PI - d;
+  return d <= DEDUP_ANGLE_RAD;
+}
+
+/** Points every ~DEDUP_SAMPLE_M along a segment, with its folded heading. */
+function sampleSegment(a: THREE.Vector3, b: THREE.Vector3): Array<{ x: number; z: number; ang: number }> {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const len = Math.hypot(dx, dz);
+  const ang = foldAngle(dx, dz);
+  const steps = Math.max(1, Math.ceil(len / DEDUP_SAMPLE_M));
+  const out: Array<{ x: number; z: number; ang: number }> = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    out.push({ x: a.x + dx * t, z: a.z + dz * t, ang });
+  }
+  return out;
 }
 
 // Index ranges [start, end] where the route is NOT in a tunnel. With no mask the
