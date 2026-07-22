@@ -30,6 +30,10 @@ const CAR_LEN = 22;
 const CAR_W = 3.0;
 const CAR_H = 3.4;
 const MAX_PER_MODE = 1024;
+// Tunnel glows mark underground runs for someone looking down from above. Up
+// close (and while riding a tunnel chase) they read as a big coloured blob, so
+// they only draw from a distance.
+const GLOW_MIN_ALTITUDE_M = 150;
 
 type Live3DOptions = {
   store: LiveVehicleStore;
@@ -248,8 +252,8 @@ export class Live3DScene {
     this.trackMotion.tick(vehicles, dt);
     // Near vehicles get full models; the rest fall back to instanced blocks.
     this.updateFollow(dt);
-    this.tunnels.update(vehicles);
-    this.tracks.update(vehicles, this.altitudeM);
+    this.tunnels.update(vehicles, this.terrain.revision);
+    this.tracks.update(vehicles, this.altitudeM, this.terrain.revision);
     const modeled = this.models.update(
       this.opts.store,
       this.target,
@@ -286,7 +290,7 @@ export class Live3DScene {
       const tunnel = this.tunnelIndex.isInTunnel(v);
       if (tunnel) {
         const i = glowPerMode.get(mode) ?? 0;
-        if (i < MAX_PER_MODE) {
+        if (i < MAX_PER_MODE && this.altitudeM >= GLOW_MIN_ALTITUDE_M) {
           this.placeTunnelGlow(glow, i, v);
           const ids = this.tunnelGlowRunIds.get(mode) ?? [];
           ids[i] = v.runId;

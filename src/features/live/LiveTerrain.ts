@@ -24,8 +24,17 @@ export class LiveTerrain {
   /** Resolves once the datum and first heightfield are ready. */
   readonly ready: Promise<void>;
 
+  /** Bumps whenever the heightfield changes; 0 means "no real heights yet". */
+  get revision(): number {
+    return this.rev;
+  }
+
   private sampler: TerrainSampler | null = null;
   private heights: Float32Array | null = null; // (GRID+1)² by [iz][ix], relative to datum
+  // 0 until the first heightfield lands, then bumped on every resample. Layers
+  // that bake ground height into geometry (tunnels, tracks) watch this so they
+  // never build against the flat placeholder and rebuild after a recenter.
+  private rev = 0;
   private readonly center = new THREE.Vector2(0, 0); // world x/z the grid is centered on
   private resampling = false;
 
@@ -114,6 +123,7 @@ export class LiveTerrain {
       this.mesh.position.set(cx, 0, cz);
       this.heights = heights;
       this.center.set(cx, cz);
+      this.rev++;
     } finally {
       this.resampling = false;
     }

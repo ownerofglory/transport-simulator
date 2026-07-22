@@ -35,6 +35,7 @@ export class LiveTrackLayer {
   private readonly built = new Set<string>();
   // Spatial hash of already-drawn track samples, keyed by DEDUP_CELL_M bucket.
   private readonly occupancy = new Map<string, Occupancy[]>();
+  private terrainRevision = -1;
   private readonly railMaterial = new THREE.MeshStandardMaterial({ color: 0x8a9095, metalness: 0.7, roughness: 0.3 });
   private readonly ballastMaterial = new THREE.MeshStandardMaterial({ color: 0x5c5a54, roughness: 0.96 });
 
@@ -46,8 +47,15 @@ export class LiveTrackLayer {
     this.group.name = 'Live overground rails';
   }
 
-  update(vehicles: TrackedVehicle[], altitudeM: number): void {
+  update(vehicles: TrackedVehicle[], altitudeM: number, terrainRevision: number): void {
     if (altitudeM > BUILD_ALTITUDE_M) return;
+    // Rails bake in ground height, so skip the flat placeholder and rebuild once
+    // the terrain resolves or recenters.
+    if (terrainRevision === 0) return;
+    if (terrainRevision !== this.terrainRevision) {
+      this.terrainRevision = terrainRevision;
+      this.clear();
+    }
     for (const vehicle of vehicles) {
       const route = this.index.routeFor(vehicle) as Route | null;
       if (!route?.geoPoints || route.geoPoints.length < 2 || this.built.has(route.id)) continue;
@@ -81,6 +89,17 @@ export class LiveTrackLayer {
       // as contiguous runs.
       for (const run of this.claimRuns(centers)) this.buildRun(run);
     }
+  }
+
+  /** Drops all built rails so they can be rebuilt at corrected heights. */
+  private clear(): void {
+    this.group.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      mesh.geometry?.dispose?.();
+    });
+    this.group.clear();
+    this.built.clear();
+    this.occupancy.clear();
   }
 
   /** Rails + ballast for one contiguous stretch of centerline points. */

@@ -18,6 +18,7 @@ const BORE_RADIAL_SEGMENTS = 18;
 export class LiveTunnelLayer {
   readonly group = new THREE.Group();
   private readonly built = new Set<string>();
+  private terrainRevision = -1;
 
   constructor(
     private readonly projection: Projection,
@@ -27,13 +28,31 @@ export class LiveTunnelLayer {
     this.group.name = 'Live route tunnel linings';
   }
 
-  update(vehicles: TrackedVehicle[]): void {
+  update(vehicles: TrackedVehicle[], terrainRevision: number): void {
+    // Ground height is baked into the lining, so never build against the flat
+    // placeholder (revision 0) and rebuild once the terrain changes — otherwise
+    // the bore sits at y≈-5 while the train rides real terrain metres away.
+    if (terrainRevision === 0) return;
+    if (terrainRevision !== this.terrainRevision) {
+      this.terrainRevision = terrainRevision;
+      this.clear();
+    }
     for (const vehicle of vehicles) {
       const route = this.index.routeFor(vehicle);
       if (!route || this.built.has(route.id)) continue;
       this.buildRoute(route);
       this.built.add(route.id);
     }
+  }
+
+  /** Drops all built linings so they can be rebuilt at corrected heights. */
+  private clear(): void {
+    this.group.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      mesh.geometry?.dispose?.();
+    });
+    this.group.clear();
+    this.built.clear();
   }
 
   dispose(): void {
