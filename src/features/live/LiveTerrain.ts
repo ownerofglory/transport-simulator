@@ -32,7 +32,9 @@ export class LiveTerrain {
   constructor(private readonly projection: Projection) {
     const geometry = new THREE.PlaneGeometry(SPAN_M, SPAN_M, GRID, GRID);
     geometry.rotateX(-Math.PI / 2); // lie flat in the XZ plane, +y up
-    this.mesh = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ color: 0x6f7d5a }));
+    // Match Explore's ground: a saturated green PBR surface (RouteLayer uses the
+    // same 0x52764b), which reads far greener under the sun than a flat Lambert.
+    this.mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x52764b, roughness: 1 }));
     this.mesh.name = 'Live terrain relief';
     this.ready = this.init().catch((error) => {
       console.warn('Live 3D: terrain relief unavailable; falling back to flat ground.', error);

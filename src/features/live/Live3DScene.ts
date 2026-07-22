@@ -70,7 +70,9 @@ export class Live3DScene {
   private readonly ground: THREE.Mesh;
   // Lighting follows real local time (concept §2.5).
   private readonly sun = new THREE.DirectionalLight(0xffffff, 1.6);
-  private readonly hemi = new THREE.HemisphereLight(0xdfeeff, 0x50603a, 1.0);
+  private readonly hemi = new THREE.HemisphereLight(0xddecff, 0x586a70, 1.0);
+  // A small constant ambient fill lifts shadowed faces, matching Explore's rig.
+  private readonly fill = new THREE.AmbientLight(0x9bb0c8, 0.16);
   private lastLightingMs = 0;
   private followRunId: string | null = null;
 
@@ -97,6 +99,7 @@ export class Live3DScene {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.08; // slightly brighter, matching Explore
     container.appendChild(this.renderer.domElement);
 
     this.scene.background = new THREE.Color(0x9fc6e8);
@@ -109,6 +112,7 @@ export class Live3DScene {
     // real local time of day (updated periodically in the frame loop).
     this.scene.add(this.hemi);
     this.scene.add(this.sun);
+    this.scene.add(this.fill);
     this.applyDaylight();
 
     // Terrain relief around the fixed origin doubles as the base ground (so there

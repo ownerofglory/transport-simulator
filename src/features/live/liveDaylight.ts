@@ -20,11 +20,11 @@ type Keyframe = { h: number; sky: number; sun: number; sunI: number; hemiI: numb
 const KEYS: Keyframe[] = [
   { h: 0, sky: 0x1c2c44, sun: 0x6474a0, sunI: 0.45, hemiI: 0.62, elev: -10 },
   { h: 5, sky: 0x2a3a54, sun: 0x7482a6, sunI: 0.55, hemiI: 0.66, elev: -3 },
-  { h: 6.5, sky: 0xc9895f, sun: 0xffc08a, sunI: 0.95, hemiI: 0.72, elev: 6 },
-  { h: 8, sky: 0x8fb8dd, sun: 0xfff0dd, sunI: 1.4, hemiI: 0.9, elev: 22 },
-  { h: 12, sky: 0x9fc6e8, sun: 0xffffff, sunI: 1.75, hemiI: 1.05, elev: 60 },
-  { h: 16, sky: 0x9cc2e2, sun: 0xfff2e0, sunI: 1.45, hemiI: 0.95, elev: 30 },
-  { h: 18.5, sky: 0xd6885a, sun: 0xffb073, sunI: 1.0, hemiI: 0.78, elev: 6 },
+  { h: 6.5, sky: 0xd0966a, sun: 0xffc08a, sunI: 1.2, hemiI: 0.95, elev: 6 },
+  { h: 8, sky: 0xa2c6e8, sun: 0xfff0dd, sunI: 2.0, hemiI: 1.2, elev: 22 },
+  { h: 12, sky: 0xa7d3ff, sun: 0xffffff, sunI: 2.3, hemiI: 1.35, elev: 60 },
+  { h: 16, sky: 0xa4cdec, sun: 0xfff2e0, sunI: 2.05, hemiI: 1.25, elev: 30 },
+  { h: 18.5, sky: 0xdc8f5f, sun: 0xffb073, sunI: 1.25, hemiI: 0.92, elev: 6 },
   { h: 20.5, sky: 0x33475f, sun: 0x7d8ab4, sunI: 0.55, hemiI: 0.68, elev: -3 },
   { h: 24, sky: 0x1c2c44, sun: 0x6474a0, sunI: 0.45, hemiI: 0.62, elev: -10 }
 ];
