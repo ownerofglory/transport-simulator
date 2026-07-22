@@ -31,7 +31,7 @@ function kindForMode(mode: LiveMode | undefined): VehicleKind {
 // A throwaway route carrying only the fields the procedural builder reads.
 const STUB_ROUTE = { line: '', destination: '', controlPoints: [] } as unknown as DemoRoute;
 
-type NearHit = { v: TrackedVehicle; x: number; z: number; d2: number };
+type NearHit = { v: TrackedVehicle; x: number; z: number; d2: number; bearing: number };
 
 /** Owns the near-field vehicle models and floating line labels for Live3DScene. */
 export class LiveVehicleModels {
@@ -55,11 +55,13 @@ export class LiveVehicleModels {
     target: THREE.Vector3,
     altitudeM: number,
     isInTunnel: (vehicle: TrackedVehicle) => boolean,
-    groundHeightAt: (x: number, z: number) => number
+    groundHeightAt: (x: number, z: number) => number,
+    resolveWorld: (vehicle: TrackedVehicle) => { x: number; z: number; bearing: number },
+    cameraPos: THREE.Vector3
   ): Set<string> {
     const modeled = new Set<string>();
 
-    // Project once and reuse for both models and labels.
+    // Project once (route-snapped) and reuse for both models and labels.
     const hits: NearHit[] = [];
     const wantModels = altitudeM < MODEL_ALT_M;
     const wantLabels = altitudeM < LABEL_ALT_M;
@@ -67,11 +69,11 @@ export class LiveVehicleModels {
       const maxR = Math.max(wantModels ? MODEL_RADIUS_M : 0, wantLabels ? LABEL_RADIUS_M : 0);
       const maxR2 = maxR * maxR;
       for (const v of store.list()) {
-        const p = this.projection.project(v.render.lat, v.render.lon);
-        const dx = p.x - target.x;
-        const dz = p.z - target.z;
+        const w = resolveWorld(v);
+        const dx = w.x - target.x;
+        const dz = w.z - target.z;
         const d2 = dx * dx + dz * dz;
-        if (d2 <= maxR2) hits.push({ v, x: p.x, z: p.z, d2 });
+        if (d2 <= maxR2) hits.push({ v, x: w.x, z: w.z, d2, bearing: w.bearing });
       }
       hits.sort((a, b) => a.d2 - b.d2);
     }
@@ -89,7 +91,7 @@ export class LiveVehicleModels {
         if (!group) continue;
         const ground = groundHeightAt(hit.x, hit.z);
         group.position.set(hit.x, ground + (isInTunnel(hit.v) ? -4.7 : 0.3), hit.z);
-        group.rotation.set(0, -hit.v.bearing * DEG, 0);
+        group.rotation.set(0, -hit.bearing * DEG, 0);
         group.userData.liveRunId = hit.v.runId;
         group.visible = true;
         modeled.add(hit.v.runId);
@@ -108,9 +110,13 @@ export class LiveVehicleModels {
         const line = hit.v.data.line;
         if (!line) continue;
         const sprite = this.acquireLabel(labelCount, line, hit.v.data.mode);
-        // Underground vehicles are represented at the surface by their label,
-        // matching the subdued tunnel-glow treatment in the live-mode concept.
-        sprite.position.set(hit.x, groundHeightAt(hit.x, hit.z) + 9, hit.z);
+        const y = groundHeightAt(hit.x, hit.z) + 7;
+        sprite.position.set(hit.x, y, hit.z);
+        // Scale with distance to the camera so the badge stays a roughly constant,
+        // compact on-screen size instead of ballooning when zoomed in on a vehicle.
+        const dist = Math.hypot(hit.x - cameraPos.x, y - cameraPos.y, hit.z - cameraPos.z);
+        const w = THREE.MathUtils.clamp(dist * 0.05, 3, 60);
+        sprite.scale.set(w, w * 0.42, 1);
         sprite.userData.liveRunId = hit.v.runId;
         sprite.visible = true;
         labelCount++;

@@ -86,10 +86,13 @@ export class LiveTunnelIndex {
 
   private matchRoute(vehicle: TrackedVehicle): TunnelRoute | null {
     const v = vehicle.data;
-    let candidates = this.routes;
-    if (v.shapeId) candidates = candidates.filter((route) => route.shapeId === v.shapeId);
-    else if (v.routeId) candidates = candidates.filter((route) => route.routeId === v.routeId);
-    else if (v.line) candidates = candidates.filter((route) => route.line === v.line);
+    // Cascade shapeId → routeId → line: the live TRIAS feed's shapeIds usually
+    // don't match the GTFS route packages, so most vehicles fall through to a
+    // line match. The closest-alignment pick below then resolves direction.
+    let candidates: TunnelRoute[] = [];
+    if (v.shapeId) candidates = this.routes.filter((route) => route.shapeId === v.shapeId);
+    if (!candidates.length && v.routeId) candidates = this.routes.filter((route) => route.routeId === v.routeId);
+    if (!candidates.length && v.line) candidates = this.routes.filter((route) => route.line === v.line);
     if (!candidates.length) return null;
 
     // A route id/line can have both directions. Pick the alignment closest to

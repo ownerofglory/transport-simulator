@@ -8,6 +8,7 @@ import { daylightAt } from './liveDaylight';
 import { LiveTunnelIndex } from './LiveTunnelIndex';
 import { LiveTunnelLayer, TUNNEL_DEPTH_M } from './LiveTunnelLayer';
 import { LiveTrackLayer } from './LiveTrackLayer';
+import { LiveTrackMotion } from './LiveTrackMotion';
 import { ALL_LIVE_MODES, modeColor, type LiveMode } from './liveTypes';
 import type { BBox } from './viewport';
 
@@ -66,6 +67,8 @@ export class Live3DScene {
   private readonly tunnelIndex = new LiveTunnelIndex();
   private readonly tunnels: LiveTunnelLayer;
   private readonly tracks: LiveTrackLayer;
+  // Snaps matched rail vehicles onto their route and moves them along it.
+  private readonly trackMotion: LiveTrackMotion;
   private readonly terrain: LiveTerrain;
   private readonly ground: THREE.Mesh;
   // Lighting follows real local time (concept §2.5).
@@ -157,6 +160,7 @@ export class Live3DScene {
     this.scene.add(this.tunnels.group);
     this.tracks = new LiveTrackLayer(this.projection, this.tunnelIndex, (x, z) => this.terrain.heightAt(x, z));
     this.scene.add(this.tracks.group);
+    this.trackMotion = new LiveTrackMotion(this.projection, this.tunnelIndex);
 
     this.attachControls();
     window.addEventListener('resize', this.onResize);
@@ -239,9 +243,11 @@ export class Live3DScene {
     }
 
     this.opts.store.tick(dt);
+    const vehicles = this.opts.store.list();
+    // Snap matched rail vehicles onto their route before anything reads positions.
+    this.trackMotion.tick(vehicles, dt);
     // Near vehicles get full models; the rest fall back to instanced blocks.
     this.updateFollow(dt);
-    const vehicles = this.opts.store.list();
     this.tunnels.update(vehicles);
     this.tracks.update(vehicles, this.altitudeM);
     const modeled = this.models.update(
@@ -249,7 +255,9 @@ export class Live3DScene {
       this.target,
       this.altitudeM,
       (vehicle) => this.tunnelIndex.isInTunnel(vehicle),
-      (x, z) => this.terrain.heightAt(x, z)
+      (x, z) => this.terrain.heightAt(x, z),
+      (vehicle) => this.resolveWorld(vehicle),
+      this.camera.position
     );
     this.syncVehicles(modeled);
 
@@ -307,11 +315,19 @@ export class Live3DScene {
     }
   }
 
+  /** World position + bearing for a vehicle: route-snapped when matched, else raw. */
+  private resolveWorld(v: TrackedVehicle): { x: number; z: number; bearing: number } {
+    const snapped = this.trackMotion.positionOf(v.runId);
+    const ll = snapped ?? v.render;
+    const p = this.projection.project(ll.lat, ll.lon);
+    return { x: p.x, z: p.z, bearing: snapped ? snapped.bearing : v.bearing };
+  }
+
   private placeInstance(mesh: THREE.InstancedMesh, index: number, v: TrackedVehicle): void {
-    const p = this.projection.project(v.render.lat, v.render.lon);
-    this.dummy.position.set(p.x, this.terrain.heightAt(p.x, p.z) + CAR_H / 2 + 0.4, p.z);
+    const w = this.resolveWorld(v);
+    this.dummy.position.set(w.x, this.terrain.heightAt(w.x, w.z) + CAR_H / 2 + 0.4, w.z);
     // Bearing is clockwise from north (+z); box forward is +z, so rotate by -bearing.
-    this.dummy.rotation.set(0, -v.bearing * DEG, 0);
+    this.dummy.rotation.set(0, -w.bearing * DEG, 0);
     this.dummy.updateMatrix();
     mesh.setMatrixAt(index, this.dummy.matrix);
   }
@@ -447,14 +463,14 @@ export class Live3DScene {
   // a touch farther back to stay inside the tunnel bore.
   private followPose(vehicle: TrackedVehicle): { distance: number; polar: number; azimuth: number; target: THREE.Vector3; underground: boolean } {
     const underground = this.tunnelIndex.isInTunnel(vehicle);
-    const p = this.projection.project(vehicle.render.lat, vehicle.render.lon);
-    const baseY = this.terrain.heightAt(p.x, p.z) - (underground ? TUNNEL_DEPTH_M : 0);
+    const w = this.resolveWorld(vehicle);
+    const baseY = this.terrain.heightAt(w.x, w.z) - (underground ? TUNNEL_DEPTH_M : 0);
     return {
       underground,
-      azimuth: Math.PI - vehicle.bearing * DEG,
+      azimuth: Math.PI - w.bearing * DEG,
       distance: underground ? 34 : 30,
       polar: underground ? 1.47 : 1.08,
-      target: new THREE.Vector3(p.x, baseY + (underground ? 1.8 : 2), p.z)
+      target: new THREE.Vector3(w.x, baseY + (underground ? 1.8 : 2), w.z)
     };
   }
 
