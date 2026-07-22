@@ -80,6 +80,11 @@ export class Live3DScene {
   private readonly hemi = new THREE.HemisphereLight(0xddecff, 0x586a70, 1.0);
   // A small constant ambient fill lifts shadowed faces, matching Explore's rig.
   private readonly fill = new THREE.AmbientLight(0x9bb0c8, 0.16);
+  // Sky colour from the daylight curve, and whether we are currently inside a
+  // tunnel — underground swaps the sky/fog for enclosing darkness so gaps in the
+  // bore read as earth instead of bright daylight.
+  private readonly skyColor = new THREE.Color(0x9fc6e8);
+  private underground = false;
   private lastLightingMs = 0;
   private followRunId: string | null = null;
 
@@ -210,9 +215,8 @@ export class Live3DScene {
   private applyDaylight(): void {
     const now = new Date();
     const d = daylightAt(now.getHours() + now.getMinutes() / 60);
-    const sky = new THREE.Color(d.skyColor);
-    (this.scene.background as THREE.Color).copy(sky);
-    if (this.scene.fog) this.scene.fog.color.copy(sky);
+    this.skyColor.setHex(d.skyColor);
+    this.applyEnvironment();
     this.sun.color.setHex(d.sunColor);
     this.sun.intensity = d.sunIntensity;
     this.hemi.intensity = d.hemiIntensity;
@@ -223,6 +227,40 @@ export class Live3DScene {
       Math.max(Math.sin(el), 0.02) * R + 100,
       Math.cos(el) * Math.cos(d.azimuthRad) * R
     );
+  }
+
+  /**
+   * Swaps between the daylight sky and enclosing tunnel darkness. Underground the
+   * bore only covers the alignment, so without this the surrounding void renders
+   * as bright sky instead of earth.
+   */
+  private applyEnvironment(): void {
+    const background = this.scene.background as THREE.Color;
+    const fog = this.scene.fog as THREE.Fog | null;
+    if (this.underground) {
+      background.setHex(0x0b0d10);
+      if (fog) {
+        fog.color.setHex(0x0b0d10);
+        fog.near = 6;
+        fog.far = 160;
+      }
+      return;
+    }
+    background.copy(this.skyColor);
+    if (fog) {
+      fog.color.copy(this.skyColor);
+      fog.near = 3000;
+      fog.far = 14_000;
+    }
+  }
+
+  /** Applies underground presentation (hidden surface + dark enclosure). */
+  private setUnderground(underground: boolean): void {
+    this.ground.visible = !underground;
+    this.streamer.group.visible = !underground;
+    if (underground === this.underground) return;
+    this.underground = underground;
+    this.applyEnvironment();
   }
 
   private updateCamera(): void {
@@ -444,8 +482,7 @@ export class Live3DScene {
     if (this.followRunId === runId) return;
     this.followRunId = runId;
     if (!runId) {
-      this.ground.visible = true;
-      this.streamer.group.visible = true;
+      this.setUnderground(false);
       return;
     }
     const vehicle = this.opts.store.get(runId);
@@ -455,8 +492,7 @@ export class Live3DScene {
     this.polar = pose.polar;
     this.azimuth = pose.azimuth;
     this.target.copy(pose.target);
-    this.ground.visible = !pose.underground;
-    this.streamer.group.visible = !pose.underground;
+    this.setUnderground(pose.underground);
     this.cameraDirty = true;
     this.updateCamera();
   }
@@ -487,8 +523,7 @@ export class Live3DScene {
     this.azimuth = THREE.MathUtils.lerp(this.azimuth, pose.azimuth, 1 - Math.exp(-dt / 0.4));
     this.distance = THREE.MathUtils.lerp(this.distance, pose.distance, 1 - Math.exp(-dt / 0.5));
     this.polar = THREE.MathUtils.lerp(this.polar, pose.polar, 1 - Math.exp(-dt / 0.5));
-    this.ground.visible = !pose.underground;
-    this.streamer.group.visible = !pose.underground;
+    this.setUnderground(pose.underground);
     this.cameraDirty = true;
     this.updateCamera();
   }

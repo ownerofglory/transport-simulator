@@ -12,9 +12,14 @@ import type { Projection } from './liveProjection';
 // datum stays fixed at the origin, so a recentered patch still lines up with the
 // buildings the streamer places via the shared `surfaceHeight` sampler.
 
-const GRID = 96; // cells per side → (GRID+1)² sampled nodes
+const GRID = 160; // cells per side → (GRID+1)² sampled nodes
 const SPAN_M = 12_000; // grid covers ±6 km around its center
-const STEP_M = SPAN_M / GRID;
+const STEP_M = SPAN_M / GRID; // 75 m cells
+// The OSM streamer places roads/land at the exact per-point terrain sample, while
+// this mesh only interpolates between grid nodes. On a slope the interpolated
+// surface can sit above those features and bury them, so the backdrop is sunk a
+// little. Placement heights (heightAt) are NOT sunk — only the visible mesh.
+const MESH_SINK_M = 1.5;
 // Resample when the focus drifts more than this from the current grid center,
 // leaving a comfortable margin inside the ±6 km patch.
 const RECENTER_M = 3_000;
@@ -120,7 +125,7 @@ export class LiveTerrain {
       }
       position.needsUpdate = true;
       this.mesh.geometry.computeVertexNormals();
-      this.mesh.position.set(cx, 0, cz);
+      this.mesh.position.set(cx, -MESH_SINK_M, cz);
       this.heights = heights;
       this.center.set(cx, cz);
       this.rev++;
