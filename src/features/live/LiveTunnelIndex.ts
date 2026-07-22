@@ -73,7 +73,9 @@ export class LiveTunnelIndex {
         .then(async (response) => {
           if (!response.ok) throw new Error(`Route feed request failed: ${response.status}`);
           const feed = (await response.json()) as GtfsRouteFeed;
-          this.routes.push(...(feed.routes ?? []).filter((route) => route.geoPoints?.length && route.tunnelMask?.some(Boolean)));
+          // Keep every rail alignment with geometry (not only tunnelled ones): the
+          // same index feeds the overground track layer and the tunnel layer.
+          this.routes.push(...(feed.routes ?? []).filter((route) => route.geoPoints?.length));
           this.revision++;
         })
         .catch((error) => console.warn('Live 3D: could not load tunnel route data.', error));

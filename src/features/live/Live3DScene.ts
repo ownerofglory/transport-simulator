@@ -7,6 +7,7 @@ import { LiveTerrain } from './LiveTerrain';
 import { daylightAt } from './liveDaylight';
 import { LiveTunnelIndex } from './LiveTunnelIndex';
 import { LiveTunnelLayer, TUNNEL_DEPTH_M } from './LiveTunnelLayer';
+import { LiveTrackLayer } from './LiveTrackLayer';
 import { ALL_LIVE_MODES, modeColor, type LiveMode } from './liveTypes';
 import type { BBox } from './viewport';
 
@@ -64,6 +65,7 @@ export class Live3DScene {
   private readonly models: LiveVehicleModels;
   private readonly tunnelIndex = new LiveTunnelIndex();
   private readonly tunnels: LiveTunnelLayer;
+  private readonly tracks: LiveTrackLayer;
   private readonly terrain: LiveTerrain;
   private readonly ground: THREE.Mesh;
   // Lighting follows real local time (concept §2.5).
@@ -149,6 +151,8 @@ export class Live3DScene {
     this.models = new LiveVehicleModels(this.scene, this.projection);
     this.tunnels = new LiveTunnelLayer(this.projection, this.tunnelIndex, (x, z) => this.terrain.heightAt(x, z));
     this.scene.add(this.tunnels.group);
+    this.tracks = new LiveTrackLayer(this.projection, this.tunnelIndex, (x, z) => this.terrain.heightAt(x, z));
+    this.scene.add(this.tracks.group);
 
     this.attachControls();
     window.addEventListener('resize', this.onResize);
@@ -162,6 +166,7 @@ export class Live3DScene {
     this.detachControls();
     this.models.dispose();
     this.tunnels.dispose();
+    this.tracks.dispose();
     this.streamer.dispose();
     for (const mesh of this.meshes.values()) {
       mesh.geometry.dispose();
@@ -234,6 +239,7 @@ export class Live3DScene {
     this.updateFollow(dt);
     const vehicles = this.opts.store.list();
     this.tunnels.update(vehicles);
+    this.tracks.update(vehicles, this.altitudeM);
     const modeled = this.models.update(
       this.opts.store,
       this.target,
@@ -385,14 +391,16 @@ export class Live3DScene {
     const orbit = this.dragButton === 2 || e.ctrlKey || e.metaKey;
     if (Math.hypot(dx, dy) > 0 && this.followRunId) this.opts.onStopFollow();
     if (orbit) {
-      this.azimuth += dx * 0.005;
-      this.polar = THREE.MathUtils.clamp(this.polar + dy * 0.005, 0.15, this.followRunId ? 1.58 : 1.4);
+      // Grab-and-spin: dragging right/down swings the view that way.
+      this.azimuth -= dx * 0.005;
+      this.polar = THREE.MathUtils.clamp(this.polar - dy * 0.005, 0.15, this.followRunId ? 1.58 : 1.4);
     } else {
-      // Pan the ground target in the camera's horizontal plane.
+      // Grab-and-drag pan: the ground point under the cursor tracks the cursor,
+      // so dragging right moves the world right (target moves the opposite way).
       const panScale = this.distance * 0.0018;
       const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 0).setY(0).normalize();
       const forward = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), right).normalize();
-      this.target.addScaledVector(right, dx * panScale).addScaledVector(forward, dy * panScale);
+      this.target.addScaledVector(right, -dx * panScale).addScaledVector(forward, -dy * panScale);
     }
     this.cameraDirty = true;
     this.updateCamera();
@@ -417,30 +425,45 @@ export class Live3DScene {
     }
     const vehicle = this.opts.store.get(runId);
     if (!vehicle) return;
-    const underground = this.tunnelIndex.isInTunnel(vehicle);
-    this.distance = underground ? 42 : 180;
-    this.polar = underground ? 1.55 : 0.82;
-    this.azimuth = Math.PI - vehicle.bearing * DEG;
-    const p = this.projection.project(vehicle.render.lat, vehicle.render.lon);
-    const surface = this.terrain.heightAt(p.x, p.z);
-    this.target.set(p.x, surface - (underground ? TUNNEL_DEPTH_M : 0), p.z);
+    const pose = this.followPose(vehicle);
+    this.distance = pose.distance;
+    this.polar = pose.polar;
+    this.azimuth = pose.azimuth;
+    this.target.copy(pose.target);
+    this.ground.visible = !pose.underground;
+    this.streamer.group.visible = !pose.underground;
     this.cameraDirty = true;
     this.updateCamera();
+  }
+
+  // A close chase pose matching Explore's ChaseCameraRig: the camera sits just
+  // behind the vehicle (azimuth = π − bearing) and slightly above, looking at the
+  // body — much closer than a free-orbit overview. Underground it drops lower and
+  // a touch farther back to stay inside the tunnel bore.
+  private followPose(vehicle: TrackedVehicle): { distance: number; polar: number; azimuth: number; target: THREE.Vector3; underground: boolean } {
+    const underground = this.tunnelIndex.isInTunnel(vehicle);
+    const p = this.projection.project(vehicle.render.lat, vehicle.render.lon);
+    const baseY = this.terrain.heightAt(p.x, p.z) - (underground ? TUNNEL_DEPTH_M : 0);
+    return {
+      underground,
+      azimuth: Math.PI - vehicle.bearing * DEG,
+      distance: underground ? 34 : 30,
+      polar: underground ? 1.47 : 1.08,
+      target: new THREE.Vector3(p.x, baseY + (underground ? 1.8 : 2), p.z)
+    };
   }
 
   private updateFollow(dt: number): void {
     if (!this.followRunId) return;
     const vehicle = this.opts.store.get(this.followRunId);
     if (!vehicle) return;
-    const underground = this.tunnelIndex.isInTunnel(vehicle);
-    const p = this.projection.project(vehicle.render.lat, vehicle.render.lon);
-    p.y = this.terrain.heightAt(p.x, p.z) - (underground ? TUNNEL_DEPTH_M : 0);
-    this.target.lerp(p, 1 - Math.exp(-dt / 0.28));
-    this.azimuth = THREE.MathUtils.lerp(this.azimuth, Math.PI - vehicle.bearing * DEG, 1 - Math.exp(-dt / 0.4));
-    this.distance = THREE.MathUtils.lerp(this.distance, underground ? 42 : 180, 1 - Math.exp(-dt / 0.5));
-    this.polar = THREE.MathUtils.lerp(this.polar, underground ? 1.55 : 0.82, 1 - Math.exp(-dt / 0.5));
-    this.ground.visible = !underground;
-    this.streamer.group.visible = !underground;
+    const pose = this.followPose(vehicle);
+    this.target.lerp(pose.target, 1 - Math.exp(-dt / 0.28));
+    this.azimuth = THREE.MathUtils.lerp(this.azimuth, pose.azimuth, 1 - Math.exp(-dt / 0.4));
+    this.distance = THREE.MathUtils.lerp(this.distance, pose.distance, 1 - Math.exp(-dt / 0.5));
+    this.polar = THREE.MathUtils.lerp(this.polar, pose.polar, 1 - Math.exp(-dt / 0.5));
+    this.ground.visible = !pose.underground;
+    this.streamer.group.visible = !pose.underground;
     this.cameraDirty = true;
     this.updateCamera();
   }
