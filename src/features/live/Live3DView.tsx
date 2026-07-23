@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Live3DScene } from './Live3DScene';
 import { LiveModePanel } from './LiveModePanel';
 import { LiveVehicleCard } from './LiveVehicleCard';
@@ -7,6 +7,13 @@ import type { LatLon } from './liveProjection';
 import type { LiveMode, LiveVehicle } from './liveTypes';
 import type { LiveSummary } from './useLiveVehicles';
 import type { BBox } from './viewport';
+import type { CameraMode } from '../../world/CameraController';
+
+const CAMERA_MODE_LABEL: Record<CameraMode, string> = {
+  chase: 'Chase',
+  passenger: 'Passenger',
+  cab: 'Driver'
+};
 
 /**
  * Full-screen 3D free-flight view (milestone 1). Mounts {@link Live3DScene},
@@ -56,6 +63,9 @@ export function Live3DView({
   const onStopFollowRef = useRef(onStopFollow);
   onStopFollowRef.current = onStopFollow;
   const sceneRef = useRef<Live3DScene | null>(null);
+  const [cameraMode, setCameraMode] = useState<CameraMode>('chase');
+  const setCameraModeRef = useRef(setCameraMode);
+  setCameraModeRef.current = setCameraMode;
 
   // Origin is fixed for the scene's lifetime; a new origin means a fresh mount.
   const originKey = `${origin.lat.toFixed(5)},${origin.lon.toFixed(5)}`;
@@ -68,7 +78,8 @@ export function Live3DView({
       onViewport: (bbox, zoom) => onViewportRef.current(bbox, zoom),
       onExitToMap: () => onBackRef.current(),
       onSelect: (runId) => onSelectRef.current(runId),
-      onStopFollow: () => onStopFollowRef.current()
+      onStopFollow: () => onStopFollowRef.current(),
+      onCameraModeChange: (mode) => setCameraModeRef.current(mode)
     });
     sceneRef.current = scene;
     return () => {
@@ -90,7 +101,18 @@ export function Live3DView({
         <button className="lv-3d-back" onClick={onBackToMap}>
           ↩ Map view
         </button>
-        <span className="lv-3d-hint">drag to pan · scroll to zoom · right-drag to rotate</span>
+        {following && (
+          <button
+            className="lv-3d-back"
+            onClick={() => sceneRef.current?.cycleCameraMode()}
+            title="Switch view (C)"
+          >
+            View: {CAMERA_MODE_LABEL[cameraMode]}
+          </button>
+        )}
+        <span className="lv-3d-hint">
+          {following ? 'C to switch view · drag to leave follow' : 'drag to pan · scroll to zoom · right-drag to rotate'}
+        </span>
       </div>
       {selectedVehicle && (
         <LiveVehicleCard

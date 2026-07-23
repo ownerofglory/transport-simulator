@@ -11,6 +11,10 @@ import { LiveTrackLayer } from './LiveTrackLayer';
 import { LiveTrackMotion } from './LiveTrackMotion';
 import { ALL_LIVE_MODES, modeColor, type LiveMode } from './liveTypes';
 import type { BBox } from './viewport';
+import { ChaseCameraRig } from '../../engine/cameras/ChaseCameraRig';
+import { PassengerCameraRig } from '../../engine/cameras/PassengerCameraRig';
+import { CabCameraRig } from '../../engine/cameras/CabCameraRig';
+import type { CameraMode, CameraUpdateInput } from '../../world/CameraController';
 
 // Free-flight 3D view over the live network (concept §2.2/§4): reused OSM scenery
 // on Mapzen terrain relief (LiveTerrain), with near vehicles as full procedural
@@ -20,14 +24,6 @@ import type { BBox } from './viewport';
 // the same ground.
 
 const DEG = Math.PI / 180;
-
-// Interpolates an angle the short way around the circle. A plain lerp of raw
-// radians spins ~360° when the target crosses the ±π seam (e.g. a vehicle
-// rounding a sharp curve), which looked like a camera whip.
-function lerpAngle(current: number, target: number, alpha: number): number {
-  const delta = Math.atan2(Math.sin(target - current), Math.cos(target - current));
-  return current + delta * alpha;
-}
 
 // Camera altitude clamp (concept §2.2: ~80 m to ~12 km). Above the top we hand
 // back to the map.
@@ -54,6 +50,8 @@ type Live3DOptions = {
   onSelect: (runId: string) => void;
   /** Stops a locked follow when the user takes manual camera control. */
   onStopFollow: () => void;
+  /** Reports the active follow camera view (chase / passenger / cab) to the UI. */
+  onCameraModeChange?: (mode: CameraMode) => void;
 };
 
 export class Live3DScene {
@@ -95,11 +93,24 @@ export class Live3DScene {
   private underground = false;
   private lastLightingMs = 0;
   private followRunId: string | null = null;
-  // Smoothing goal for the follow camera, gated so a single bad frame (a route
-  // rematch flipping the snapped position across the city) can't whip the camera.
+  // Follow camera reuses Explore's rigs so chase/passenger/driver match that view.
+  private cameraMode: CameraMode = 'chase';
+  private readonly rigs = {
+    chase: new ChaseCameraRig(),
+    passenger: new PassengerCameraRig(),
+    cab: new CabCameraRig()
+  } as const;
+  private readonly emptyTrain = new THREE.Group();
+  // Gated smoothing goal (world XZ) for the followed vehicle, so a single bad frame
+  // (a route rematch flipping the snapped position) can't whip the camera.
   private readonly followTarget = new THREE.Vector3();
   private followTargetSet = false;
   private followFreezeFrames = 0;
+  private followJustStarted = false;
+  // Scratch reused by the follow camera each frame (no per-frame allocations).
+  private readonly _followPos = new THREE.Vector3();
+  private readonly _followTan = new THREE.Vector3();
+  private readonly _followOff = new THREE.Vector3();
 
   private raf: number | null = null;
   private lastTime = 0;
@@ -301,10 +312,9 @@ export class Live3DScene {
     const vehicles = this.opts.store.list();
     // Snap matched rail vehicles onto their route before anything reads positions.
     this.trackMotion.tick(vehicles, dt);
-    // Near vehicles get full models; the rest fall back to instanced blocks.
-    this.updateFollow(dt);
     this.tunnels.update(vehicles, this.terrain.revision);
     this.tracks.update(vehicles, this.altitudeM, this.terrain.revision);
+    // Near vehicles get full models; the rest fall back to instanced blocks.
     const modeled = this.models.update(
       this.opts.store,
       this.target,
@@ -315,6 +325,8 @@ export class Live3DScene {
       this.camera.position,
       (runId, offsetM) => this.trackMotion.offsetPoseOf(runId, offsetM)
     );
+    // Follow after models are placed so interior cameras read fresh car matrices.
+    this.updateFollow(dt);
     this.syncVehicles(modeled);
 
     // Keep terrain relief + scenery centered on the camera focus (both no-op
@@ -432,6 +444,7 @@ export class Live3DScene {
     el.addEventListener('pointerleave', this.onPointerUp);
     el.addEventListener('wheel', this.onWheel, { passive: false });
     el.addEventListener('contextmenu', this.onContextMenu);
+    window.addEventListener('keydown', this.onKeyDown);
   }
 
   private detachControls(): void {
@@ -442,9 +455,17 @@ export class Live3DScene {
     el.removeEventListener('pointerleave', this.onPointerUp);
     el.removeEventListener('wheel', this.onWheel);
     el.removeEventListener('contextmenu', this.onContextMenu);
+    window.removeEventListener('keydown', this.onKeyDown);
   }
 
   private readonly onContextMenu = (e: Event) => e.preventDefault();
+
+  // 'c' cycles the follow view (chase / passenger / driver) while following.
+  private readonly onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'c' || e.key === 'C') {
+      if (this.followRunId) this.cycleCameraMode();
+    }
+  };
 
   private readonly onPointerDown = (e: PointerEvent) => {
     this.dragButton = e.button;
@@ -497,74 +518,102 @@ export class Live3DScene {
     this.followRunId = runId;
     this.followTargetSet = false;
     this.followFreezeFrames = 0;
+    this.followJustStarted = !!runId;
     if (!runId) {
       this.setUnderground(false);
+      this.camera.up.set(0, 1, 0); // clear any interior-camera up-vector for free orbit
       return;
     }
-    const vehicle = this.opts.store.get(runId);
-    if (!vehicle) return;
-    const pose = this.followPose(vehicle);
-    this.distance = pose.distance;
-    this.polar = pose.polar;
-    this.azimuth = pose.azimuth;
-    this.target.copy(pose.target);
-    this.setUnderground(pose.underground);
-    this.cameraDirty = true;
-    this.updateCamera();
   }
 
-  // A close chase pose matching Explore's ChaseCameraRig: the camera sits just
-  // behind the vehicle (azimuth = π − bearing) and slightly above, looking at the
-  // body — much closer than a free-orbit overview. Underground it drops lower and
-  // a touch farther back to stay inside the tunnel bore.
-  private followPose(vehicle: TrackedVehicle): { distance: number; polar: number; azimuth: number; target: THREE.Vector3; underground: boolean } {
-    const underground = this.tunnelIndex.isInTunnel(vehicle);
-    const w = this.resolveWorld(vehicle);
-    const baseY = this.terrain.heightAt(w.x, w.z) - (underground ? TUNNEL_DEPTH_M : 0);
-    return {
-      underground,
-      azimuth: Math.PI - w.bearing * DEG,
-      distance: underground ? 34 : 30,
-      polar: underground ? 1.47 : 1.08,
-      target: new THREE.Vector3(w.x, baseY + (underground ? 1.8 : 2), w.z)
-    };
+  /** Cycles the follow view chase → passenger → cab, like Explore. */
+  cycleCameraMode(): CameraMode {
+    return this.setCameraMode(
+      this.cameraMode === 'chase' ? 'passenger' : this.cameraMode === 'passenger' ? 'cab' : 'chase'
+    );
   }
 
+  setCameraMode(mode: CameraMode): CameraMode {
+    this.cameraMode = mode;
+    this.followJustStarted = true; // snap into the new view instead of sliding across
+    this.opts.onCameraModeChange?.(mode);
+    return mode;
+  }
+
+  // Positions the follow camera by reusing Explore's rigs, so chase shows the
+  // vehicle's rear (with its route display), and passenger/cab match the ride view.
+  // Orbit params are kept in sync so the hand-off to free flight (on stop-follow)
+  // doesn't jump and viewport polling still gets a sane altitude.
   private updateFollow(dt: number): void {
     if (!this.followRunId) return;
     // Freeze at the last valid pose when the run vanishes from the store (e.g. a
     // brief bbox flicker); never latch onto another vehicle.
     const vehicle = this.opts.store.get(this.followRunId);
     if (!vehicle) return;
-    const pose = this.followPose(vehicle);
 
-    // Gate the smoothing goal: a plausible step is the vehicle's own motion plus a
-    // margin. A larger jump means the snapped position teleported (a route rematch,
-    // bad fix); hold the previous goal so the camera waits it out instead of whipping
-    // across the city — but if the jump persists (~1 s) it's a genuine re-acquisition,
-    // so accept it and glide over.
+    const w = this.resolveWorld(vehicle);
+    // Gate the horizontal goal: a plausible step is the vehicle's own motion plus a
+    // margin. A larger jump means the snapped position teleported (route rematch, bad
+    // fix); hold the previous goal, but accept it if the jump persists (~1 s).
     if (!this.followTargetSet) {
-      this.followTarget.copy(pose.target);
+      this.followTarget.set(w.x, 0, w.z);
       this.followTargetSet = true;
       this.followFreezeFrames = 0;
     } else {
-      const step = this.followTarget.distanceTo(pose.target);
+      const step = Math.hypot(w.x - this.followTarget.x, w.z - this.followTarget.z);
       const allowed = Math.max(40, 45 * dt * 3);
       if (step <= allowed || this.followFreezeFrames > 60) {
-        this.followTarget.copy(pose.target);
+        this.followTarget.set(w.x, 0, w.z);
         this.followFreezeFrames = 0;
       } else {
         this.followFreezeFrames += 1;
       }
     }
 
-    this.target.lerp(this.followTarget, 1 - Math.exp(-dt / 0.28));
-    this.azimuth = lerpAngle(this.azimuth, pose.azimuth, 1 - Math.exp(-dt / 0.4));
-    this.distance = THREE.MathUtils.lerp(this.distance, pose.distance, 1 - Math.exp(-dt / 0.5));
-    this.polar = THREE.MathUtils.lerp(this.polar, pose.polar, 1 - Math.exp(-dt / 0.5));
-    this.setUnderground(pose.underground);
+    const px = this.followTarget.x;
+    const pz = this.followTarget.z;
+    const underground = this.tunnelIndex.isInTunnel(vehicle);
+    const baseY = this.terrain.heightAt(px, pz) + (underground ? -TUNNEL_DEPTH_M : 0.3);
+    const position = this._followPos.set(px, baseY, pz);
+    // Track-forward unit vector from bearing (model forward = (-sinβ, 0, cosβ)).
+    const beta = w.bearing * DEG;
+    const tangent = this._followTan.set(-Math.sin(beta), 0, Math.cos(beta));
+
+    // Interior views need the rendered model; without one (e.g. just-acquired, far)
+    // fall back to chase so the camera never anchors to nothing.
+    const model = this.models.getFollowModel(this.followRunId);
+    const mode: CameraMode = this.cameraMode !== 'chase' && !model ? 'chase' : this.cameraMode;
+    const input: CameraUpdateInput = {
+      position,
+      tangent,
+      underground,
+      interiorCameraProfile: model?.profile ?? 'tram',
+      passengerOffsetM: 0,
+      trainHalfLengthM: model?.trainHalfLengthM ?? 20,
+      train: model?.train ?? this.emptyTrain,
+      trainCars: model?.cars ?? []
+    };
+    const rig = this.rigs[mode];
+    const pose = rig.pose(input);
+
+    if (this.followJustStarted) {
+      this.camera.position.copy(pose.position);
+      this.camera.up.copy(pose.up).normalize();
+      this.followJustStarted = false;
+    } else {
+      this.camera.position.lerp(pose.position, rig.positionSmoothing);
+      this.camera.up.lerp(pose.up, 0.32).normalize();
+    }
+    this.camera.lookAt(pose.target);
+    this.setUnderground(underground);
+
+    // Keep orbit state consistent with the rig camera for viewport + hand-off.
+    this.target.set(px, baseY + 2, pz);
+    const off = this._followOff.copy(this.camera.position).sub(this.target);
+    this.distance = Math.max(1, off.length());
+    this.polar = THREE.MathUtils.clamp(Math.acos(THREE.MathUtils.clamp(off.y / this.distance, -1, 1)), 0.05, 1.55);
+    this.azimuth = Math.atan2(off.x, off.z);
     this.cameraDirty = true;
-    this.updateCamera();
   }
 
   private pick(e: PointerEvent): void {

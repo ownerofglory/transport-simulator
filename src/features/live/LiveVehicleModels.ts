@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { buildTransitVehicle, isStadtbahnDoubleFormation, isBusLineArticulated, defaultBusBlueprint } from '../../vehicles';
-import { fallbackTransportModeDefinition, type VehicleKind } from '../../domain/transport';
+import { fallbackTransportModeDefinition, type InteriorCameraProfile, type VehicleKind } from '../../domain/transport';
 import { makeLabelTexture } from '../../labels';
 import type { DemoRoute } from '../../route';
 import { modeColor, type LiveMode } from './liveTypes';
@@ -9,6 +9,21 @@ import type { Projection } from './liveProjection';
 
 /** World-space pose along a run's track at a metre offset ahead/behind its center. */
 export type OffsetPose = (runId: string, offsetM: number) => { x: number; z: number; bearing: number } | null;
+
+/** The rendered model of a followed run, for anchoring interior/chase cameras. */
+export type FollowModel = {
+  train: THREE.Group;
+  cars: THREE.Group[];
+  trainHalfLengthM: number;
+  profile: InteriorCameraProfile;
+};
+
+// The interior-camera profile the Explore rigs key on, from the live mode.
+function profileForKind(kind: VehicleKind): InteriorCameraProfile {
+  if (kind === 'bus') return 'bus';
+  if (kind === 's-bahn') return 's-bahn';
+  return 'tram'; // stadtbahn (light-rail / tram)
+}
 
 // Level-of-detail for the 3D view (concept §4.1): near vehicles get the full
 // procedural models (the same kind-builders the ride view uses), everything else
@@ -60,6 +75,7 @@ export class LiveVehicleModels {
   // Keyed by formation variant (see variantFor), not just kind, so single/double
   // Stadtbahn and rigid/articulated bus each get their own pooled model.
   private readonly templates = new Map<string, THREE.Group | null>();
+  private readonly templateMeta = new Map<string, { trainHalfLengthM: number; profile: InteriorCameraProfile }>();
   private readonly pools = new Map<string, THREE.Group[]>();
   private readonly labelPool: THREE.Sprite[] = [];
   private readonly labelTextures = new Map<string, THREE.Texture>();
@@ -201,9 +217,12 @@ export class LiveVehicleModels {
 
     const invRoot = this._q.copy(group.quaternion).invert();
     for (const car of cars) {
-      const offsetM = Number(car.userData.centerOffsetM ?? 0);
-      const pose = offsetPose(hit.v.runId, offsetM);
       const def = car.userData as { defaultPos: THREE.Vector3; defaultQuat: THREE.Quaternion };
+      // Only cars with an explicit along-body offset articulate (procedural
+      // Stadtbahn); blueprint sections bake their offset into meshes, so they stay
+      // rigid at their built local transform.
+      const offsetRaw = car.userData.centerOffsetM;
+      const pose = offsetRaw === undefined ? null : offsetPose(hit.v.runId, Number(offsetRaw));
       if (!pose) {
         car.position.copy(def.defaultPos);
         car.quaternion.copy(def.defaultQuat);
@@ -219,6 +238,23 @@ export class LiveVehicleModels {
     }
   }
 
+  /** Model of a currently-rendered followed run, or null if it has no near model. */
+  getFollowModel(runId: string): FollowModel | null {
+    for (const pool of this.pools.values()) {
+      for (const group of pool) {
+        if (group.visible && group.userData.liveRunId === runId) {
+          return {
+            train: group,
+            cars: (group.userData.liveCars as THREE.Group[]) ?? [],
+            trainHalfLengthM: (group.userData.trainHalfLengthM as number) ?? 20,
+            profile: (group.userData.interiorCameraProfile as InteriorCameraProfile) ?? 'tram'
+          };
+        }
+      }
+    }
+    return null;
+  }
+
   private acquireModel(variant: Variant, used: Map<string, number>): THREE.Group | null {
     const pool = this.pools.get(variant.key) ?? this.pools.set(variant.key, []).get(variant.key)!;
     const i = used.get(variant.key) ?? 0;
@@ -229,24 +265,29 @@ export class LiveVehicleModels {
       if (!template) return null;
       group = template.clone(true); // shares geometry/materials with the template
       this.captureCars(group);
+      const meta = this.templateMeta.get(variant.key);
+      group.userData.trainHalfLengthM = meta?.trainHalfLengthM ?? 20;
+      group.userData.interiorCameraProfile = meta?.profile ?? profileForKind(variant.kind);
       pool.push(group);
       this.scene.add(group);
     }
     return group;
   }
 
-  // Records the articulable cars of a clone and each car's built-in (straight)
-  // local transform, so placeVehicle can bend them and later restore them.
+  // Records a clone's cars (ordered by liveCarIndex) and each car's built-in
+  // (straight) local transform, so placeVehicle can bend the articulable ones and
+  // restore them, and the interior camera can anchor to a car.
   private captureCars(group: THREE.Group): void {
-    const cars: THREE.Group[] = [];
-    for (const child of group.children) {
-      if (child instanceof THREE.Group && child.userData.centerOffsetM !== undefined) {
+    const indexed: Array<{ index: number; car: THREE.Group }> = [];
+    group.traverse((child) => {
+      if (child instanceof THREE.Group && child.userData.liveCarIndex !== undefined) {
         child.userData.defaultPos = child.position.clone();
         child.userData.defaultQuat = child.quaternion.clone();
-        cars.push(child);
+        indexed.push({ index: child.userData.liveCarIndex as number, car: child });
       }
-    }
-    group.userData.liveCars = cars;
+    });
+    indexed.sort((a, b) => a.index - b.index);
+    group.userData.liveCars = indexed.map((e) => e.car);
   }
 
   private hideUnusedModels(used: Map<string, number>): void {
@@ -269,6 +310,15 @@ export class LiveVehicleModels {
       });
       root = instance.root;
       root.visible = false; // template stays hidden; only clones are shown
+      // Tag cars so clones can recover the ordered car list (for articulation and
+      // interior-camera anchoring); record formation length + interior profile.
+      instance.cars.forEach((car, index) => {
+        car.userData.liveCarIndex = index;
+      });
+      this.templateMeta.set(variant.key, {
+        trainHalfLengthM: instance.trainHalfLengthM,
+        profile: profileForKind(variant.kind)
+      });
       this.scene.add(root); // keep it in the graph so dispose() sweeps its resources
     } catch (error) {
       console.warn(`Live 3D: could not build ${variant.key} vehicle model; falling back to blocks.`, error);
