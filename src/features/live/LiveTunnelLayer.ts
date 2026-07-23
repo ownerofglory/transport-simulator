@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { smoothTrackXZ } from './liveTrackGeometry';
 import type { Projection } from './liveProjection';
 import type { TrackedVehicle } from './LiveVehicleStore';
 import { LiveTunnelIndex } from './LiveTunnelIndex';
@@ -76,11 +77,12 @@ export class LiveTunnelLayer {
     for (const [start, end] of ranges(mask)) {
       if (end - start < 1) continue;
       const routePoints = points.slice(Math.max(0, start - 1), Math.min(points.length, end + 2));
-      const curvePoints = routePoints.map(([lat, lon]) => {
-        const p = this.projection.project(lat, lon);
-        p.y = this.groundHeightAt(p.x, p.z) - TUNNEL_DEPTH_M;
-        return p;
-      });
+      // Smooth the bore centerline the same way as the overground rails and the
+      // motion path, so a followed vehicle stays centered in the tunnel on curves.
+      const curvePoints = smoothTrackXZ(
+        routePoints.map(([lat, lon]) => this.projection.project(lat, lon))
+      );
+      for (const p of curvePoints) p.y = this.groundHeightAt(p.x, p.z) - TUNNEL_DEPTH_M;
       if (curvePoints.length < 2) continue;
       const curve = new THREE.CatmullRomCurve3(curvePoints, false, 'centripetal');
       const segments = Math.max(16, curvePoints.length * 3);

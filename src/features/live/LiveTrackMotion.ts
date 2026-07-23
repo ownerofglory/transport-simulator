@@ -1,6 +1,7 @@
 import type { Projection } from './liveProjection';
 import type { TrackedVehicle } from './LiveVehicleStore';
 import type { LiveTunnelIndex } from './LiveTunnelIndex';
+import { buildSmoothTrackXZ } from './liveTrackGeometry';
 
 // Along-track motion for matched rail vehicles (concept §7 "along-track dead
 // reckoning"). Instead of straight-line extrapolation — which drifts off curved
@@ -130,14 +131,17 @@ export class LiveTrackMotion {
   private geomFor(id: string, geoPoints: [number, number][]): Geom {
     const cached = this.geoms.get(id);
     if (cached) return cached;
-    const n = geoPoints.length;
+    // Smooth + resample the raw GTFS shape to the same centerline the rails use, so
+    // the vehicle glides along curves instead of stepping between straight segments.
+    const projected = geoPoints.map(([lat, lon]) => this.projection.project(lat, lon));
+    const points = buildSmoothTrackXZ(projected);
+    const n = points.length;
     const xs = new Float64Array(n);
     const zs = new Float64Array(n);
     const cum = new Float64Array(n);
     for (let i = 0; i < n; i++) {
-      const p = this.projection.project(geoPoints[i][0], geoPoints[i][1]);
-      xs[i] = p.x;
-      zs[i] = p.z;
+      xs[i] = points[i].x;
+      zs[i] = points[i].z;
       if (i > 0) cum[i] = cum[i - 1] + Math.hypot(xs[i] - xs[i - 1], zs[i] - zs[i - 1]);
     }
     const geom: Geom = { xs, zs, cum, total: cum[n - 1] };

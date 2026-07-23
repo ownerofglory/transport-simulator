@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Projection } from './liveProjection';
 import type { TrackedVehicle } from './LiveVehicleStore';
 import type { LiveTunnelIndex } from './LiveTunnelIndex';
+import { resampleTrackXZ, smoothTrackXZ } from './liveTrackGeometry';
 
 // Overground running rails for the live rail network (Stadtbahn / S-Bahn / rail),
 // so vehicles don't float on bare terrain. Mirrors the Explore GuidewayLayer look
@@ -77,14 +78,16 @@ export class LiveTrackLayer {
   private buildRoute(route: Route): void {
     const geo = route.geoPoints!;
     const mask = route.tunnelMask ?? [];
+    // Project + smooth the whole route once. Smoothing preserves the point count,
+    // so the tunnel mask below stays index-aligned.
+    const smoothed = smoothTrackXZ(geo.map(([lat, lon]) => this.projection.project(lat, lon)));
     for (const [start, end] of overgroundRanges(mask, geo.length)) {
       if (end - start < 1) continue;
-      const centers = geo.slice(start, end + 1).map(([lat, lon]) => {
-        const p = this.projection.project(lat, lon);
-        p.y = this.groundHeightAt(p.x, p.z) + 0.12;
-        return p;
-      });
+      // Resample this overground stretch to a smooth, denser centerline matching the
+      // motion path, then bake rail height from the terrain per resampled point.
+      const centers = resampleTrackXZ(smoothed.slice(start, end + 1));
       if (centers.length < 2) continue;
+      for (const c of centers) c.y = this.groundHeightAt(c.x, c.z) + 0.12;
       // Drop stretches another route already laid rails on, then draw what's left
       // as contiguous runs.
       for (const run of this.claimRuns(centers)) this.buildRun(run);
