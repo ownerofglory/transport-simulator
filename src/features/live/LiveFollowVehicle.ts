@@ -1,10 +1,9 @@
 import * as THREE from 'three';
-import { buildTransitVehicle } from '../../vehicles';
 import type { InteriorCameraProfile } from '../../domain/transport';
 import type { CameraMode } from '../../world/CameraController';
 import type { VehicleDefinition } from '../../vehicles/VehicleDefinition';
-import { VehicleInteriorDisplay } from '../../vehicles/VehicleInteriorDisplay';
-import { VehicleVisualController } from '../../vehicles/VehicleVisualController';
+import type { VehicleVisualController } from '../../vehicles/VehicleVisualController';
+import { vehicleVisualFactory } from '../../vehicles/VehicleVisualFactory';
 
 // The fully-detailed model for the vehicle the user is following. It owns only
 // live along-track placement; doors, the interior display, per-view visibility and
@@ -48,27 +47,12 @@ export class LiveFollowVehicle {
     definition: VehicleDefinition
   ) {
     this.profile = definition.interiorCameraProfile;
-    // Build from the shared definition — no fake route. buildTransitVehicle
-    // synthesizes any compatibility fields the builders still read.
-    let display: VehicleInteriorDisplay | null = null;
-    const instance = buildTransitVehicle({
-      definition,
-      makeInteriorDisplayMaterial: () => {
-        display = new VehicleInteriorDisplay();
-        return display.material;
-      }
-    });
-    this.visual = new VehicleVisualController(instance, display, {
-      line: definition.line,
-      destination: definition.destination,
-      lineAccentColor: definition.lineAccentColor,
-      interiorCameraProfile: definition.interiorCameraProfile
-    });
-    this.visual.updateInteriorDisplay(definition.destination, false); // initial board
-
-    this.root = instance.root;
-    this.cars = instance.cars;
-    this.trainHalfLengthM = instance.trainHalfLengthM;
+    // Build the complete presentation through the shared factory (same one the
+    // simulator uses); only the along-track placement below is live-specific.
+    this.visual = vehicleVisualFactory.create(definition);
+    this.root = this.visual.root;
+    this.cars = this.visual.cars;
+    this.trainHalfLengthM = this.visual.trainHalfLengthM;
     this.carDefaults = this.cars.map((c) => ({ pos: c.position.clone(), quat: c.quaternion.clone() }));
     scene.add(this.root);
   }

@@ -3,11 +3,9 @@ import type { DemoRoute } from '../../route';
 import type { CityDefinition } from '../../cities';
 import { fallbackTransportModeDefinition, type TransportModeDefinition } from '../../domain/transport';
 import type { CameraMode } from '../../world/CameraController';
-import { buildTransitVehicle } from '../../vehicles';
-import type { VehicleInstance } from '../../vehicles/types';
 import { resolveRouteVehicleDefinition } from '../../vehicles/VehicleDefinition';
-import { VehicleInteriorDisplay } from '../../vehicles/VehicleInteriorDisplay';
-import { VehicleVisualController } from '../../vehicles/VehicleVisualController';
+import type { VehicleVisualController } from '../../vehicles/VehicleVisualController';
+import { vehicleVisualFactory } from '../../vehicles/VehicleVisualFactory';
 import type { EngineSystem } from '../core/EngineSystem';
 
 /** Route-geometry placement helper owned by the world (also used by opposing traffic). */
@@ -28,8 +26,6 @@ export type ActiveVehicleContext = {
   placeArticulated: ArticulatedPlacer;
 };
 
-const DEFAULT_TRAIN_HALF_LENGTH_M = 20.15;
-
 /**
  * Owns the active {@link VehicleInstance}: builds it, places its articulated
  * sections along the route, animates doors, drives the interior destination
@@ -40,56 +36,41 @@ const DEFAULT_TRAIN_HALF_LENGTH_M = 20.15;
  * OSM streaming, or station building — placement math is supplied by the world.
  */
 export class ActiveVehicleSystem implements EngineSystem {
-  private vehicle: VehicleInstance | null = null;
   // Shared presentation (doors, interior display, visibility, lamps); placement
   // stays here because the simulator drives it by route distance.
   private readonly visual: VehicleVisualController;
 
   constructor(private readonly ctx: ActiveVehicleContext) {
-    // Resolve the shared definition and build through it; the real route/city/mode
-    // are still passed so route-specific builder reads (e.g. funicular orientation)
-    // keep working.
+    // Resolve the shared definition and build through the shared factory; the real
+    // route/city/mode are still forwarded so route-specific builder reads (e.g.
+    // funicular orientation) keep working.
     const definition = resolveRouteVehicleDefinition(ctx.route, ctx.city, ctx.modeDefinition ?? fallbackTransportModeDefinition);
-    let display: VehicleInteriorDisplay | null = null;
-    this.vehicle = buildTransitVehicle({
-      definition,
+    this.visual = vehicleVisualFactory.create(definition, {
       route: ctx.route,
       city: ctx.city,
-      modeDefinition: ctx.modeDefinition,
-      makeInteriorDisplayMaterial: () => {
-        display = new VehicleInteriorDisplay();
-        return display.material;
-      }
+      modeDefinition: ctx.modeDefinition
     });
-    ctx.scene.add(this.vehicle.root);
-
-    this.visual = new VehicleVisualController(this.vehicle, display, {
-      line: definition.line,
-      destination: definition.destination,
-      lineAccentColor: definition.lineAccentColor,
-      interiorCameraProfile: definition.interiorCameraProfile
-    });
-    // Initial board so it isn't blank before the first schedule update.
+    ctx.scene.add(this.visual.root);
+    // Initial board from the real schedule (first stop), not just the destination.
     this.visual.updateInteriorDisplay(ctx.route.stations[1]?.name ?? ctx.route.destination, false);
   }
 
   /** The vehicle root group (identity of the active train in the scene). */
   get root(): THREE.Group {
-    return this.vehicle?.root ?? EMPTY_GROUP;
+    return this.visual.root;
   }
 
   get cars(): THREE.Group[] {
-    return this.vehicle?.cars ?? [];
+    return this.visual.cars;
   }
 
   get trainHalfLengthM(): number {
-    return this.vehicle?.trainHalfLengthM ?? DEFAULT_TRAIN_HALF_LENGTH_M;
+    return this.visual.trainHalfLengthM;
   }
 
   /** Places the articulated sections at the given route distance (forward). */
   place(distanceM: number): void {
-    if (!this.vehicle) return;
-    this.ctx.placeArticulated(this.vehicle.root, this.vehicle.cars, distanceM, 1, this.ctx.activeLaneOffsetM);
+    this.ctx.placeArticulated(this.visual.root, this.visual.cars, distanceM, 1, this.ctx.activeLaneOffsetM);
   }
 
   updateDoors(open: boolean, deltaSeconds: number): void {
@@ -112,9 +93,5 @@ export class ActiveVehicleSystem implements EngineSystem {
 
   dispose(): void {
     this.visual.dispose();
-    this.vehicle = null;
   }
 }
-
-// Fallback so `root` stays non-null before/after the vehicle exists.
-const EMPTY_GROUP = new THREE.Group();
