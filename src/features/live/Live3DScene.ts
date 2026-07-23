@@ -203,7 +203,7 @@ export class Live3DScene {
       this.tunnelGlows.set(mode, glow);
     }
 
-    this.models = new LiveVehicleModels(this.scene, this.projection);
+    this.models = new LiveVehicleModels(this.scene, this.projection, opts.city);
     this.tunnels = new LiveTunnelLayer(this.projection, this.tunnelIndex, (x, z) => this.terrain.heightAt(x, z));
     this.scene.add(this.tunnels.group);
     this.tracks = new LiveTrackLayer(this.projection, this.tunnelIndex, (x, z) => this.terrain.heightAt(x, z));

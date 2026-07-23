@@ -1,21 +1,15 @@
 import * as THREE from 'three';
-import { buildTransitVehicle, isStadtbahnDoubleFormation, isBusLineArticulated, defaultBusBlueprint } from '../../vehicles';
-import { fallbackTransportModeDefinition, type InteriorCameraProfile, type VehicleKind } from '../../domain/transport';
+import { buildTransitVehicle } from '../../vehicles';
+import type { VehicleDefinition } from '../../vehicles/VehicleDefinition';
+import type { CityDefinition } from '../../cities';
 import { makeLabelTexture } from '../../labels';
-import type { DemoRoute } from '../../route';
 import { modeColor, type LiveMode } from './liveTypes';
+import { resolveLiveVehicleDefinition } from './liveVehicleDefinition';
 import type { LiveVehicleStore, TrackedVehicle } from './LiveVehicleStore';
 import type { Projection } from './liveProjection';
 
 /** World-space pose along a run's track at a metre offset ahead/behind its center. */
 export type OffsetPose = (runId: string, offsetM: number) => { x: number; z: number; bearing: number } | null;
-
-// The interior-camera profile the Explore rigs key on, from the live mode.
-function profileForKind(kind: VehicleKind): InteriorCameraProfile {
-  if (kind === 'bus') return 'bus';
-  if (kind === 's-bahn') return 's-bahn';
-  return 'tram'; // stadtbahn (light-rail / tram)
-}
 
 // Level-of-detail for the 3D view (concept §4.1): near vehicles get the full
 // procedural models (the same kind-builders the ride view uses), everything else
@@ -32,42 +26,23 @@ const LABEL_ALT_M = 2400;
 const LABEL_RADIUS_M = 2600;
 const LABEL_CAP = 60;
 
-function kindForMode(mode: LiveMode | undefined): VehicleKind {
-  if (mode === 'bus') return 'bus';
-  if (mode === 's-bahn' || mode === 'rail') return 's-bahn';
-  return 'stadtbahn'; // light-rail, tram
-}
-
-// Which model formation a live run should use, and a representative line that makes
-// the shared vehicle builder produce it. Formation follows the same VVS rules the
-// Explore/ride view uses (double-traction Stadtbahn lines, articulated bus lines),
-// so a U12 shows four Tango sections and an X-bus bends, exactly like Explore.
-// Templates are cached per variant, so only a handful are ever built.
-type Variant = { key: string; kind: VehicleKind; line: string };
-
-function variantFor(v: TrackedVehicle): Variant {
-  const kind = kindForMode(v.data.mode);
-  const line = v.data.line;
-  if (kind === 'stadtbahn') {
-    const double = isStadtbahnDoubleFormation(line);
-    return { key: 'stadtbahn:' + (double ? 'double' : 'single'), kind, line: double ? 'U12' : 'U5' };
-  }
-  if (kind === 'bus') {
-    // Live has no city context yet, so formation follows the "city unknown" rule.
-    const artic = isBusLineArticulated(defaultBusBlueprint, line, undefined);
-    return { key: 'bus:' + (artic ? 'artic' : 'rigid'), kind, line: artic ? 'X1' : '70' };
-  }
-  return { key: kind, kind, line: '' };
+// Overview models pool by resolved definition, so vehicles that build the same
+// design + formation share one template (e.g. every double Stadtbahn line), while
+// single/double Stadtbahn and rigid/articulated bus each get their own.
+export function vehiclePoolKey(definition: VehicleDefinition): string {
+  return [
+    definition.vehicleDesignId ?? definition.vehicleKind,
+    definition.formation?.doubleFormation ? 'double' : 'single',
+    definition.formation?.articulated ? 'articulated' : 'rigid'
+  ].join(':');
 }
 
 type NearHit = { v: TrackedVehicle; x: number; z: number; d2: number; bearing: number };
 
 /** Owns the near-field vehicle models and floating line labels for Live3DScene. */
 export class LiveVehicleModels {
-  // Keyed by formation variant (see variantFor), not just kind, so single/double
-  // Stadtbahn and rigid/articulated bus each get their own pooled model.
+  // Keyed by resolved-definition pool key (see vehiclePoolKey).
   private readonly templates = new Map<string, THREE.Group | null>();
-  private readonly templateMeta = new Map<string, { trainHalfLengthM: number; profile: InteriorCameraProfile }>();
   private readonly pools = new Map<string, THREE.Group[]>();
   private readonly labelPool: THREE.Sprite[] = [];
   private readonly labelTextures = new Map<string, THREE.Texture>();
@@ -78,7 +53,8 @@ export class LiveVehicleModels {
 
   constructor(
     private readonly scene: THREE.Scene,
-    private readonly projection: Projection
+    private readonly projection: Projection,
+    private readonly city?: CityDefinition
   ) {}
 
   /**
@@ -125,8 +101,8 @@ export class LiveVehicleModels {
         if (placed >= MODEL_CAP) break;
         if (hit.d2 > r2) break;
         if (hit.v.runId === excludeRunId) continue; // dedicated follow vehicle renders this run
-        const variant = variantFor(hit.v);
-        const group = this.acquireModel(variant, usedByVariant);
+        const definition = resolveLiveVehicleDefinition(hit.v.data, this.city);
+        const group = this.acquireModel(definition, vehiclePoolKey(definition), usedByVariant);
         if (!group) continue;
         const yOff = isInTunnel(hit.v) ? -4.7 : 0.3;
         this.placeVehicle(group, hit, groundHeightAt, offsetPose, yOff);
@@ -232,19 +208,16 @@ export class LiveVehicleModels {
     }
   }
 
-  private acquireModel(variant: Variant, used: Map<string, number>): THREE.Group | null {
-    const pool = this.pools.get(variant.key) ?? this.pools.set(variant.key, []).get(variant.key)!;
-    const i = used.get(variant.key) ?? 0;
-    used.set(variant.key, i + 1);
+  private acquireModel(definition: VehicleDefinition, key: string, used: Map<string, number>): THREE.Group | null {
+    const pool = this.pools.get(key) ?? this.pools.set(key, []).get(key)!;
+    const i = used.get(key) ?? 0;
+    used.set(key, i + 1);
     let group = pool[i];
     if (!group) {
-      const template = this.getTemplate(variant);
+      const template = this.getTemplate(definition, key);
       if (!template) return null;
       group = template.clone(true); // shares geometry/materials with the template
       this.captureCars(group);
-      const meta = this.templateMeta.get(variant.key);
-      group.userData.trainHalfLengthM = meta?.trainHalfLengthM ?? 20;
-      group.userData.interiorCameraProfile = meta?.profile ?? profileForKind(variant.kind);
       pool.push(group);
       this.scene.add(group);
     }
@@ -273,34 +246,28 @@ export class LiveVehicleModels {
     }
   }
 
-  private getTemplate(variant: Variant): THREE.Group | null {
-    if (this.templates.has(variant.key)) return this.templates.get(variant.key) ?? null;
+  private getTemplate(definition: VehicleDefinition, key: string): THREE.Group | null {
+    if (this.templates.has(key)) return this.templates.get(key) ?? null;
     let root: THREE.Group | null = null;
     try {
-      // A throwaway route carrying only the fields the builder reads; the line
-      // drives the formation (double-traction / articulation).
-      const route = { line: variant.line, destination: '', controlPoints: [] } as unknown as DemoRoute;
+      // Build from the shared definition — the same design/formation the follow
+      // vehicle and the simulator resolve. A dummy display material is fine; the
+      // overview model has no live next-stop board.
       const instance = buildTransitVehicle({
-        route,
-        modeDefinition: { ...fallbackTransportModeDefinition, id: variant.kind, vehicleKind: variant.kind },
+        definition,
         makeInteriorDisplayMaterial: () => new THREE.MeshBasicMaterial({ color: 0x0b0f14 })
       });
       root = instance.root;
       root.visible = false; // template stays hidden; only clones are shown
-      // Tag cars so clones can recover the ordered car list (for articulation and
-      // interior-camera anchoring); record formation length + interior profile.
+      // Tag cars so clones can recover the ordered car list (used for articulation).
       instance.cars.forEach((car, index) => {
         car.userData.liveCarIndex = index;
       });
-      this.templateMeta.set(variant.key, {
-        trainHalfLengthM: instance.trainHalfLengthM,
-        profile: profileForKind(variant.kind)
-      });
       this.scene.add(root); // keep it in the graph so dispose() sweeps its resources
     } catch (error) {
-      console.warn(`Live 3D: could not build ${variant.key} vehicle model; falling back to blocks.`, error);
+      console.warn(`Live 3D: could not build ${key} vehicle model; falling back to blocks.`, error);
     }
-    this.templates.set(variant.key, root);
+    this.templates.set(key, root);
     return root;
   }
 
