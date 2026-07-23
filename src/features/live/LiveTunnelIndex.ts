@@ -12,6 +12,16 @@ type CachedMatch = {
   inTunnel: boolean;
 };
 
+// Once a run is matched to an alignment we keep it: rematching every refresh lets
+// the "closest" route flip between parallel/overlapping tracks (shared central
+// tunnels, terminals, crossings), which teleports a followed vehicle across the
+// map. We only re-evaluate when the shapeId changes, or the run has stayed farther
+// than this from its locked route for several consecutive checks.
+const ROUTE_LOCK_M = 80;
+const ROUTE_UNLOCK_MISSES = 3;
+
+type RouteLock = { route: TunnelRoute; shapeId?: string; consecutiveFar: number };
+
 const RAIL_FILES = {
   'light-rail': '/data/routes-stadtbahn.json',
   tram: '/data/routes-stadtbahn.json',
@@ -28,6 +38,7 @@ export class LiveTunnelIndex {
   private readonly routes: TunnelRoute[] = [];
   private readonly loading = new Map<string, Promise<void>>();
   private readonly matches = new Map<string, CachedMatch>();
+  private readonly locks = new Map<string, RouteLock>();
   private revision = 0;
 
   get version(): number {
@@ -86,6 +97,19 @@ export class LiveTunnelIndex {
 
   private matchRoute(vehicle: TrackedVehicle): TunnelRoute | null {
     const v = vehicle.data;
+
+    // Keep a previously locked alignment unless the shapeId changed or the run has
+    // drifted away from it for several consecutive checks — otherwise the closest
+    // route can flip between parallel tracks and fling a followed vehicle away.
+    const lock = this.locks.get(vehicle.runId);
+    if (lock && lock.shapeId === v.shapeId) {
+      if (this.routeDistanceM(lock.route, vehicle.render) <= ROUTE_LOCK_M) {
+        lock.consecutiveFar = 0;
+        return lock.route;
+      }
+      if (++lock.consecutiveFar < ROUTE_UNLOCK_MISSES) return lock.route;
+    }
+
     // Cascade shapeId → routeId → line: the live TRIAS feed's shapeIds usually
     // don't match the GTFS route packages, so most vehicles fall through to a
     // line match. The closest-alignment pick below then resolves direction.
@@ -93,13 +117,18 @@ export class LiveTunnelIndex {
     if (v.shapeId) candidates = this.routes.filter((route) => route.shapeId === v.shapeId);
     if (!candidates.length && v.routeId) candidates = this.routes.filter((route) => route.routeId === v.routeId);
     if (!candidates.length && v.line) candidates = this.routes.filter((route) => route.line === v.line);
-    if (!candidates.length) return null;
+    if (!candidates.length) {
+      this.locks.delete(vehicle.runId);
+      return null;
+    }
 
     // A route id/line can have both directions. Pick the alignment closest to
     // the live fix, which also handles feeds whose shapeId is not exposed.
-    return candidates.reduce((closest, route) =>
+    const best = candidates.reduce((closest, route) =>
       this.routeDistanceM(route, vehicle.render) < this.routeDistanceM(closest, vehicle.render) ? route : closest
     );
+    this.locks.set(vehicle.runId, { route: best, shapeId: v.shapeId, consecutiveFar: 0 });
+    return best;
   }
 
   private pointIsInTunnel(route: TunnelRoute, point: { lat: number; lon: number }): boolean {

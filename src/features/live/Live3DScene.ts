@@ -21,6 +21,14 @@ import type { BBox } from './viewport';
 
 const DEG = Math.PI / 180;
 
+// Interpolates an angle the short way around the circle. A plain lerp of raw
+// radians spins ~360° when the target crosses the ±π seam (e.g. a vehicle
+// rounding a sharp curve), which looked like a camera whip.
+function lerpAngle(current: number, target: number, alpha: number): number {
+  const delta = Math.atan2(Math.sin(target - current), Math.cos(target - current));
+  return current + delta * alpha;
+}
+
 // Camera altitude clamp (concept §2.2: ~80 m to ~12 km). Above the top we hand
 // back to the map.
 const MIN_DISTANCE_M = 120;
@@ -87,6 +95,11 @@ export class Live3DScene {
   private underground = false;
   private lastLightingMs = 0;
   private followRunId: string | null = null;
+  // Smoothing goal for the follow camera, gated so a single bad frame (a route
+  // rematch flipping the snapped position across the city) can't whip the camera.
+  private readonly followTarget = new THREE.Vector3();
+  private followTargetSet = false;
+  private followFreezeFrames = 0;
 
   private raf: number | null = null;
   private lastTime = 0;
@@ -481,6 +494,8 @@ export class Live3DScene {
   setFollowRunId(runId: string | null): void {
     if (this.followRunId === runId) return;
     this.followRunId = runId;
+    this.followTargetSet = false;
+    this.followFreezeFrames = 0;
     if (!runId) {
       this.setUnderground(false);
       return;
@@ -516,11 +531,34 @@ export class Live3DScene {
 
   private updateFollow(dt: number): void {
     if (!this.followRunId) return;
+    // Freeze at the last valid pose when the run vanishes from the store (e.g. a
+    // brief bbox flicker); never latch onto another vehicle.
     const vehicle = this.opts.store.get(this.followRunId);
     if (!vehicle) return;
     const pose = this.followPose(vehicle);
-    this.target.lerp(pose.target, 1 - Math.exp(-dt / 0.28));
-    this.azimuth = THREE.MathUtils.lerp(this.azimuth, pose.azimuth, 1 - Math.exp(-dt / 0.4));
+
+    // Gate the smoothing goal: a plausible step is the vehicle's own motion plus a
+    // margin. A larger jump means the snapped position teleported (a route rematch,
+    // bad fix); hold the previous goal so the camera waits it out instead of whipping
+    // across the city — but if the jump persists (~1 s) it's a genuine re-acquisition,
+    // so accept it and glide over.
+    if (!this.followTargetSet) {
+      this.followTarget.copy(pose.target);
+      this.followTargetSet = true;
+      this.followFreezeFrames = 0;
+    } else {
+      const step = this.followTarget.distanceTo(pose.target);
+      const allowed = Math.max(40, 45 * dt * 3);
+      if (step <= allowed || this.followFreezeFrames > 60) {
+        this.followTarget.copy(pose.target);
+        this.followFreezeFrames = 0;
+      } else {
+        this.followFreezeFrames += 1;
+      }
+    }
+
+    this.target.lerp(this.followTarget, 1 - Math.exp(-dt / 0.28));
+    this.azimuth = lerpAngle(this.azimuth, pose.azimuth, 1 - Math.exp(-dt / 0.4));
     this.distance = THREE.MathUtils.lerp(this.distance, pose.distance, 1 - Math.exp(-dt / 0.5));
     this.polar = THREE.MathUtils.lerp(this.polar, pose.polar, 1 - Math.exp(-dt / 0.5));
     this.setUnderground(pose.underground);

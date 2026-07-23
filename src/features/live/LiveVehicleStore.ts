@@ -24,6 +24,15 @@ export type TrackedVehicle = {
 // tolerated because bbox edges flicker (§6.1).
 const MAX_MISSES = 2;
 
+// Inferred-speed bounds. The backend positions are schedule estimates, so the
+// speed we derive from consecutive fixes is noisy — especially around stops,
+// where a stop→depart pair produces a spurious burst. We cap it to a plausible
+// Stadtbahn/regional display speed and rate-limit how fast it can change so a bad
+// fix can't fling the marker forward and then jerk it back (concept §7).
+const MAX_INFERRED_SPEED_MPS = 35; // ~126 km/h; display cap, below the rail cap
+const MAX_ACCEL_MPS2 = 1.4; // realistic light-rail acceleration
+const MAX_BRAKE_MPS2 = 2.2; // realistic service braking
+
 function fixTime(v: LiveVehicle, fallbackMs: number): number {
   if (v.estimatedAt) {
     const t = Date.parse(v.estimatedAt);
@@ -52,44 +61,18 @@ export class LiveVehicleStore {
   }
 
   /**
-   * Merges a snapshot: spawns new runs, updates seen ones (recomputing inferred
-   * speed/bearing), and despawns runs that have been absent too long or completed.
+   * Merges a *complete* snapshot: spawns new runs, updates seen ones, and
+   * despawns runs that have been absent too long or completed. Only this method
+   * ages/removes unseen runs — a single-run patch must never touch other runs
+   * (that was a bug: the 5 s follow poll despawned the rest of the fleet, churning
+   * model pools and letting the camera latch onto the wrong vehicle).
    */
   applySnapshot(incoming: RenderableVehicle[], nowMs: number = Date.now()): void {
     const seen = new Set<string>();
 
     for (const v of incoming) {
       seen.add(v.runId);
-      const server: LatLon = { lat: v.lat, lon: v.lon };
-      const fixMs = fixTime(v, nowMs);
-      const existing = this.vehicles.get(v.runId);
-
-      if (!existing) {
-        this.vehicles.set(v.runId, {
-          runId: v.runId,
-          data: v,
-          server,
-          render: server,
-          bearing: v.bearing ?? 0,
-          speedMps: 0,
-          lastFixMs: fixMs,
-          misses: 0
-        });
-        continue;
-      }
-
-      const dtSec = Math.max(0.001, (fixMs - existing.lastFixMs) / 1000);
-      const movedM = haversineM(existing.server, server);
-      // Prefer the server bearing; fall back to the heading between fixes when
-      // the vehicle actually moved.
-      const bearing = v.bearing ?? (movedM > 2 ? bearingDeg(existing.server, server) : existing.bearing);
-      existing.data = v;
-      existing.server = server;
-      existing.speedMps = movedM / dtSec;
-      existing.bearing = bearing;
-      existing.lastFixMs = fixMs;
-      existing.misses = 0;
-      // A large jump means our render lagged badly — snap on the next tick.
+      this.upsert(v, nowMs);
     }
 
     for (const [runId, tracked] of this.vehicles) {
@@ -101,10 +84,75 @@ export class LiveVehicleStore {
     }
   }
 
+  /**
+   * Spawns or updates a single run, recomputing its inferred (smoothed) speed and
+   * bearing. Never ages or removes other runs. Stale fixes — an older estimate
+   * arriving after a newer one (e.g. a slow follow response overtaken by a fresh
+   * snapshot) — are ignored for motion so they can't rewind the vehicle.
+   */
+  upsert(v: RenderableVehicle, nowMs: number = Date.now()): void {
+    const server: LatLon = { lat: v.lat, lon: v.lon };
+    const fixMs = fixTime(v, nowMs);
+    const existing = this.vehicles.get(v.runId);
+
+    if (!existing) {
+      this.vehicles.set(v.runId, {
+        runId: v.runId,
+        data: v,
+        server,
+        render: server,
+        bearing: v.bearing ?? 0,
+        speedMps: 0,
+        lastFixMs: fixMs,
+        misses: 0
+      });
+      return;
+    }
+
+    // Older-or-equal estimate: refresh metadata (delay/next stop/status) but leave
+    // position and inferred speed untouched so we never move backward on it.
+    if (fixMs <= existing.lastFixMs) {
+      existing.data = v;
+      existing.misses = 0;
+      return;
+    }
+
+    const dtSec = (fixMs - existing.lastFixMs) / 1000;
+    const movedM = haversineM(existing.server, server);
+    // Prefer the server bearing; fall back to the heading between fixes when the
+    // vehicle actually moved.
+    const bearing = v.bearing ?? (movedM > 2 ? bearingDeg(existing.server, server) : existing.bearing);
+    existing.data = v;
+    existing.server = server;
+    existing.speedMps = this.inferSpeed(existing.speedMps, movedM, dtSec, v.status);
+    existing.bearing = bearing;
+    existing.lastFixMs = fixMs;
+    existing.misses = 0;
+    // A large jump means our render lagged badly — snap on the next tick.
+  }
+
+  /** Removes a single run (e.g. the follow endpoint reports it finished). */
+  remove(runId: string): void {
+    this.vehicles.delete(runId);
+  }
+
+  // Turns a raw fix-to-fix displacement into a stable display speed. At a stop the
+  // speed is forced to zero; otherwise the measurement is capped and rate-limited
+  // by plausible acceleration/braking so a noisy schedule estimate can't produce
+  // the "stop → sudden lurch → snap back" the raw movedM/dt did.
+  private inferSpeed(prevMps: number, movedM: number, dtSec: number, status: LiveVehicle['status']): number {
+    if (status === 'at_stop' || status === 'not_started') return 0;
+    if (dtSec <= 0) return prevMps;
+    const measured = Math.max(0, Math.min(movedM / dtSec, MAX_INFERRED_SPEED_MPS));
+    const lower = Math.max(0, prevMps - MAX_BRAKE_MPS2 * dtSec);
+    const upper = prevMps + MAX_ACCEL_MPS2 * dtSec;
+    return Math.max(lower, Math.min(measured, upper));
+  }
+
   /** Patches a single run from the per-run endpoint while following (§6.2). */
   patchOne(v: LiveVehicle, nowMs: number = Date.now()): void {
     if (!v.runId || typeof v.lat !== 'number' || typeof v.lon !== 'number') return;
-    this.applySnapshot([v as RenderableVehicle], nowMs);
+    this.upsert(v as RenderableVehicle, nowMs);
   }
 
   /** Advances every vehicle's render position by `dtSec` (called each frame). */

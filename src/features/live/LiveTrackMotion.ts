@@ -13,12 +13,21 @@ const DEG = Math.PI / 180;
 // Beyond this lateral distance the vehicle clearly isn't on this alignment, so we
 // fall back to the raw server position rather than snapping to the wrong track.
 const MAX_LATERAL_M = 45;
-// Along-track error above which we hard-snap (e.g. a run that was off-screen).
+// Along-track error above which we hard-snap (e.g. a run that was off-screen, or a
+// confirmed re-acquisition). Below it we correct with speed, never by moving the
+// position — a followed vehicle makes even a small backward jump very visible.
 const SNAP_ERR_M = 250;
 const MAX_SPEED_MPS = 45;
+// A behind-schedule vehicle is caught up by adding at most this much to its
+// display speed, spread over the correction horizon; ahead-of-schedule it slows
+// (down to a pause) but never reverses.
+const MAX_CATCH_UP_MPS = 6;
+const CORRECTION_HORIZON_S = 4;
 
 type Geom = { xs: Float64Array; zs: Float64Array; cum: Float64Array; total: number };
-type State = { s: number; lastFixMs: number; seg: number; dir: 1 | -1; serverS: number };
+// `corrMps` is the current along-track speed correction (+ catch up, − ease off),
+// recomputed on each server fix and held until the next one.
+type State = { s: number; lastFixMs: number; seg: number; dir: 1 | -1; serverS: number; corrMps: number };
 type Resolved = { lat: number; lon: number; bearing: number };
 
 export class LiveTrackMotion {
@@ -65,25 +74,37 @@ export class LiveTrackMotion {
       return null;
     }
     if (!st) {
-      st = { s: near.s, lastFixMs: v.lastFixMs, seg: near.seg, dir: 1, serverS: near.s };
+      st = { s: near.s, lastFixMs: v.lastFixMs, seg: near.seg, dir: 1, serverS: near.s, corrMps: 0 };
       this.states.set(v.runId, st);
     }
     st.seg = near.seg;
 
     // On a fresh server fix: infer travel direction from how the projected
     // along-track distance progressed (the matched shape may run either way),
-    // then correct toward it — fast forward, gentle backward, so it never jumps.
+    // then decide how to reconcile with the server position. Large errors hard-snap
+    // (off-screen run, re-acquisition); ordinary errors are corrected by nudging
+    // the *display speed* toward closing the gap over CORRECTION_HORIZON_S — the
+    // vehicle speeds up when behind and eases off when ahead, but never reverses.
     if (v.lastFixMs !== st.lastFixMs) {
       st.lastFixMs = v.lastFixMs;
       const progressed = near.s - st.serverS;
       if (Math.abs(progressed) > 1) st.dir = progressed > 0 ? 1 : -1;
       st.serverS = near.s;
       const err = near.s - st.s;
-      if (Math.abs(err) > SNAP_ERR_M) st.s = near.s;
-      else st.s += err * (err > 0 ? 0.6 : 0.25);
+      if (Math.abs(err) > SNAP_ERR_M) {
+        st.s = near.s;
+        st.corrMps = 0;
+      } else {
+        // Signed along the travel direction: positive => client is behind.
+        const behind = st.dir * err;
+        const base = Math.max(0, Math.min(v.speedMps, MAX_SPEED_MPS));
+        st.corrMps = Math.max(-base, Math.min(behind / CORRECTION_HORIZON_S, MAX_CATCH_UP_MPS));
+      }
     }
 
-    st.s += st.dir * Math.max(0, Math.min(v.speedMps, MAX_SPEED_MPS)) * dtSec;
+    const base = Math.max(0, Math.min(v.speedMps, MAX_SPEED_MPS));
+    const displayMps = Math.max(0, base + st.corrMps);
+    st.s += st.dir * displayMps * dtSec;
     st.s = Math.max(0, Math.min(st.s, geom.total));
     return this.pointAt(geom, st.s, st.dir);
   }
