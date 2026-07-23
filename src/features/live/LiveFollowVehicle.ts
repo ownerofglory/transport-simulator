@@ -4,6 +4,7 @@ import { fallbackTransportModeDefinition, type InteriorCameraProfile, type Vehic
 import type { CameraMode } from '../../world/CameraController';
 import type { DemoRoute } from '../../route';
 import type { VehicleInstance } from '../../vehicles/types';
+import { VehicleInteriorDisplay } from '../../vehicles/VehicleInteriorDisplay';
 
 // The fully-detailed model for the vehicle the user is following. Unlike the
 // pooled overview models (LiveVehicleModels), this is built once per followed run
@@ -37,9 +38,7 @@ export class LiveFollowVehicle {
 
   private readonly instance: VehicleInstance;
   private readonly carDefaults: Array<{ pos: THREE.Vector3; quat: THREE.Quaternion }>;
-  private interiorCanvas: HTMLCanvasElement | null = null;
-  private interiorTexture: THREE.CanvasTexture | null = null;
-  private lastInteriorKey = '';
+  private interiorDisplay: VehicleInteriorDisplay | null = null;
   private doorOpenAmount = 0;
   private readonly accent: string;
 
@@ -128,66 +127,26 @@ export class LiveFollowVehicle {
   }
 
   private makeInteriorDisplayMaterial(): THREE.MeshBasicMaterial {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1024;
-    canvas.height = 256;
-    this.interiorCanvas = canvas;
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    this.interiorTexture = texture;
-    this.renderInteriorDisplay(this.destination, false);
-    return new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, toneMapped: false });
+    this.interiorDisplay = new VehicleInteriorDisplay();
+    this.updateInteriorDisplay(this.destination, false);
+    return this.interiorDisplay.material;
   }
 
   private updateInteriorDisplay(nextStop: string, doorsOpen: boolean): void {
-    const station = nextStop || this.destination;
-    const key = `${station}/${doorsOpen}`;
-    if (key === this.lastInteriorKey) return;
-    this.lastInteriorKey = key;
-    this.renderInteriorDisplay(station, doorsOpen);
-  }
-
-  private renderInteriorDisplay(station: string, doorsOpen: boolean): void {
-    const ctx = this.interiorCanvas?.getContext('2d');
-    if (!ctx || !this.interiorTexture) return;
-    ctx.fillStyle = '#071015';
-    ctx.fillRect(0, 0, 1024, 256);
-    ctx.fillStyle = this.accent;
-    ctx.fillRect(0, 0, 1024, 14);
-    ctx.fillRect(24, 40, 126, 126);
-    ctx.fillStyle = '#11151a';
-    ctx.font = '800 56px Inter, Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(this.line, 87, 104);
-
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#a9b7bd';
-    ctx.font = '600 30px Inter, Arial, sans-serif';
-    ctx.fillText(doorsOpen ? 'TÜREN GEÖFFNET · DANACH' : 'NÄCHSTER HALT', 184, 62);
-
-    let fontSize = 58;
-    do {
-      ctx.font = `700 ${fontSize}px Inter, Arial, sans-serif`;
-      fontSize -= 2;
-    } while (ctx.measureText(station).width > 806 && fontSize > 30);
-    ctx.fillStyle = '#f5f7f6';
-    ctx.fillText(station, 184, 126);
-
-    ctx.fillStyle = this.accent;
-    ctx.font = '500 25px Inter, Arial, sans-serif';
-    ctx.fillText(`Richtung ${this.destination}`, 184, 202);
-    this.interiorTexture.needsUpdate = true;
+    this.interiorDisplay?.update({
+      line: this.line,
+      destination: this.destination,
+      nextStop,
+      doorsOpen,
+      accentColor: this.accent
+    });
   }
 
   dispose(): void {
     this.scene.remove(this.root);
     this.instance.dispose?.();
-    this.interiorTexture?.dispose();
-    this.interiorTexture = null;
-    this.interiorCanvas = null;
+    this.interiorDisplay?.dispose();
+    this.interiorDisplay = null;
     // Dispose this instance's own geometries/materials (freshly built, unshared).
     this.root.traverse((o) => {
       const m = o as Partial<THREE.Mesh> & { material?: THREE.Material | THREE.Material[] };

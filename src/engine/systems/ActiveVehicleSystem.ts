@@ -5,6 +5,7 @@ import type { TransportModeDefinition } from '../../domain/transport';
 import type { CameraMode } from '../../world/CameraController';
 import { buildTransitVehicle } from '../../vehicles';
 import type { VehicleInstance } from '../../vehicles/types';
+import { VehicleInteriorDisplay } from '../../vehicles/VehicleInteriorDisplay';
 import type { EngineSystem } from '../core/EngineSystem';
 
 /** Route-geometry placement helper owned by the world (also used by opposing traffic). */
@@ -38,9 +39,7 @@ const DEFAULT_TRAIN_HALF_LENGTH_M = 20.15;
  */
 export class ActiveVehicleSystem implements EngineSystem {
   private vehicle: VehicleInstance | null = null;
-  private interiorDisplayCanvas: HTMLCanvasElement | null = null;
-  private interiorDisplayTexture: THREE.CanvasTexture | null = null;
-  private lastInteriorDisplayKey = '';
+  private interiorDisplay: VehicleInteriorDisplay | null = null;
   private doorOpenAmount = 0;
 
   constructor(private readonly ctx: ActiveVehicleContext) {
@@ -107,66 +106,27 @@ export class ActiveVehicleSystem implements EngineSystem {
   }
 
   private makeInteriorDisplayMaterial(): THREE.MeshBasicMaterial {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1024;
-    canvas.height = 256;
-    this.interiorDisplayCanvas = canvas;
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    this.interiorDisplayTexture = texture;
+    this.interiorDisplay = new VehicleInteriorDisplay();
     this.updateInteriorDisplay(this.ctx.route.stations[1]?.name ?? this.ctx.route.destination, false);
-    return new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, toneMapped: false });
+    return this.interiorDisplay.material;
   }
 
   updateInteriorDisplay(nextStation: string, doorsOpen: boolean): void {
-    if (!this.interiorDisplayCanvas || !this.interiorDisplayTexture) return;
-    const route = this.ctx.route;
-    const station = nextStation === 'End of line' ? 'Endstation' : nextStation || route.destination;
-    const key = `${station}/${doorsOpen}`;
-    if (key === this.lastInteriorDisplayKey) return;
-    this.lastInteriorDisplayKey = key;
-
-    const context = this.interiorDisplayCanvas.getContext('2d');
-    if (!context) return;
-    context.fillStyle = '#071015';
-    context.fillRect(0, 0, 1024, 256);
     const vehicleKind = this.ctx.modeDefinition?.vehicleKind ?? 'stadtbahn';
-    const accent = this.ctx.modeDefinition?.lineAccentColor ?? (vehicleKind === 's-bahn' ? '#e0202b' : '#ffd800');
-    context.fillStyle = accent;
-    context.fillRect(0, 0, 1024, 14);
-    context.fillRect(24, 40, 126, 126);
-    context.fillStyle = '#11151a';
-    context.font = '800 56px Inter, Arial, sans-serif';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.fillText(route.line, 87, 104);
-
-    context.textAlign = 'left';
-    context.fillStyle = '#a9b7bd';
-    context.font = '600 30px Inter, Arial, sans-serif';
-    context.fillText(doorsOpen ? 'TÜREN GEÖFFNET · DANACH' : 'NÄCHSTER HALT', 184, 62);
-
-    let fontSize = 58;
-    do {
-      context.font = `700 ${fontSize}px Inter, Arial, sans-serif`;
-      fontSize -= 2;
-    } while (context.measureText(station).width > 806 && fontSize > 30);
-    context.fillStyle = '#f5f7f6';
-    context.fillText(station, 184, 126);
-
-    context.fillStyle = accent;
-    context.font = '500 25px Inter, Arial, sans-serif';
-    context.fillText(`Richtung ${route.destination}`, 184, 202);
-    this.interiorDisplayTexture.needsUpdate = true;
+    const accentColor = this.ctx.modeDefinition?.lineAccentColor ?? (vehicleKind === 's-bahn' ? '#e0202b' : '#ffd800');
+    this.interiorDisplay?.update({
+      line: this.ctx.route.line,
+      destination: this.ctx.route.destination,
+      nextStop: nextStation,
+      doorsOpen,
+      accentColor
+    });
   }
 
   dispose(): void {
     this.vehicle?.dispose?.();
-    this.interiorDisplayTexture?.dispose();
-    this.interiorDisplayCanvas = null;
-    this.interiorDisplayTexture = null;
+    this.interiorDisplay?.dispose();
+    this.interiorDisplay = null;
     this.vehicle = null;
   }
 }
