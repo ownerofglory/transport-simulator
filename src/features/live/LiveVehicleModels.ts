@@ -10,14 +10,6 @@ import type { Projection } from './liveProjection';
 /** World-space pose along a run's track at a metre offset ahead/behind its center. */
 export type OffsetPose = (runId: string, offsetM: number) => { x: number; z: number; bearing: number } | null;
 
-/** The rendered model of a followed run, for anchoring interior/chase cameras. */
-export type FollowModel = {
-  train: THREE.Group;
-  cars: THREE.Group[];
-  trainHalfLengthM: number;
-  profile: InteriorCameraProfile;
-};
-
 // The interior-camera profile the Explore rigs key on, from the live mode.
 function profileForKind(kind: VehicleKind): InteriorCameraProfile {
   if (kind === 'bus') return 'bus';
@@ -102,7 +94,8 @@ export class LiveVehicleModels {
     groundHeightAt: (x: number, z: number) => number,
     resolveWorld: (vehicle: TrackedVehicle) => { x: number; z: number; bearing: number },
     cameraPos: THREE.Vector3,
-    offsetPose: OffsetPose
+    offsetPose: OffsetPose,
+    excludeRunId: string | null = null
   ): Set<string> {
     const modeled = new Set<string>();
 
@@ -131,6 +124,7 @@ export class LiveVehicleModels {
       for (const hit of hits) {
         if (placed >= MODEL_CAP) break;
         if (hit.d2 > r2) break;
+        if (hit.v.runId === excludeRunId) continue; // dedicated follow vehicle renders this run
         const variant = variantFor(hit.v);
         const group = this.acquireModel(variant, usedByVariant);
         if (!group) continue;
@@ -236,23 +230,6 @@ export class LiveVehicleModels {
         .setFromAxisAngle(this._up, -pose.bearing * DEG)
         .premultiply(invRoot);
     }
-  }
-
-  /** Model of a currently-rendered followed run, or null if it has no near model. */
-  getFollowModel(runId: string): FollowModel | null {
-    for (const pool of this.pools.values()) {
-      for (const group of pool) {
-        if (group.visible && group.userData.liveRunId === runId) {
-          return {
-            train: group,
-            cars: (group.userData.liveCars as THREE.Group[]) ?? [],
-            trainHalfLengthM: (group.userData.trainHalfLengthM as number) ?? 20,
-            profile: (group.userData.interiorCameraProfile as InteriorCameraProfile) ?? 'tram'
-          };
-        }
-      }
-    }
-    return null;
   }
 
   private acquireModel(variant: Variant, used: Map<string, number>): THREE.Group | null {

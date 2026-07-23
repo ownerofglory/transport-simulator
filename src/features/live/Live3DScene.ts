@@ -6,7 +6,7 @@ import { LiveVehicleModels } from './LiveVehicleModels';
 import { LiveTerrain } from './LiveTerrain';
 import { daylightAt } from './liveDaylight';
 import { LiveTunnelIndex } from './LiveTunnelIndex';
-import { LiveTunnelLayer, TUNNEL_DEPTH_M } from './LiveTunnelLayer';
+import { LiveTunnelLayer } from './LiveTunnelLayer';
 import { LiveTrackLayer } from './LiveTrackLayer';
 import { LiveTrackMotion } from './LiveTrackMotion';
 import { ALL_LIVE_MODES, modeColor, type LiveMode } from './liveTypes';
@@ -15,6 +15,25 @@ import { ChaseCameraRig } from '../../engine/cameras/ChaseCameraRig';
 import { PassengerCameraRig } from '../../engine/cameras/PassengerCameraRig';
 import { CabCameraRig } from '../../engine/cameras/CabCameraRig';
 import type { CameraMode, CameraUpdateInput } from '../../world/CameraController';
+import { LiveFollowVehicle } from './LiveFollowVehicle';
+import type { InteriorCameraProfile, VehicleKind } from '../../domain/transport';
+
+// Vehicle kind + interior-camera profile for the followed run, from the live mode.
+function kindForLiveMode(mode: LiveMode | undefined): VehicleKind {
+  if (mode === 'bus') return 'bus';
+  if (mode === 's-bahn' || mode === 'rail') return 's-bahn';
+  return 'stadtbahn'; // light-rail / tram
+}
+function profileForLiveMode(mode: LiveMode | undefined): InteriorCameraProfile {
+  if (mode === 'bus') return 'bus';
+  if (mode === 's-bahn' || mode === 'rail') return 's-bahn';
+  return 'tram';
+}
+// Body base height above terrain (matches the overview models); dropped into the
+// bore when underground.
+function followBaseOffset(underground: boolean): number {
+  return underground ? -4.7 : 0.3;
+}
 
 // Free-flight 3D view over the live network (concept §2.2/§4): reused OSM scenery
 // on Mapzen terrain relief (LiveTerrain), with near vehicles as full procedural
@@ -100,7 +119,11 @@ export class Live3DScene {
     passenger: new PassengerCameraRig(),
     cab: new CabCameraRig()
   } as const;
-  private readonly emptyTrain = new THREE.Group();
+  // The fully-detailed model of the followed run (real destination display, doors,
+  // interior board, per-view visibility). Built lazily on first follow frame.
+  private followVehicle: LiveFollowVehicle | null = null;
+  // 0 (night) → 1 (full day), for exterior lamp switching on the followed vehicle.
+  private daylightFactor = 1;
   // Gated smoothing goal (world XZ) for the followed vehicle, so a single bad frame
   // (a route rematch flipping the snapped position) can't whip the camera.
   private readonly followTarget = new THREE.Vector3();
@@ -205,6 +228,7 @@ export class Live3DScene {
     if (this.raf) cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.onResize);
     this.detachControls();
+    this.disposeFollowVehicle();
     this.models.dispose();
     this.tunnels.dispose();
     this.tracks.dispose();
@@ -239,6 +263,8 @@ export class Live3DScene {
   private applyDaylight(): void {
     const now = new Date();
     const d = daylightAt(now.getHours() + now.getMinutes() / 60);
+    // Lamps come on around dusk (sun below ~5°); full day well above the horizon.
+    this.daylightFactor = THREE.MathUtils.clamp(d.elevationDeg / 12, 0, 1);
     this.skyColor.setHex(d.skyColor);
     this.applyEnvironment();
     this.sun.color.setHex(d.sunColor);
@@ -323,7 +349,8 @@ export class Live3DScene {
       (x, z) => this.terrain.heightAt(x, z),
       (vehicle) => this.resolveWorld(vehicle),
       this.camera.position,
-      (runId, offsetM) => this.trackMotion.offsetPoseOf(runId, offsetM)
+      (runId, offsetM) => this.trackMotion.offsetPoseOf(runId, offsetM),
+      this.followRunId // the followed run renders via the dedicated LiveFollowVehicle
     );
     // Follow after models are placed so interior cameras read fresh car matrices.
     this.updateFollow(dt);
@@ -347,6 +374,7 @@ export class Live3DScene {
     for (const mode of ALL_LIVE_MODES) glowPerMode.set(mode, 0);
 
     for (const v of this.opts.store.list()) {
+      if (v.runId === this.followRunId) continue; // rendered by the dedicated follow vehicle
       const mode = (v.data.mode ?? 'tram') as LiveMode;
       const mesh = this.meshes.get(mode);
       const glow = this.tunnelGlows.get(mode);
@@ -519,11 +547,29 @@ export class Live3DScene {
     this.followTargetSet = false;
     this.followFreezeFrames = 0;
     this.followJustStarted = !!runId;
+    this.disposeFollowVehicle(); // rebuilt for the new run on the next follow frame
     if (!runId) {
       this.setUnderground(false);
       this.camera.up.set(0, 1, 0); // clear any interior-camera up-vector for free orbit
       return;
     }
+  }
+
+  private ensureFollowVehicle(vehicle: TrackedVehicle): LiveFollowVehicle {
+    if (this.followVehicle) return this.followVehicle;
+    this.followVehicle = new LiveFollowVehicle(
+      this.scene,
+      kindForLiveMode(vehicle.data.mode),
+      vehicle.data.line ?? '',
+      vehicle.data.direction ?? '',
+      profileForLiveMode(vehicle.data.mode)
+    );
+    return this.followVehicle;
+  }
+
+  private disposeFollowVehicle(): void {
+    this.followVehicle?.dispose();
+    this.followVehicle = null;
   }
 
   /** Cycles the follow view chase → passenger → cab, like Explore. */
@@ -573,27 +619,39 @@ export class Live3DScene {
     const px = this.followTarget.x;
     const pz = this.followTarget.z;
     const underground = this.tunnelIndex.isInTunnel(vehicle);
-    const baseY = this.terrain.heightAt(px, pz) + (underground ? -TUNNEL_DEPTH_M : 0.3);
+    const baseY = this.terrain.heightAt(px, pz) + followBaseOffset(underground);
     const position = this._followPos.set(px, baseY, pz);
     // Track-forward unit vector from bearing (model forward = (-sinβ, 0, cosβ)).
     const beta = w.bearing * DEG;
     const tangent = this._followTan.set(-Math.sin(beta), 0, Math.cos(beta));
 
-    // Interior views need the rendered model; without one (e.g. just-acquired, far)
-    // fall back to chase so the camera never anchors to nothing.
-    const model = this.models.getFollowModel(this.followRunId);
-    const mode: CameraMode = this.cameraMode !== 'chase' && !model ? 'chase' : this.cameraMode;
+    // Build the detailed followed vehicle on first frame (needs the run's data), then
+    // drive its motion, doors, interior display, and per-view visibility.
+    const follow = this.ensureFollowVehicle(vehicle);
+    follow.update({
+      x: px,
+      z: pz,
+      bearing: w.bearing,
+      centerY: baseY,
+      offsetPose: (offsetM) => this.trackMotion.offsetPoseOf(vehicle.runId, offsetM),
+      mode: this.cameraMode,
+      doorsOpen: vehicle.data.status === 'at_stop',
+      nextStop: vehicle.data.nextStop ?? '',
+      daylightFactor: this.daylightFactor,
+      dt
+    });
+
     const input: CameraUpdateInput = {
       position,
       tangent,
       underground,
-      interiorCameraProfile: model?.profile ?? 'tram',
+      interiorCameraProfile: follow.profile,
       passengerOffsetM: 0,
-      trainHalfLengthM: model?.trainHalfLengthM ?? 20,
-      train: model?.train ?? this.emptyTrain,
-      trainCars: model?.cars ?? []
+      trainHalfLengthM: follow.trainHalfLengthM,
+      train: follow.root,
+      trainCars: follow.cars
     };
-    const rig = this.rigs[mode];
+    const rig = this.rigs[this.cameraMode];
     const pose = rig.pose(input);
 
     if (this.followJustStarted) {
