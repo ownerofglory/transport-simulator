@@ -16,19 +16,9 @@ import { PassengerCameraRig } from '../../engine/cameras/PassengerCameraRig';
 import { CabCameraRig } from '../../engine/cameras/CabCameraRig';
 import type { CameraMode, CameraUpdateInput } from '../../world/CameraController';
 import { LiveFollowVehicle } from './LiveFollowVehicle';
-import type { InteriorCameraProfile, VehicleKind } from '../../domain/transport';
+import { resolveLiveVehicleDefinition } from './liveVehicleDefinition';
+import type { CityDefinition } from '../../cities';
 
-// Vehicle kind + interior-camera profile for the followed run, from the live mode.
-function kindForLiveMode(mode: LiveMode | undefined): VehicleKind {
-  if (mode === 'bus') return 'bus';
-  if (mode === 's-bahn' || mode === 'rail') return 's-bahn';
-  return 'stadtbahn'; // light-rail / tram
-}
-function profileForLiveMode(mode: LiveMode | undefined): InteriorCameraProfile {
-  if (mode === 'bus') return 'bus';
-  if (mode === 's-bahn' || mode === 'rail') return 's-bahn';
-  return 'tram';
-}
 // Body base height above terrain (matches the overview models); dropped into the
 // bore when underground.
 function followBaseOffset(underground: boolean): number {
@@ -71,6 +61,8 @@ type Live3DOptions = {
   onStopFollow: () => void;
   /** Reports the active follow camera view (chase / passenger / cab) to the UI. */
   onCameraModeChange?: (mode: CameraMode) => void;
+  /** Current city, so followed vehicles resolve to the same design as the simulator. */
+  city?: CityDefinition;
 };
 
 export class Live3DScene {
@@ -557,13 +549,8 @@ export class Live3DScene {
 
   private ensureFollowVehicle(vehicle: TrackedVehicle): LiveFollowVehicle {
     if (this.followVehicle) return this.followVehicle;
-    this.followVehicle = new LiveFollowVehicle(
-      this.scene,
-      kindForLiveMode(vehicle.data.mode),
-      vehicle.data.line ?? '',
-      vehicle.data.direction ?? '',
-      profileForLiveMode(vehicle.data.mode)
-    );
+    const definition = resolveLiveVehicleDefinition(vehicle.data, this.opts.city);
+    this.followVehicle = new LiveFollowVehicle(this.scene, definition);
     return this.followVehicle;
   }
 

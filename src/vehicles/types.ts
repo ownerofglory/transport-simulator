@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { CityDefinition } from '../cities';
 import type { TransportModeDefinition } from '../domain/transport';
 import type { DemoRoute } from '../route';
+import type { VehicleDefinition } from './VehicleDefinition';
 
 export type VehicleDoorLeaf = {
   group: THREE.Group;
@@ -41,9 +42,28 @@ export type VehicleInstance = {
   dispose?: () => void;
 };
 
+// What callers pass to buildTransitVehicle. The definition is the intended input;
+// route/city/modeDefinition are temporary compatibility fields still accepted from
+// existing call sites. buildTransitVehicle normalizes either form into a
+// ResolvedVehicleBuildContext before the registry and builders run.
 export type VehicleBuildContext = {
-  route: DemoRoute;
+  definition?: VehicleDefinition;
+
+  // Temporary compatibility fields.
+  route?: DemoRoute;
   city?: CityDefinition;
   modeDefinition?: TransportModeDefinition;
+
+  makeInteriorDisplayMaterial: () => THREE.MeshBasicMaterial;
+};
+
+// The normalized context the registry and builders actually consume: a definition
+// is always present, and route/modeDefinition are always populated (synthesized
+// from the definition when a caller only supplied one).
+export type ResolvedVehicleBuildContext = {
+  definition: VehicleDefinition;
+  route: DemoRoute;
+  city?: CityDefinition;
+  modeDefinition: TransportModeDefinition;
   makeInteriorDisplayMaterial: () => THREE.MeshBasicMaterial;
 };

@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { buildTransitVehicle } from '../../vehicles';
-import { fallbackTransportModeDefinition, type InteriorCameraProfile, type VehicleKind } from '../../domain/transport';
+import type { InteriorCameraProfile } from '../../domain/transport';
 import type { CameraMode } from '../../world/CameraController';
-import type { DemoRoute } from '../../route';
+import type { VehicleDefinition } from '../../vehicles/VehicleDefinition';
 import { VehicleInteriorDisplay } from '../../vehicles/VehicleInteriorDisplay';
 import { VehicleVisualController } from '../../vehicles/VehicleVisualController';
 
@@ -45,32 +45,26 @@ export class LiveFollowVehicle {
 
   constructor(
     private readonly scene: THREE.Scene,
-    kind: VehicleKind,
-    line: string,
-    destination: string,
-    profile: InteriorCameraProfile
+    definition: VehicleDefinition
   ) {
-    this.profile = profile;
-    // A throwaway route carrying only the fields the builder reads. The real line
-    // drives both the formation and the cab/destination display text. (Replaced by
-    // a shared VehicleDefinition in a later step.)
-    const route = { line, destination, stations: [], controlPoints: [] } as unknown as DemoRoute;
+    this.profile = definition.interiorCameraProfile;
+    // Build from the shared definition — no fake route. buildTransitVehicle
+    // synthesizes any compatibility fields the builders still read.
     let display: VehicleInteriorDisplay | null = null;
     const instance = buildTransitVehicle({
-      route,
-      modeDefinition: { ...fallbackTransportModeDefinition, id: kind, vehicleKind: kind },
+      definition,
       makeInteriorDisplayMaterial: () => {
         display = new VehicleInteriorDisplay();
         return display.material;
       }
     });
     this.visual = new VehicleVisualController(instance, display, {
-      line,
-      destination,
-      lineAccentColor: kind === 's-bahn' ? '#e0202b' : '#ffd800',
-      interiorCameraProfile: profile
+      line: definition.line,
+      destination: definition.destination,
+      lineAccentColor: definition.lineAccentColor,
+      interiorCameraProfile: definition.interiorCameraProfile
     });
-    this.visual.updateInteriorDisplay(destination, false); // initial board
+    this.visual.updateInteriorDisplay(definition.destination, false); // initial board
 
     this.root = instance.root;
     this.cars = instance.cars;

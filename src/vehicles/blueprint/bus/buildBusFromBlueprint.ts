@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { makeLabelTexture } from '../../../labels';
-import type { VehicleBuildContext, VehicleInstance } from '../../types';
+import type { ResolvedVehicleBuildContext, VehicleInstance } from '../../types';
 import {
   addCabinLight,
   addExteriorLightThrow,
@@ -33,7 +33,7 @@ type BusBuildState = {
   rig: ExteriorLightRig;
 };
 
-export function buildBusVehicle(config: BusBlueprintConfig, context: VehicleBuildContext): VehicleInstance {
+export function buildBusVehicle(config: BusBlueprintConfig, context: ResolvedVehicleBuildContext): VehicleInstance {
   const state: BusBuildState = {
     root: new THREE.Group(),
     cars: [],
@@ -71,7 +71,7 @@ export function buildBusVehicle(config: BusBlueprintConfig, context: VehicleBuil
   };
 }
 
-function isArticulatedFormation(config: BusBlueprintConfig, context: VehicleBuildContext): boolean {
+function isArticulatedFormation(config: BusBlueprintConfig, context: ResolvedVehicleBuildContext): boolean {
   return isBusLineArticulated(config, context.route.line, context.city?.id);
 }
 
@@ -105,7 +105,7 @@ function addBusSection(
   m: BusMaterials,
   displayMaterial: THREE.Material,
   config: BusBlueprintConfig,
-  context: VehicleBuildContext
+  context: ResolvedVehicleBuildContext
 ): THREE.Group {
   const L = section.lengthM;
   const half = L / 2;
@@ -314,7 +314,7 @@ function addBusFrontEnd(
   displayMaterial: THREE.Material,
   frontZ: number,
   config: BusBlueprintConfig,
-  context: VehicleBuildContext
+  context: ResolvedVehicleBuildContext
 ): void {
   state.rig.headLampMaterials.push(m.headlight);
 

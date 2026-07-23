@@ -9,6 +9,7 @@ import { ALL_LIVE_MODES, type LiveMode, type LiveVehicle } from './liveTypes';
 import type { LatLon } from './liveProjection';
 import type { BBox } from './viewport';
 import { useLiveVehicles } from './useLiveVehicles';
+import type { CityDefinition } from '../../cities';
 
 // The 3D scene pulls in Three.js + the OSM streamer, so it is code-split and
 // loaded only when the user actually zooms into the 3D view.
@@ -45,7 +46,7 @@ async function resolveStop(name: string, near: { lat: number; lon: number }): Pr
  * hook with the map renderer, the slim HUD, the selection card, and the existing
  * departures board. Rendered lazily and only for Stuttgart with live enabled.
  */
-export function LiveView({ onExit }: { onExit: () => void }) {
+export function LiveView({ onExit, city }: { onExit: () => void; city?: CityDefinition }) {
   const [userModes, setUserModes] = useState<Set<LiveMode>>(() => new Set(ALL_LIVE_MODES));
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [followRunId, setFollowRunId] = useState<string | null>(null);
@@ -171,6 +172,7 @@ export function LiveView({ onExit }: { onExit: () => void }) {
           onStopFollow={() => setFollowRunId(null)}
           onDepartures={openDepartures}
           onCloseSelection={() => setSelectedRunId(null)}
+          city={city}
         />
       </Suspense>
     );

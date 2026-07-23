@@ -14,7 +14,7 @@ import {
   makeSetExteriorLightsOn,
   type ExteriorLightRig
 } from './parts';
-import type { VehicleBuildContext, VehicleInstance } from './types';
+import type { ResolvedVehicleBuildContext, VehicleInstance } from './types';
 
 const DOUBLE_FORMATION_LINES = new Set(['U1', 'U6', 'U7', 'U11', 'U12', 'U19']);
 
@@ -43,7 +43,7 @@ class ProceduralTransitVehicleFactory {
   private glassMaterial?: THREE.MeshStandardMaterial;
   private trainHalfLengthM = 20.15;
 
-  constructor(private readonly context: VehicleBuildContext) {}
+  constructor(private readonly context: ResolvedVehicleBuildContext) {}
 
   build(): VehicleInstance {
     const cityId = this.context.city?.id;
@@ -2556,34 +2556,34 @@ class ProceduralTransitVehicleFactory {
   }
 }
 
-export function buildProceduralTransitVehicle(context: VehicleBuildContext): VehicleInstance {
+export function buildProceduralTransitVehicle(context: ResolvedVehicleBuildContext): VehicleInstance {
   return new ProceduralTransitVehicleFactory(context).build();
 }
 
-export function createStadtbahnVehicle(context: VehicleBuildContext): VehicleInstance {
+export function createStadtbahnVehicle(context: ResolvedVehicleBuildContext): VehicleInstance {
   return new ProceduralTransitVehicleFactory(context).createStadtbahnVehicle();
 }
 
-export function createBusVehicle(context: VehicleBuildContext): VehicleInstance {
+export function createBusVehicle(context: ResolvedVehicleBuildContext): VehicleInstance {
   return new ProceduralTransitVehicleFactory(context).createBusVehicle();
 }
 
-export function createSBahnVehicle(context: VehicleBuildContext): VehicleInstance {
+export function createSBahnVehicle(context: ResolvedVehicleBuildContext): VehicleInstance {
   return new ProceduralTransitVehicleFactory(context).createSBahnVehicle();
 }
 
-export function createTramVehicle(context: VehicleBuildContext): VehicleInstance {
+export function createTramVehicle(context: ResolvedVehicleBuildContext): VehicleInstance {
   return new ProceduralTransitVehicleFactory(context).build();
 }
 
-export function createZackeVehicle(context: VehicleBuildContext): VehicleInstance {
+export function createZackeVehicle(context: ResolvedVehicleBuildContext): VehicleInstance {
   return new ProceduralTransitVehicleFactory(context).createZackeVehicle();
 }
 
-export function createSeilbahnVehicle(context: VehicleBuildContext): VehicleInstance {
+export function createSeilbahnVehicle(context: ResolvedVehicleBuildContext): VehicleInstance {
   return new ProceduralTransitVehicleFactory(context).createSeilbahnVehicle();
 }
 
-export function createFerryVehicle(context: VehicleBuildContext): VehicleInstance {
+export function createFerryVehicle(context: ResolvedVehicleBuildContext): VehicleInstance {
   return new ProceduralTransitVehicleFactory(context).createFerryVehicle();
 }

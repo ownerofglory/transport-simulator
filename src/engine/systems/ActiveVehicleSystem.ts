@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import type { DemoRoute } from '../../route';
 import type { CityDefinition } from '../../cities';
-import type { TransportModeDefinition } from '../../domain/transport';
+import { fallbackTransportModeDefinition, type TransportModeDefinition } from '../../domain/transport';
 import type { CameraMode } from '../../world/CameraController';
 import { buildTransitVehicle } from '../../vehicles';
 import type { VehicleInstance } from '../../vehicles/types';
+import { resolveRouteVehicleDefinition } from '../../vehicles/VehicleDefinition';
 import { VehicleInteriorDisplay } from '../../vehicles/VehicleInteriorDisplay';
 import { VehicleVisualController } from '../../vehicles/VehicleVisualController';
 import type { EngineSystem } from '../core/EngineSystem';
@@ -45,8 +46,13 @@ export class ActiveVehicleSystem implements EngineSystem {
   private readonly visual: VehicleVisualController;
 
   constructor(private readonly ctx: ActiveVehicleContext) {
+    // Resolve the shared definition and build through it; the real route/city/mode
+    // are still passed so route-specific builder reads (e.g. funicular orientation)
+    // keep working.
+    const definition = resolveRouteVehicleDefinition(ctx.route, ctx.city, ctx.modeDefinition ?? fallbackTransportModeDefinition);
     let display: VehicleInteriorDisplay | null = null;
     this.vehicle = buildTransitVehicle({
+      definition,
       route: ctx.route,
       city: ctx.city,
       modeDefinition: ctx.modeDefinition,
@@ -57,12 +63,11 @@ export class ActiveVehicleSystem implements EngineSystem {
     });
     ctx.scene.add(this.vehicle.root);
 
-    const vehicleKind = ctx.modeDefinition?.vehicleKind ?? 'stadtbahn';
     this.visual = new VehicleVisualController(this.vehicle, display, {
-      line: ctx.route.line,
-      destination: ctx.route.destination,
-      lineAccentColor: ctx.modeDefinition?.lineAccentColor ?? (vehicleKind === 's-bahn' ? '#e0202b' : '#ffd800'),
-      interiorCameraProfile: ctx.modeDefinition?.interiorCameraProfile ?? 'tram'
+      line: definition.line,
+      destination: definition.destination,
+      lineAccentColor: definition.lineAccentColor,
+      interiorCameraProfile: definition.interiorCameraProfile
     });
     // Initial board so it isn't blank before the first schedule update.
     this.visual.updateInteriorDisplay(ctx.route.stations[1]?.name ?? ctx.route.destination, false);

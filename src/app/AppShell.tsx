@@ -198,7 +198,7 @@ export function AppShell() {
       )}
       {state.view === 'live' && catalog.currentCity?.liveTraffic && (
         <Suspense fallback={<div className="lv-root" />}>
-          <LiveView onExit={() => dispatch({ type: 'view-changed', view: 'simulator' })} />
+          <LiveView onExit={() => dispatch({ type: 'view-changed', view: 'simulator' })} city={catalog.currentCity} />
         </Suspense>
       )}
     </SimulatorCommandsContext.Provider>

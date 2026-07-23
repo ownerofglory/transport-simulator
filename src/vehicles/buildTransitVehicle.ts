@@ -4,7 +4,10 @@ import { buildSBahnVehicle } from './blueprint/sbahn/buildSBahnFromBlueprint';
 import { defaultSBahnBlueprint } from './blueprint/sbahn/defaultSBahnBlueprint';
 import { buildProceduralTransitVehicle, createStadtbahnVehicle } from './procedural';
 import { VehicleRegistry } from './registry';
-import type { VehicleBuildContext, VehicleInstance } from './types';
+import type { ResolvedVehicleBuildContext, VehicleBuildContext, VehicleInstance } from './types';
+import { resolveRouteVehicleDefinition, type VehicleDefinition } from './VehicleDefinition';
+import { fallbackTransportModeDefinition, type TransportModeDefinition } from '../domain/transport';
+import type { DemoRoute } from '../route';
 import genericModernTram from './configs/generic-modern-tram.json';
 import genericBus from './configs/generic-bus.json';
 import stuttgartDt8Tango from './configs/stuttgart-dt8-tango.json';
@@ -34,6 +37,45 @@ for (const rawConfig of [genericModernTram, genericBus, stuttgartDt8Tango]) {
   }
 }
 
+// Minimal route/mode synthesized from a definition so the registry and existing
+// builders (which still read route/modeDefinition) keep working when a caller
+// supplies only a definition — e.g. the live follow vehicle, which no longer
+// invents a fake DemoRoute of its own.
+function synthesizeRoute(def: VehicleDefinition): DemoRoute {
+  return {
+    line: def.line,
+    destination: def.destination,
+    controlPoints: [],
+    stations: [],
+    vehicleDesignId: def.vehicleDesignId
+  } as unknown as DemoRoute;
+}
+
+function synthesizeMode(def: VehicleDefinition): TransportModeDefinition {
+  return {
+    ...fallbackTransportModeDefinition,
+    id: def.modeId,
+    vehicleFamily: '',
+    vehicleKind: def.vehicleKind,
+    interiorCameraProfile: def.interiorCameraProfile,
+    lineAccentColor: def.lineAccentColor,
+    vehicleDesignId: def.vehicleDesignId
+  };
+}
+
+// Normalizes either input form (new `definition`, or legacy route/city/mode) into
+// one ResolvedVehicleBuildContext with a definition and populated route/mode.
+export function resolveBuildContext(context: VehicleBuildContext): ResolvedVehicleBuildContext {
+  const modeDefinition =
+    context.modeDefinition ?? (context.definition ? synthesizeMode(context.definition) : { ...fallbackTransportModeDefinition });
+  if (!context.route && !context.definition) {
+    throw new Error('buildTransitVehicle requires a definition or a route.');
+  }
+  const route = context.route ?? synthesizeRoute(context.definition!);
+  const definition = context.definition ?? resolveRouteVehicleDefinition(route, context.city, modeDefinition);
+  return { definition, route, city: context.city, modeDefinition, makeInteriorDisplayMaterial: context.makeInteriorDisplayMaterial };
+}
+
 export function buildTransitVehicle(context: VehicleBuildContext): VehicleInstance {
-  return vehicleRegistry.build(context);
+  return vehicleRegistry.build(resolveBuildContext(context));
 }

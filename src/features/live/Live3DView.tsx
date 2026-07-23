@@ -8,6 +8,7 @@ import type { LiveMode, LiveVehicle } from './liveTypes';
 import type { LiveSummary } from './useLiveVehicles';
 import type { BBox } from './viewport';
 import type { CameraMode } from '../../world/CameraController';
+import type { CityDefinition } from '../../cities';
 
 const CAMERA_MODE_LABEL: Record<CameraMode, string> = {
   chase: 'Chase',
@@ -35,7 +36,8 @@ export function Live3DView({
   onToggleFollow,
   onStopFollow,
   onDepartures,
-  onCloseSelection
+  onCloseSelection,
+  city
 }: {
   store: LiveVehicleStore;
   origin: LatLon;
@@ -52,6 +54,7 @@ export function Live3DView({
   onStopFollow: () => void;
   onDepartures: () => void;
   onCloseSelection: () => void;
+  city?: CityDefinition;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onViewportRef = useRef(onViewport);
@@ -63,6 +66,8 @@ export function Live3DView({
   const onStopFollowRef = useRef(onStopFollow);
   onStopFollowRef.current = onStopFollow;
   const sceneRef = useRef<Live3DScene | null>(null);
+  const cityRef = useRef(city);
+  cityRef.current = city;
   const [cameraMode, setCameraMode] = useState<CameraMode>('chase');
   const setCameraModeRef = useRef(setCameraMode);
   setCameraModeRef.current = setCameraMode;
@@ -79,7 +84,8 @@ export function Live3DView({
       onExitToMap: () => onBackRef.current(),
       onSelect: (runId) => onSelectRef.current(runId),
       onStopFollow: () => onStopFollowRef.current(),
-      onCameraModeChange: (mode) => setCameraModeRef.current(mode)
+      onCameraModeChange: (mode) => setCameraModeRef.current(mode),
+      city: cityRef.current
     });
     sceneRef.current = scene;
     return () => {

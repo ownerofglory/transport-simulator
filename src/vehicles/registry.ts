@@ -2,9 +2,9 @@ import type { VehicleKind } from '../domain/transport';
 import type { VehicleBlueprintConfig } from './blueprint/VehicleBlueprintConfig';
 import { buildVehicleFromBlueprint } from './blueprint/buildVehicleFromBlueprint';
 import { validateVehicleBlueprint } from './blueprint/validateVehicleBlueprint';
-import type { VehicleBuildContext, VehicleInstance } from './types';
+import type { ResolvedVehicleBuildContext, VehicleInstance } from './types';
 
-export type VehicleBuilder = (context: VehicleBuildContext) => VehicleInstance;
+export type VehicleBuilder = (context: ResolvedVehicleBuildContext) => VehicleInstance;
 
 export type VehicleBlueprintRegistrationResult =
   | { ok: true; id: string; warnings: string[] }
@@ -55,7 +55,7 @@ export class VehicleRegistry {
     }
   }
 
-  resolve(context: VehicleBuildContext): VehicleBuilder {
+  resolve(context: ResolvedVehicleBuildContext): VehicleBuilder {
     const explicitId = context.route.vehicleDesignId ?? context.city?.vehicleDesignId ?? context.modeDefinition?.vehicleDesignId;
     if (explicitId) {
       const builder = this.buildersById.get(explicitId);
@@ -79,7 +79,7 @@ export class VehicleRegistry {
     throw new Error('VehicleRegistry has no final fallback builder registered.');
   }
 
-  build(context: VehicleBuildContext): VehicleInstance {
+  build(context: ResolvedVehicleBuildContext): VehicleInstance {
     return this.resolve(context)(context);
   }
 }

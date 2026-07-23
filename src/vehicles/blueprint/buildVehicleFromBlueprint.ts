@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { makeLabelTexture } from '../../labels';
-import type { VehicleBuildContext, VehicleInstance } from '../types';
+import type { ResolvedVehicleBuildContext, VehicleInstance } from '../types';
 import type { VehicleBlueprintConfig, VehicleDoorConfig, VehicleSectionConfig } from './VehicleBlueprintConfig';
 import { buildBlueprintMaterials, resolveMaterial } from './materials';
 import { buildBlueprintSection } from './sections';
@@ -12,7 +12,7 @@ import { buildBlueprintInterior } from './interior';
 // This is the generic counterpart to the hand-written procedural builders in
 // ../procedural.ts: instead of a bespoke method per vehicle, any JSON config
 // matching VehicleBlueprintConfig produces a working vehicle.
-export function buildVehicleFromBlueprint(config: VehicleBlueprintConfig, context: VehicleBuildContext): VehicleInstance {
+export function buildVehicleFromBlueprint(config: VehicleBlueprintConfig, context: ResolvedVehicleBuildContext): VehicleInstance {
   const root = new THREE.Group();
   root.name = `Vehicle blueprint ${config.id}`;
   const materials = buildBlueprintMaterials(config.materials);
@@ -128,7 +128,7 @@ export function buildVehicleFromBlueprint(config: VehicleBlueprintConfig, contex
   };
 }
 
-function resolveDisplayText(text: string | undefined, context: VehicleBuildContext): string {
+function resolveDisplayText(text: string | undefined, context: ResolvedVehicleBuildContext): string {
   if (text === 'route-line') return context.route.line;
   if (!text || text === 'route-destination') return `${context.route.line} ${context.route.destination}`;
   return text;
@@ -139,7 +139,7 @@ function buildDestinationDisplayForCab(
   sectionIndex: number,
   section: VehicleSectionConfig,
   materials: Record<string, THREE.MeshStandardMaterial>,
-  context: VehicleBuildContext
+  context: ResolvedVehicleBuildContext
 ): THREE.Mesh | null {
   // Skip if an explicit destinationDisplays entry already targets this section.
   if (config.destinationDisplays?.some((display) => display.section === sectionIndex)) return null;

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { makeLabelTexture } from '../../../labels';
-import type { VehicleBuildContext, VehicleInstance } from '../../types';
+import type { ResolvedVehicleBuildContext, VehicleInstance } from '../../types';
 import {
   addCabinLight,
   addExteriorLightThrow,
@@ -23,7 +23,7 @@ import type { SBahnBlueprintConfig, SBahnMaterialRole } from './SBahnBlueprintCo
 
 type SBahnMaterials = Record<SBahnMaterialRole, THREE.MeshStandardMaterial>;
 
-export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: VehicleBuildContext): VehicleInstance {
+export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: ResolvedVehicleBuildContext): VehicleInstance {
   const root = new THREE.Group();
   const cars: THREE.Group[] = [];
   const doors: VehicleInstance['doors'] = [];
