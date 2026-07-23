@@ -18,6 +18,15 @@ import type { VehicleBuildContext, VehicleInstance } from './types';
 
 const DOUBLE_FORMATION_LINES = new Set(['U1', 'U6', 'U7', 'U11', 'U12', 'U19']);
 
+/**
+ * Whether a Stadtbahn line runs a coupled double formation (4 Tango sections
+ * instead of 2). Exported so other renderers (e.g. the Live 3D view) build the
+ * same formation the ride/explore view does, keyed off the GTFS line label.
+ */
+export function isStadtbahnDoubleFormation(line: string | undefined): boolean {
+  return !!line && DOUBLE_FORMATION_LINES.has(line.trim().toUpperCase());
+}
+
 class ProceduralTransitVehicleFactory {
   private readonly root = new THREE.Group();
   private readonly cars: THREE.Group[] = [];
@@ -1672,7 +1681,7 @@ class ProceduralTransitVehicleFactory {
     const metalMat = new THREE.MeshStandardMaterial({ color: 0x8a8f91, roughness: 0.4, metalness: 0.65 });
     const interiorDisplayMat = this.context.makeInteriorDisplayMaterial();
 
-    const doubleFormation = DOUBLE_FORMATION_LINES.has(this.context.route.line);
+    const doubleFormation = isStadtbahnDoubleFormation(this.context.route.line);
     const carCenters = doubleFormation ? [-29.85, -9.95, 9.95, 29.85] : [-9.95, 9.95];
     const cabDirections: (-1 | 1)[] = doubleFormation ? [-1, 1, -1, 1] : [-1, 1];
     this.trainHalfLengthM = doubleFormation ? 40.05 : 20.15;

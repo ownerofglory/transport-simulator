@@ -34,6 +34,7 @@ export class LiveTrackMotion {
   private readonly geoms = new Map<string, Geom>(); // by route id
   private readonly states = new Map<string, State>(); // by runId
   private readonly out = new Map<string, Resolved>(); // by runId
+  private readonly runGeom = new Map<string, Geom>(); // by runId — for offset queries
 
   constructor(
     private readonly projection: Projection,
@@ -46,9 +47,11 @@ export class LiveTrackMotion {
     for (const v of vehicles) {
       const route = this.index.routeFor(v);
       if (!route?.geoPoints || route.geoPoints.length < 2) continue;
-      const resolved = this.advance(v, this.geomFor(route.id, route.geoPoints), dtSec);
+      const geom = this.geomFor(route.id, route.geoPoints);
+      const resolved = this.advance(v, geom, dtSec);
       if (resolved) {
         this.out.set(v.runId, resolved);
+        this.runGeom.set(v.runId, geom);
         seen.add(v.runId);
       }
     }
@@ -56,6 +59,7 @@ export class LiveTrackMotion {
       if (!seen.has(id)) {
         this.out.delete(id);
         this.states.delete(id);
+        this.runGeom.delete(id);
       }
     }
   }
@@ -63,6 +67,20 @@ export class LiveTrackMotion {
   /** Snapped position + track-aligned bearing for a run, if it is on a route. */
   positionOf(runId: string): Resolved | undefined {
     return this.out.get(runId);
+  }
+
+  /**
+   * World-space pose (projected x/z + bearing) at `offsetM` along the run's track
+   * from its current position — positive ahead, negative behind travel. Used to
+   * articulate a model's cars so the train bends through curves. Returns null when
+   * the run isn't currently matched to a route.
+   */
+  offsetPoseOf(runId: string, offsetM: number): { x: number; z: number; bearing: number } | null {
+    const st = this.states.get(runId);
+    const geom = this.runGeom.get(runId);
+    if (!st || !geom) return null;
+    const s = Math.max(0, Math.min(st.s + st.dir * offsetM, geom.total));
+    return this.pointAtWorld(geom, s, st.dir);
   }
 
   private advance(v: TrackedVehicle, geom: Geom, dtSec: number): Resolved | null {
@@ -153,6 +171,13 @@ export class LiveTrackMotion {
   }
 
   private pointAt(geom: Geom, s: number, dir: 1 | -1): Resolved {
+    const { x, z, bearing } = this.pointAtWorld(geom, s, dir);
+    const { lat, lon } = this.projection.unproject(x, z);
+    return { lat, lon, bearing };
+  }
+
+  // Projected world x/z and track-aligned bearing at along-track distance `s`.
+  private pointAtWorld(geom: Geom, s: number, dir: 1 | -1): { x: number; z: number; bearing: number } {
     const { xs, zs, cum } = geom;
     const n = xs.length;
     let lo = 0;
@@ -166,11 +191,10 @@ export class LiveTrackMotion {
     const t = (s - cum[lo]) / segLen;
     const dx = xs[lo + 1] - xs[lo];
     const dz = zs[lo + 1] - zs[lo];
-    const { lat, lon } = this.projection.unproject(xs[lo] + dx * t, zs[lo] + dz * t);
     // Bearing that matches the model rotation convention (rotate.y = -bearing):
     // world forward (dx,dz) corresponds to (-sinβ, cosβ), so β = atan2(-dx, dz).
     // Flip 180° when the vehicle runs against the polyline's stored direction.
     const bearing = ((Math.atan2(-dx * dir, dz * dir) / DEG) + 360) % 360;
-    return { lat, lon, bearing };
+    return { x: xs[lo] + dx * t, z: zs[lo] + dz * t, bearing };
   }
 }

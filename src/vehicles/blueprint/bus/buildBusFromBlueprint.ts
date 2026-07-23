@@ -72,13 +72,21 @@ export function buildBusVehicle(config: BusBlueprintConfig, context: VehicleBuil
 }
 
 function isArticulatedFormation(config: BusBlueprintConfig, context: VehicleBuildContext): boolean {
+  return isBusLineArticulated(config, context.route.line, context.city?.id);
+}
+
+/**
+ * Whether a bus line runs an articulated ("bendy") unit under the given config
+ * and city. Exported so other renderers (e.g. the Live 3D view) pick the same
+ * formation the ride/explore view does from just a line label + optional city.
+ */
+export function isBusLineArticulated(config: BusBlueprintConfig, line: string | undefined, cityId: string | undefined): boolean {
   const rules = config.articulated;
   if (!rules) return false;
-  const cityId = context.city?.id;
   const cityMatches = cityId === undefined ? rules.applyWhenCityUnknown : rules.cityIds.includes(cityId);
   if (!cityMatches) return false;
-  const line = context.route.line.trim().toUpperCase();
-  return rules.lines.includes(line) || rules.linePrefixes.some((prefix) => line.startsWith(prefix));
+  const normalized = (line ?? '').trim().toUpperCase();
+  return rules.lines.includes(normalized) || rules.linePrefixes.some((prefix) => normalized.startsWith(prefix));
 }
 
 function makeBusMaterials(configMaterials: BusBlueprintConfig['materials']): BusMaterials {

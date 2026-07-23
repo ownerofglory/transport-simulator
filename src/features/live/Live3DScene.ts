@@ -312,7 +312,8 @@ export class Live3DScene {
       (vehicle) => this.tunnelIndex.isInTunnel(vehicle),
       (x, z) => this.terrain.heightAt(x, z),
       (vehicle) => this.resolveWorld(vehicle),
-      this.camera.position
+      this.camera.position,
+      (runId, offsetM) => this.trackMotion.offsetPoseOf(runId, offsetM)
     );
     this.syncVehicles(modeled);
 

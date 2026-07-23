@@ -1,11 +1,14 @@
 import * as THREE from 'three';
-import { buildTransitVehicle } from '../../vehicles';
+import { buildTransitVehicle, isStadtbahnDoubleFormation, isBusLineArticulated, defaultBusBlueprint } from '../../vehicles';
 import { fallbackTransportModeDefinition, type VehicleKind } from '../../domain/transport';
 import { makeLabelTexture } from '../../labels';
 import type { DemoRoute } from '../../route';
 import { modeColor, type LiveMode } from './liveTypes';
 import type { LiveVehicleStore, TrackedVehicle } from './LiveVehicleStore';
 import type { Projection } from './liveProjection';
+
+/** World-space pose along a run's track at a metre offset ahead/behind its center. */
+export type OffsetPose = (runId: string, offsetM: number) => { x: number; z: number; bearing: number } | null;
 
 // Level-of-detail for the 3D view (concept §4.1): near vehicles get the full
 // procedural models (the same kind-builders the ride view uses), everything else
@@ -28,17 +31,42 @@ function kindForMode(mode: LiveMode | undefined): VehicleKind {
   return 'stadtbahn'; // light-rail, tram
 }
 
-// A throwaway route carrying only the fields the procedural builder reads.
-const STUB_ROUTE = { line: '', destination: '', controlPoints: [] } as unknown as DemoRoute;
+// Which model formation a live run should use, and a representative line that makes
+// the shared vehicle builder produce it. Formation follows the same VVS rules the
+// Explore/ride view uses (double-traction Stadtbahn lines, articulated bus lines),
+// so a U12 shows four Tango sections and an X-bus bends, exactly like Explore.
+// Templates are cached per variant, so only a handful are ever built.
+type Variant = { key: string; kind: VehicleKind; line: string };
+
+function variantFor(v: TrackedVehicle): Variant {
+  const kind = kindForMode(v.data.mode);
+  const line = v.data.line;
+  if (kind === 'stadtbahn') {
+    const double = isStadtbahnDoubleFormation(line);
+    return { key: 'stadtbahn:' + (double ? 'double' : 'single'), kind, line: double ? 'U12' : 'U5' };
+  }
+  if (kind === 'bus') {
+    // Live has no city context yet, so formation follows the "city unknown" rule.
+    const artic = isBusLineArticulated(defaultBusBlueprint, line, undefined);
+    return { key: 'bus:' + (artic ? 'artic' : 'rigid'), kind, line: artic ? 'X1' : '70' };
+  }
+  return { key: kind, kind, line: '' };
+}
 
 type NearHit = { v: TrackedVehicle; x: number; z: number; d2: number; bearing: number };
 
 /** Owns the near-field vehicle models and floating line labels for Live3DScene. */
 export class LiveVehicleModels {
-  private readonly templates = new Map<VehicleKind, THREE.Group | null>();
-  private readonly pools = new Map<VehicleKind, THREE.Group[]>();
+  // Keyed by formation variant (see variantFor), not just kind, so single/double
+  // Stadtbahn and rigid/articulated bus each get their own pooled model.
+  private readonly templates = new Map<string, THREE.Group | null>();
+  private readonly pools = new Map<string, THREE.Group[]>();
   private readonly labelPool: THREE.Sprite[] = [];
   private readonly labelTextures = new Map<string, THREE.Texture>();
+  // Scratch objects reused across the per-car articulation loop (never per-frame allocs).
+  private readonly _v = new THREE.Vector3();
+  private readonly _q = new THREE.Quaternion();
+  private readonly _up = new THREE.Vector3(0, 1, 0);
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -57,7 +85,8 @@ export class LiveVehicleModels {
     isInTunnel: (vehicle: TrackedVehicle) => boolean,
     groundHeightAt: (x: number, z: number) => number,
     resolveWorld: (vehicle: TrackedVehicle) => { x: number; z: number; bearing: number },
-    cameraPos: THREE.Vector3
+    cameraPos: THREE.Vector3,
+    offsetPose: OffsetPose
   ): Set<string> {
     const modeled = new Set<string>();
 
@@ -79,26 +108,25 @@ export class LiveVehicleModels {
     }
 
     // ---- Models (nearest, closest ring) ----
-    const usedByKind = new Map<VehicleKind, number>();
+    const usedByVariant = new Map<string, number>();
     if (wantModels) {
       const r2 = MODEL_RADIUS_M * MODEL_RADIUS_M;
       let placed = 0;
       for (const hit of hits) {
         if (placed >= MODEL_CAP) break;
         if (hit.d2 > r2) break;
-        const kind = kindForMode(hit.v.data.mode);
-        const group = this.acquireModel(kind, usedByKind);
+        const variant = variantFor(hit.v);
+        const group = this.acquireModel(variant, usedByVariant);
         if (!group) continue;
-        const ground = groundHeightAt(hit.x, hit.z);
-        group.position.set(hit.x, ground + (isInTunnel(hit.v) ? -4.7 : 0.3), hit.z);
-        group.rotation.set(0, -hit.bearing * DEG, 0);
+        const yOff = isInTunnel(hit.v) ? -4.7 : 0.3;
+        this.placeVehicle(group, hit, groundHeightAt, offsetPose, yOff);
         group.userData.liveRunId = hit.v.runId;
         group.visible = true;
         modeled.add(hit.v.runId);
         placed++;
       }
     }
-    this.hideUnusedModels(usedByKind);
+    this.hideUnusedModels(usedByVariant);
 
     // ---- Labels (wider ring) ----
     let labelCount = 0;
@@ -153,43 +181,99 @@ export class LiveVehicleModels {
     return null;
   }
 
-  private acquireModel(kind: VehicleKind, used: Map<VehicleKind, number>): THREE.Group | null {
-    const pool = this.pools.get(kind) ?? this.pools.set(kind, []).get(kind)!;
-    const i = used.get(kind) ?? 0;
-    used.set(kind, i + 1);
+  // Places a model. When the run is matched to a track, each car (a child group
+  // carrying userData.centerOffsetM) is swung to its own along-track pose so the
+  // train bends through curves — the same articulation the Explore view uses.
+  // Otherwise cars are restored to their straight built-in layout.
+  private placeVehicle(
+    group: THREE.Group,
+    hit: NearHit,
+    groundHeightAt: (x: number, z: number) => number,
+    offsetPose: OffsetPose,
+    yOff: number
+  ): void {
+    const rootY = groundHeightAt(hit.x, hit.z) + yOff;
+    group.position.set(hit.x, rootY, hit.z);
+    group.rotation.set(0, -hit.bearing * DEG, 0); // yaw keeps group.quaternion in sync
+
+    const cars = group.userData.liveCars as THREE.Group[] | undefined;
+    if (!cars || cars.length < 2) return; // single-body vehicle: nothing to articulate
+
+    const invRoot = this._q.copy(group.quaternion).invert();
+    for (const car of cars) {
+      const offsetM = Number(car.userData.centerOffsetM ?? 0);
+      const pose = offsetPose(hit.v.runId, offsetM);
+      const def = car.userData as { defaultPos: THREE.Vector3; defaultQuat: THREE.Quaternion };
+      if (!pose) {
+        car.position.copy(def.defaultPos);
+        car.quaternion.copy(def.defaultQuat);
+        continue;
+      }
+      // Car center in the root's local frame (same height plane as the root).
+      this._v.set(pose.x - hit.x, 0, pose.z - hit.z).applyQuaternion(invRoot);
+      car.position.set(this._v.x, def.defaultPos.y, this._v.z);
+      // Local yaw = inverse(root) * world-yaw(-pose.bearing).
+      car.quaternion
+        .setFromAxisAngle(this._up, -pose.bearing * DEG)
+        .premultiply(invRoot);
+    }
+  }
+
+  private acquireModel(variant: Variant, used: Map<string, number>): THREE.Group | null {
+    const pool = this.pools.get(variant.key) ?? this.pools.set(variant.key, []).get(variant.key)!;
+    const i = used.get(variant.key) ?? 0;
+    used.set(variant.key, i + 1);
     let group = pool[i];
     if (!group) {
-      const template = this.getTemplate(kind);
+      const template = this.getTemplate(variant);
       if (!template) return null;
       group = template.clone(true); // shares geometry/materials with the template
+      this.captureCars(group);
       pool.push(group);
       this.scene.add(group);
     }
     return group;
   }
 
-  private hideUnusedModels(used: Map<VehicleKind, number>): void {
-    for (const [kind, pool] of this.pools) {
-      for (let i = used.get(kind) ?? 0; i < pool.length; i++) pool[i].visible = false;
+  // Records the articulable cars of a clone and each car's built-in (straight)
+  // local transform, so placeVehicle can bend them and later restore them.
+  private captureCars(group: THREE.Group): void {
+    const cars: THREE.Group[] = [];
+    for (const child of group.children) {
+      if (child instanceof THREE.Group && child.userData.centerOffsetM !== undefined) {
+        child.userData.defaultPos = child.position.clone();
+        child.userData.defaultQuat = child.quaternion.clone();
+        cars.push(child);
+      }
+    }
+    group.userData.liveCars = cars;
+  }
+
+  private hideUnusedModels(used: Map<string, number>): void {
+    for (const [key, pool] of this.pools) {
+      for (let i = used.get(key) ?? 0; i < pool.length; i++) pool[i].visible = false;
     }
   }
 
-  private getTemplate(kind: VehicleKind): THREE.Group | null {
-    if (this.templates.has(kind)) return this.templates.get(kind) ?? null;
+  private getTemplate(variant: Variant): THREE.Group | null {
+    if (this.templates.has(variant.key)) return this.templates.get(variant.key) ?? null;
     let root: THREE.Group | null = null;
     try {
+      // A throwaway route carrying only the fields the builder reads; the line
+      // drives the formation (double-traction / articulation).
+      const route = { line: variant.line, destination: '', controlPoints: [] } as unknown as DemoRoute;
       const instance = buildTransitVehicle({
-        route: STUB_ROUTE,
-        modeDefinition: { ...fallbackTransportModeDefinition, id: kind, vehicleKind: kind },
+        route,
+        modeDefinition: { ...fallbackTransportModeDefinition, id: variant.kind, vehicleKind: variant.kind },
         makeInteriorDisplayMaterial: () => new THREE.MeshBasicMaterial({ color: 0x0b0f14 })
       });
       root = instance.root;
       root.visible = false; // template stays hidden; only clones are shown
       this.scene.add(root); // keep it in the graph so dispose() sweeps its resources
     } catch (error) {
-      console.warn(`Live 3D: could not build ${kind} vehicle model; falling back to blocks.`, error);
+      console.warn(`Live 3D: could not build ${variant.key} vehicle model; falling back to blocks.`, error);
     }
-    this.templates.set(kind, root);
+    this.templates.set(variant.key, root);
     return root;
   }
 

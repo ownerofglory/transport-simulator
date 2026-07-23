@@ -32,6 +32,11 @@ export {
   createZackeVehicle
 };
 
+// Formation predicates: which lines run coupled/articulated units. Shared so
+// alternate renderers (Live 3D) match the ride/explore formation from a line label.
+export { isStadtbahnDoubleFormation } from './procedural';
+export { isBusLineArticulated } from './blueprint/bus/buildBusFromBlueprint';
+
 export type { VehicleBuildContext, VehicleInstance, VehicleTexturePaths, VehicleVisualConfig } from './types';
 
 export type {
