@@ -6,6 +6,7 @@ import type { CameraMode } from '../../world/CameraController';
 import { buildTransitVehicle } from '../../vehicles';
 import type { VehicleInstance } from '../../vehicles/types';
 import { VehicleInteriorDisplay } from '../../vehicles/VehicleInteriorDisplay';
+import { VehicleVisualController } from '../../vehicles/VehicleVisualController';
 import type { EngineSystem } from '../core/EngineSystem';
 
 /** Route-geometry placement helper owned by the world (also used by opposing traffic). */
@@ -39,17 +40,32 @@ const DEFAULT_TRAIN_HALF_LENGTH_M = 20.15;
  */
 export class ActiveVehicleSystem implements EngineSystem {
   private vehicle: VehicleInstance | null = null;
-  private interiorDisplay: VehicleInteriorDisplay | null = null;
-  private doorOpenAmount = 0;
+  // Shared presentation (doors, interior display, visibility, lamps); placement
+  // stays here because the simulator drives it by route distance.
+  private readonly visual: VehicleVisualController;
 
   constructor(private readonly ctx: ActiveVehicleContext) {
+    let display: VehicleInteriorDisplay | null = null;
     this.vehicle = buildTransitVehicle({
       route: ctx.route,
       city: ctx.city,
       modeDefinition: ctx.modeDefinition,
-      makeInteriorDisplayMaterial: () => this.makeInteriorDisplayMaterial()
+      makeInteriorDisplayMaterial: () => {
+        display = new VehicleInteriorDisplay();
+        return display.material;
+      }
     });
     ctx.scene.add(this.vehicle.root);
+
+    const vehicleKind = ctx.modeDefinition?.vehicleKind ?? 'stadtbahn';
+    this.visual = new VehicleVisualController(this.vehicle, display, {
+      line: ctx.route.line,
+      destination: ctx.route.destination,
+      lineAccentColor: ctx.modeDefinition?.lineAccentColor ?? (vehicleKind === 's-bahn' ? '#e0202b' : '#ffd800'),
+      interiorCameraProfile: ctx.modeDefinition?.interiorCameraProfile ?? 'tram'
+    });
+    // Initial board so it isn't blank before the first schedule update.
+    this.visual.updateInteriorDisplay(ctx.route.stations[1]?.name ?? ctx.route.destination, false);
   }
 
   /** The vehicle root group (identity of the active train in the scene). */
@@ -72,61 +88,25 @@ export class ActiveVehicleSystem implements EngineSystem {
   }
 
   updateDoors(open: boolean, deltaSeconds: number): void {
-    this.doorOpenAmount = THREE.MathUtils.damp(
-      this.doorOpenAmount,
-      open ? 1 : 0,
-      open ? 5.2 : 6.5,
-      THREE.MathUtils.clamp(deltaSeconds, 0, 0.1)
-    );
-    const eased = this.doorOpenAmount * this.doorOpenAmount * (3 - 2 * this.doorOpenAmount);
-    for (const leaf of this.vehicle?.doors ?? []) {
-      leaf.group.position.z = leaf.closedZ + leaf.direction * 0.72 * eased;
-    }
+    this.visual.updateDoors(open, deltaSeconds);
   }
 
   /** Applies interior/cab window transparency and shell visibility per view. */
   setPresentation(mode: CameraMode, cinematicActive: boolean): void {
-    const glassMaterial = this.vehicle?.glassMaterial;
-    if (!glassMaterial) return;
-    const interiorView = !cinematicActive && (mode === 'passenger' || mode === 'cab');
-    const cabView = mode === 'cab';
-    glassMaterial.opacity = interiorView ? 0.1 : 0.58;
-    glassMaterial.depthWrite = !interiorView;
-    glassMaterial.color.setHex(interiorView ? 0xd9f2f8 : 0x91c7dd);
-    glassMaterial.needsUpdate = true;
-    for (const band of this.vehicle?.windowBands ?? []) band.visible = !interiorView;
-    for (const shell of this.vehicle?.cabShells ?? []) shell.visible = !cabView;
-    for (const shell of this.vehicle?.passengerShells ?? []) shell.visible = !interiorView;
-    for (const display of this.vehicle?.cabDisplays ?? []) display.visible = !cabView;
+    this.visual.setPresentation(mode, cinematicActive);
   }
 
   /** Head/tail lamps come on in low light (night, dawn, dusk). */
   updateExteriorLights(daylightFactor: number): void {
-    this.vehicle?.setExteriorLightsOn?.(daylightFactor < 0.45);
-  }
-
-  private makeInteriorDisplayMaterial(): THREE.MeshBasicMaterial {
-    this.interiorDisplay = new VehicleInteriorDisplay();
-    this.updateInteriorDisplay(this.ctx.route.stations[1]?.name ?? this.ctx.route.destination, false);
-    return this.interiorDisplay.material;
+    this.visual.updateExteriorLights(daylightFactor);
   }
 
   updateInteriorDisplay(nextStation: string, doorsOpen: boolean): void {
-    const vehicleKind = this.ctx.modeDefinition?.vehicleKind ?? 'stadtbahn';
-    const accentColor = this.ctx.modeDefinition?.lineAccentColor ?? (vehicleKind === 's-bahn' ? '#e0202b' : '#ffd800');
-    this.interiorDisplay?.update({
-      line: this.ctx.route.line,
-      destination: this.ctx.route.destination,
-      nextStop: nextStation,
-      doorsOpen,
-      accentColor
-    });
+    this.visual.updateInteriorDisplay(nextStation, doorsOpen);
   }
 
   dispose(): void {
-    this.vehicle?.dispose?.();
-    this.interiorDisplay?.dispose();
-    this.interiorDisplay = null;
+    this.visual.dispose();
     this.vehicle = null;
   }
 }

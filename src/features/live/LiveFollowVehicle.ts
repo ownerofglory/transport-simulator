@@ -3,15 +3,14 @@ import { buildTransitVehicle } from '../../vehicles';
 import { fallbackTransportModeDefinition, type InteriorCameraProfile, type VehicleKind } from '../../domain/transport';
 import type { CameraMode } from '../../world/CameraController';
 import type { DemoRoute } from '../../route';
-import type { VehicleInstance } from '../../vehicles/types';
 import { VehicleInteriorDisplay } from '../../vehicles/VehicleInteriorDisplay';
+import { VehicleVisualController } from '../../vehicles/VehicleVisualController';
 
-// The fully-detailed model for the vehicle the user is following. Unlike the
-// pooled overview models (LiveVehicleModels), this is built once per followed run
-// with the run's real line + destination and driven like Explore's active vehicle:
-// it animates doors at stops, shows the next-stop interior display, and toggles
-// body/glass visibility per camera view so passenger/driver views see through the
-// windows and out the front. Positioned + articulated along the live track.
+// The fully-detailed model for the vehicle the user is following. It owns only
+// live along-track placement; doors, the interior display, per-view visibility and
+// lamps are delegated to the shared VehicleVisualController, so it behaves exactly
+// like the simulator's active vehicle. Built once per followed run with the run's
+// real line + destination.
 
 const DEG = Math.PI / 180;
 
@@ -36,11 +35,8 @@ export class LiveFollowVehicle {
   readonly trainHalfLengthM: number;
   readonly profile: InteriorCameraProfile;
 
-  private readonly instance: VehicleInstance;
+  private readonly visual: VehicleVisualController;
   private readonly carDefaults: Array<{ pos: THREE.Vector3; quat: THREE.Quaternion }>;
-  private interiorDisplay: VehicleInteriorDisplay | null = null;
-  private doorOpenAmount = 0;
-  private readonly accent: string;
 
   // Scratch reused each frame (no per-frame allocations).
   private readonly _v = new THREE.Vector3();
@@ -49,29 +45,42 @@ export class LiveFollowVehicle {
 
   constructor(
     private readonly scene: THREE.Scene,
-    private readonly kind: VehicleKind,
-    private readonly line: string,
-    private readonly destination: string,
+    kind: VehicleKind,
+    line: string,
+    destination: string,
     profile: InteriorCameraProfile
   ) {
     this.profile = profile;
-    this.accent = kind === 's-bahn' ? '#e0202b' : '#ffd800';
     // A throwaway route carrying only the fields the builder reads. The real line
-    // drives both the formation and the cab/destination display text.
+    // drives both the formation and the cab/destination display text. (Replaced by
+    // a shared VehicleDefinition in a later step.)
     const route = { line, destination, stations: [], controlPoints: [] } as unknown as DemoRoute;
-    this.instance = buildTransitVehicle({
+    let display: VehicleInteriorDisplay | null = null;
+    const instance = buildTransitVehicle({
       route,
       modeDefinition: { ...fallbackTransportModeDefinition, id: kind, vehicleKind: kind },
-      makeInteriorDisplayMaterial: () => this.makeInteriorDisplayMaterial()
+      makeInteriorDisplayMaterial: () => {
+        display = new VehicleInteriorDisplay();
+        return display.material;
+      }
     });
-    this.root = this.instance.root;
-    this.cars = this.instance.cars;
-    this.trainHalfLengthM = this.instance.trainHalfLengthM;
+    this.visual = new VehicleVisualController(instance, display, {
+      line,
+      destination,
+      lineAccentColor: kind === 's-bahn' ? '#e0202b' : '#ffd800',
+      interiorCameraProfile: profile
+    });
+    this.visual.updateInteriorDisplay(destination, false); // initial board
+
+    this.root = instance.root;
+    this.cars = instance.cars;
+    this.trainHalfLengthM = instance.trainHalfLengthM;
     this.carDefaults = this.cars.map((c) => ({ pos: c.position.clone(), quat: c.quaternion.clone() }));
     scene.add(this.root);
   }
 
   update(p: FollowUpdate): void {
+    // ---- Live along-track placement (the only live-specific part) ----
     this.root.position.set(p.x, p.centerY, p.z);
     this.root.rotation.set(0, -p.bearing * DEG, 0); // yaw keeps root.quaternion in sync
 
@@ -92,62 +101,21 @@ export class LiveFollowVehicle {
       car.quaternion.setFromAxisAngle(this._up, -pose.bearing * DEG).premultiply(invRoot);
     });
 
-    this.updateDoors(p.doorsOpen, p.dt);
-    this.updateInteriorDisplay(p.nextStop, p.doorsOpen);
-    this.setPresentation(p.mode);
-    this.instance.setExteriorLightsOn?.(p.daylightFactor < 0.45);
-  }
-
-  private updateDoors(open: boolean, dt: number): void {
-    this.doorOpenAmount = THREE.MathUtils.damp(this.doorOpenAmount, open ? 1 : 0, open ? 5.2 : 6.5, THREE.MathUtils.clamp(dt, 0, 0.1));
-    const eased = this.doorOpenAmount * this.doorOpenAmount * (3 - 2 * this.doorOpenAmount);
-    for (const leaf of this.instance.doors) {
-      leaf.group.position.z = leaf.closedZ + leaf.direction * 0.72 * eased;
-    }
-  }
-
-  // Interior/cab window transparency and shell visibility per view (mirrors
-  // Explore's ActiveVehicleSystem.setPresentation): in passenger/cab views the
-  // opaque body shells hide so the outside shows through the glass, and in cab view
-  // the cab shell/display hide so the driver can see the line ahead.
-  private setPresentation(mode: CameraMode): void {
-    const glass = this.instance.glassMaterial;
-    const interiorView = mode === 'passenger' || mode === 'cab';
-    const cabView = mode === 'cab';
-    if (glass) {
-      glass.opacity = interiorView ? 0.1 : 0.58;
-      glass.depthWrite = !interiorView;
-      glass.color.setHex(interiorView ? 0xd9f2f8 : 0x91c7dd);
-      glass.needsUpdate = true;
-    }
-    for (const band of this.instance.windowBands) band.visible = !interiorView;
-    for (const shell of this.instance.cabShells) shell.visible = !cabView;
-    for (const shell of this.instance.passengerShells) shell.visible = !interiorView;
-    for (const display of this.instance.cabDisplays) display.visible = !cabView;
-  }
-
-  private makeInteriorDisplayMaterial(): THREE.MeshBasicMaterial {
-    this.interiorDisplay = new VehicleInteriorDisplay();
-    this.updateInteriorDisplay(this.destination, false);
-    return this.interiorDisplay.material;
-  }
-
-  private updateInteriorDisplay(nextStop: string, doorsOpen: boolean): void {
-    this.interiorDisplay?.update({
-      line: this.line,
-      destination: this.destination,
-      nextStop,
-      doorsOpen,
-      accentColor: this.accent
+    // ---- Shared presentation ----
+    this.visual.update({
+      doorsOpen: p.doorsOpen,
+      nextStop: p.nextStop,
+      cameraMode: p.mode,
+      cinematicActive: false,
+      daylightFactor: p.daylightFactor,
+      deltaSeconds: p.dt
     });
   }
 
   dispose(): void {
     this.scene.remove(this.root);
-    this.instance.dispose?.();
-    this.interiorDisplay?.dispose();
-    this.interiorDisplay = null;
-    // Dispose this instance's own geometries/materials (freshly built, unshared).
+    this.visual.dispose(); // disposes the instance + interior display
+    // Free this instance's own geometries/materials (freshly built, unshared).
     this.root.traverse((o) => {
       const m = o as Partial<THREE.Mesh> & { material?: THREE.Material | THREE.Material[] };
       m.geometry?.dispose?.();
