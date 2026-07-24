@@ -8,6 +8,7 @@ import { useAppState } from './useAppState';
 import { searchJourneys } from '../features/realtime/api';
 import { enrichRouteFromTerrain } from '../features/realtime/catalogTerrain';
 import { buildJourneyRoute } from '../features/realtime/journeyRoute';
+import { LIVE_MODE_ENABLED } from './liveModeFlag';
 
 export type BootstrapResult = {
   ready: boolean;
@@ -57,9 +58,10 @@ export function useAppBootstrap(): BootstrapResult {
           type: 'initial-state-loaded',
           state: {
             selectedCityId: city.id,
-            // Restore Live only for a live-eligible city; otherwise fall back to
-            // the simulator view (concept §3: non-VVS ?live=1 degrades gracefully).
-            ...(url.liveView && city.liveTraffic ? { view: 'live' as const } : {}),
+            // Restore Live only for a live-eligible city with the feature enabled;
+            // otherwise fall back to the simulator view (concept §3: a non-VVS or
+            // disabled ?live=1 degrades gracefully).
+            ...(url.liveView && city.liveTraffic && LIVE_MODE_ENABLED ? { view: 'live' as const } : {}),
             ...(url.rideMode && { selectedMode: url.rideMode }),
             ...(url.season && { selectedSeason: url.season }),
             ...(url.time !== undefined && { selectedTime: url.time }),

@@ -20,6 +20,7 @@ import type { SimulatorRuntime, RouteSession } from '../simulator/SimulatorRunti
 import { InputController } from './InputController';
 import { RuntimeBridge } from './RuntimeBridge';
 import type { DesiredRuntimeState } from '../engine/runtime/DesiredRuntimeState';
+import { LIVE_MODE_ENABLED } from './liveModeFlag';
 
 // The live-traffic workspace is heavy (Leaflet + realtime tools) and Stuttgart-only,
 // so it is code-split and loaded only when the user enters Live (concept §2.1).
@@ -174,7 +175,7 @@ export function AppShell() {
                 <button onClick={() => runtime?.enterPhotoMode()}>Photo</button>
                 <button onClick={() => session && runtime?.resetSimulation(session)}>Restart</button>
                 <LiveEntryButton
-                  eligible={!!catalog.currentCity?.liveTraffic}
+                  eligible={LIVE_MODE_ENABLED && !!catalog.currentCity?.liveTraffic}
                   onEnter={() => dispatch({ type: 'view-changed', view: 'live' })}
                 />
               </div>
@@ -196,7 +197,7 @@ export function AppShell() {
           onExit={() => runtime.exitPhotoMode()}
         />
       )}
-      {state.view === 'live' && catalog.currentCity?.liveTraffic && (
+      {state.view === 'live' && LIVE_MODE_ENABLED && catalog.currentCity?.liveTraffic && (
         <Suspense fallback={<div className="lv-root" />}>
           <LiveView onExit={() => dispatch({ type: 'view-changed', view: 'simulator' })} city={catalog.currentCity} />
         </Suspense>
