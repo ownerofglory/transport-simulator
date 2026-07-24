@@ -16,6 +16,7 @@ import { buildVvsUndergroundHall, buildVvsUndergroundSideLighting } from './comp
 import { buildVvsCanopy } from './components/canopy';
 import { buildVvsFurniture } from './components/furniture';
 import { buildVvsIslandStation } from './components/island';
+import { buildVvsDfiBoards, buildVvsRetainingWall } from './components/environment';
 import { buildVvsStationSigns, buildVvsWayfinding } from './components/signage';
 
 // Legacy single-item platform layout, used as the default so unlisted stops
@@ -114,11 +115,25 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     // Curved platforms follow the route in world space → untransformed root.
     buildVvsSidePlatforms(scaffold.root, context.layer, materials, station, definition.platform);
 
+    const retainingWall = definition.environment?.retainingWall;
+    const dfiDisplays = definition.furniture?.dfiDisplays ?? 0;
+
     for (const side of [-1, 1]) {
       if (underground) buildVvsUndergroundSideLighting(scaffold.local, materials, side);
       else buildVvsCanopy(scaffold.local, materials, side, canopyLengthM);
       buildVvsFurniture(scaffold.local, materials, side, underground, counts);
       buildVvsStationSigns(scaffold.local, context.layer, side, station, underground);
+
+      // Hillside/cutting stops carry a retaining wall behind the platform.
+      if (!underground && (retainingWall === 'both' || (retainingWall === 'left' && side === -1) ||
+        (retainingWall === 'right' && side === 1))) {
+        buildVvsRetainingWall(scaffold.local, materials, side);
+      }
+      // Interchanges add track-facing departure boards (side 1 only to avoid
+      // doubling; count spreads them along the platform).
+      if (!underground && dfiDisplays > 0 && side === 1) {
+        buildVvsDfiBoards(scaffold.local, context.layer, materials, side, station, dfiDisplays);
+      }
     }
 
     if (underground) buildVvsWayfinding(scaffold.local, station);

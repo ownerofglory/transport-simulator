@@ -1,5 +1,36 @@
 {
   "schemaVersion": 1,
   "style": "vvs-stadtbahn",
-  "stations": {}
+  "stations": {
+    "Degerloch": {
+      "displayName": "Degerloch",
+      "archetype": "surface-interchange",
+      "furniture": { "dfiDisplays": 2, "benches": 3, "ticketMachines": 2, "bins": 2 },
+      "environment": { "plaza": true, "vegetation": "urban" }
+    },
+    "Vaihingen": {
+      "archetype": "surface-interchange",
+      "furniture": { "dfiDisplays": 2, "benches": 2, "ticketMachines": 2 }
+    },
+    "Möhringen": {
+      "archetype": "surface-interchange",
+      "furniture": { "dfiDisplays": 2, "benches": 2 }
+    },
+    "Bopser": {
+      "archetype": "cutting",
+      "environment": { "retainingWall": "both", "vegetation": "wooded" }
+    },
+    "Weinsteige": {
+      "archetype": "cutting",
+      "environment": { "retainingWall": "left", "vegetation": "wooded" }
+    },
+    "Charlottenplatz": {
+      "archetype": "underground-interchange",
+      "furniture": { "benches": 2, "ticketMachines": 2 }
+    },
+    "Hauptbahnhof": {
+      "archetype": "underground-interchange",
+      "furniture": { "benches": 2, "ticketMachines": 2 }
+    }
+  }
 }

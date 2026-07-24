@@ -24,6 +24,10 @@ export class VvsStationMaterials {
   readonly machine = new THREE.MeshStandardMaterial({ color: 0xffd800, roughness: 0.48 });
   readonly light = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff4cf, emissiveIntensity: 2.1 });
   readonly undergroundWall = new THREE.MeshStandardMaterial({ color: 0xcacbc8, roughness: 0.88 });
+  // Weathered concrete for hillside/cutting retaining walls.
+  readonly concrete = new THREE.MeshStandardMaterial({ color: 0x9a978d, roughness: 0.96 });
+  // Dark DFI departure-board face; amber text is faked with the label texture.
+  readonly dfi = new THREE.MeshBasicMaterial({ color: 0x111820 });
 
   // Materials owned by this palette (reused across stops); per-stop disposal
   // must skip these so a removed station doesn't free shared resources.
@@ -37,7 +41,9 @@ export class VvsStationMaterials {
     this.bench,
     this.machine,
     this.light,
-    this.undergroundWall
+    this.undergroundWall,
+    this.concrete,
+    this.dfi
   ]);
 
   dispose(): void {

@@ -29,7 +29,8 @@ describe('station style registry', () => {
 
   it('classifies surface vs underground stops by archetype', () => {
     const provider = createStationStyleRegistry().resolveOptional('vvs-stadtbahn')!;
-    const station: RouteStation = { name: 'Charlottenplatz', distanceM: 500 };
+    // A name deliberately absent from the bundled catalog, so it uses defaults.
+    const station: RouteStation = { name: 'Unclassified Test Stop', distanceM: 500 };
 
     const surface = provider.resolve(station, { layer: {} as never, placement: placementAt(station, false) });
     expect(surface.archetype).toBe('surface-side');
@@ -62,6 +63,15 @@ describe('station style registry', () => {
     expect(resolved.archetype).toBe('surface-interchange');
     expect(resolved.furniture?.benches).toBe(3);
     expect(resolved.furniture?.ticketMachines).toBe(2);
+  });
+
+  it('applies bundled catalog classifications (Degerloch interchange)', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    const station: RouteStation = { name: 'Degerloch', distanceM: 100 };
+    const resolved = provider.resolve(station, { layer: {} as never, placement: placementAt(station, false) });
+    expect(resolved.archetype).toBe('surface-interchange');
+    expect(resolved.furniture?.dfiDisplays).toBe(2);
+    expect(resolved.environment?.plaza).toBe(true);
   });
 });
 
