@@ -2,12 +2,17 @@ import * as THREE from 'three';
 import { makeLabelTexture } from '../../labels';
 import type { GuidewayKind } from '../../domain/transport';
 import { BuilderRegistry } from '../../engine/builders/BuilderRegistry';
+import { createStationStyleRegistry, resolveStationPlacement } from '../stations';
+import type { StationStyleProvider } from '../stations';
 import type { WorldLayerContext } from './WorldLayerContext';
 
 /** Builds platforms, canopies, signage, and stops for every guideway type. */
 export class StationLayer {
   /** All meshes go under this group; the world adds it to the scene. */
   readonly root = new THREE.Group();
+  // Data-driven station styles selected by the active mode's stationStyleId.
+  // Modes without a registered style fall back to the per-guideway builders.
+  private readonly styleRegistry = createStationStyleRegistry();
   // Per-guideway station builders; unmapped kinds fall back to rail stations.
   private readonly builders = new BuilderRegistry<GuidewayKind, () => void>()
     .register('bus', () => this.buildBusStops())
@@ -20,176 +25,23 @@ export class StationLayer {
   constructor(private readonly ctx: WorldLayerContext) {}
 
   build(): void {
-    (this.builders.resolveOptional(this.ctx.guidewayKind) ?? (() => this.buildRailStations()))();
+    const style = this.styleRegistry.resolveOptional(this.ctx.stationStyleId);
+    if (style) {
+      this.buildStyledStations(style);
+      return;
+    }
+    this.builders.resolve(this.ctx.guidewayKind)();
   }
 
-  private buildRailStations(): void {
-    const platformMat = new THREE.MeshStandardMaterial({ color: 0xb9b7b0, roughness: 0.9 });
-    const platformEdgeMat = new THREE.MeshStandardMaterial({ color: 0x696b6c, roughness: 0.82 });
-    const tactileMat = new THREE.MeshStandardMaterial({ color: 0xeee7cf, roughness: 0.92 });
-    const ssbBlueMat = new THREE.MeshStandardMaterial({ color: 0x174a73, roughness: 0.45, metalness: 0.28 });
-    const glassMat = new THREE.MeshStandardMaterial({
-      color: 0xa9d0dd,
-      roughness: 0.12,
-      metalness: 0.08,
-      transparent: true,
-      opacity: 0.38,
-      side: THREE.DoubleSide
+  // Coordinator path for data-driven station styles: resolve placement + a
+  // visual definition per stop, then let the provider build it.
+  private buildStyledStations(style: StationStyleProvider): void {
+    const buildContext = { layer: this.ctx, root: this.root };
+    this.ctx.route.stations.forEach((station, index) => {
+      const placement = resolveStationPlacement(station, index, this.ctx);
+      const definition = style.resolve(station, { layer: this.ctx, placement });
+      style.build(definition, placement, buildContext);
     });
-    const canopyMat = new THREE.MeshStandardMaterial({ color: 0xd7dde0, roughness: 0.38, metalness: 0.34 });
-    const benchMat = new THREE.MeshStandardMaterial({ color: 0x234e68, roughness: 0.68 });
-    const machineMat = new THREE.MeshStandardMaterial({ color: 0xffd800, roughness: 0.48 });
-    const lightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff4cf, emissiveIntensity: 2.1 });
-    const undergroundWallMat = new THREE.MeshStandardMaterial({ color: 0xcacbc8, roughness: 0.88 });
-
-    for (const station of this.ctx.route.stations) {
-      const t = THREE.MathUtils.clamp(station.distanceM / this.ctx.route.routeLengthM, 0, 1);
-      const p = this.ctx.curve.getPointAt(t);
-      const tangent = this.ctx.curve.getTangentAt(t).normalize();
-      const yaw = Math.atan2(tangent.x, tangent.z);
-      const underground = this.ctx.stationIsUnderground(t);
-      const stationGroup = new THREE.Group();
-      stationGroup.name = `${underground ? 'Underground' : 'Surface'} station ${station.name}`;
-      stationGroup.position.copy(p);
-      stationGroup.rotation.y = yaw;
-      this.root.add(stationGroup);
-
-      if (underground) {
-        const ceiling = new THREE.Mesh(new THREE.BoxGeometry(27, 0.48, 82), undergroundWallMat);
-        ceiling.position.y = 5.7;
-        ceiling.receiveShadow = true;
-        stationGroup.add(ceiling);
-        for (const side of [-1, 1]) {
-          const wall = new THREE.Mesh(new THREE.BoxGeometry(0.45, 5.3, 82), undergroundWallMat);
-          wall.position.set(side * 12.2, 2.75, 0);
-          wall.receiveShadow = true;
-          stationGroup.add(wall);
-        }
-      }
-
-      for (const side of [-1, 1]) {
-        const halfLengthM = 38;
-        const startT = THREE.MathUtils.clamp((station.distanceM - halfLengthM) / this.ctx.route.routeLengthM, 0, 1);
-        const endT = THREE.MathUtils.clamp((station.distanceM + halfLengthM) / this.ctx.route.routeLengthM, 0, 1);
-        const platformEdge = new THREE.Mesh(this.ctx.makeRouteStrip(side * 7.4, 8.25, startT, endT, 28, 0.12), platformEdgeMat);
-        platformEdge.receiveShadow = true;
-        stationGroup.parent?.add(platformEdge);
-        const platform = new THREE.Mesh(this.ctx.makeRouteStrip(side * 7.4, 8, startT, endT, 24, 0.22), platformMat);
-        platform.receiveShadow = true;
-        platform.name = `Curved platform ${station.name}`;
-        stationGroup.parent?.add(platform);
-
-        const tactileOffset = side * 3.72;
-        const tactile = new THREE.Mesh(this.ctx.makeRouteStrip(tactileOffset, 0.72, startT, endT, 28, 0.245), tactileMat);
-        tactile.name = `Tactile platform edge ${station.name}`;
-        stationGroup.parent?.add(tactile);
-
-        if (underground) {
-          for (const z of [-24, 0, 24]) {
-            const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.58, 5.1, 0.58), ssbBlueMat);
-            pillar.position.set(side * 9.7, 2.72, z);
-            pillar.castShadow = true;
-            stationGroup.add(pillar);
-          }
-          for (const z of [-24, -8, 8, 24]) {
-            const light = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.12, 8.5), lightMat);
-            light.position.set(side * 7.1, 5.4, z);
-            stationGroup.add(light);
-          }
-        } else {
-          const roof = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.24, 25), canopyMat);
-          roof.position.set(side * 7.8, 4.25, 8);
-          roof.rotation.z = side * -0.035;
-          roof.castShadow = true;
-          stationGroup.add(roof);
-          for (const roofEdge of [-1, 1]) {
-            const fascia = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.42, 25.2), ssbBlueMat);
-            fascia.position.set(side * 7.8 + roofEdge * 3.05, 4.12, 8);
-            stationGroup.add(fascia);
-          }
-
-          const glassBack = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.55, 22), glassMat);
-          glassBack.position.set(side * 10.55, 2.55, 8);
-          stationGroup.add(glassBack);
-          for (const z of [-2.5, 8, 18.5]) {
-            const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, 3.55, 0.16), ssbBlueMat);
-            post.position.set(side * 10.5, 2.25, z);
-            post.castShadow = true;
-            stationGroup.add(post);
-            const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 5.5), lightMat);
-            lamp.position.set(side * 7.8, 4.08, z);
-            stationGroup.add(lamp);
-          }
-        }
-
-        const bench = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.48, 4.8), benchMat);
-        bench.position.set(side * 8.8, 0.78, underground ? 9 : 8);
-        bench.castShadow = true;
-        stationGroup.add(bench);
-        const backrest = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.15, 4.8), benchMat);
-        backrest.position.set(side * 9.32, 1.25, underground ? 9 : 8);
-        stationGroup.add(backrest);
-
-        const ticketMachine = new THREE.Mesh(new THREE.BoxGeometry(0.72, 1.9, 1.05), machineMat);
-        ticketMachine.position.set(side * 9.25, 1.18, -8);
-        ticketMachine.castShadow = true;
-        stationGroup.add(ticketMachine);
-        const ticketScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.48, 0.42), new THREE.MeshBasicMaterial({ color: 0x82c9ef }));
-        ticketScreen.position.set(side * 9.63, 1.52, -8);
-        ticketScreen.rotation.y = side * Math.PI / 2;
-        stationGroup.add(ticketScreen);
-
-        const timetableCase = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.85, 1.35), ssbBlueMat);
-        timetableCase.position.set(side * 9.45, 1.46, -13);
-        stationGroup.add(timetableCase);
-        const timetable = new THREE.Mesh(new THREE.PlaneGeometry(1.08, 1.52), new THREE.MeshBasicMaterial({ color: 0xf6f3e9 }));
-        timetable.position.set(side * 9.55, 1.46, -13);
-        timetable.rotation.y = side * Math.PI / 2;
-        stationGroup.add(timetable);
-
-        const signTexture = makeLabelTexture(`${this.ctx.route.line}  ${station.name}`, {
-          width: 1024,
-          height: 180,
-          bg: '#174a73',
-          fg: '#ffffff'
-        });
-        for (const z of [-21, 21]) {
-          const sign = new THREE.Mesh(
-            new THREE.PlaneGeometry(8.6, 1.5),
-            new THREE.MeshBasicMaterial({ map: signTexture, side: THREE.FrontSide })
-          );
-          sign.position.set(side * 10.75, underground ? 3.55 : 3.05, z);
-          sign.rotation.y = side * Math.PI / 2;
-          stationGroup.add(sign);
-          const signBack = sign.clone();
-          signBack.rotation.y += Math.PI;
-          stationGroup.add(signBack);
-          this.ctx.stationMarkers.push(sign, signBack);
-        }
-
-        const bin = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 0.95, 12), ssbBlueMat);
-        bin.position.set(side * 9.35, 0.7, 14);
-        stationGroup.add(bin);
-      }
-
-      if (underground) {
-        const wayfindingTexture = makeLabelTexture(`Ausgang   ${station.name}   →`, {
-          width: 1024,
-          height: 160,
-          bg: '#173f62',
-          fg: '#ffffff'
-        });
-        const wayfinding = new THREE.Mesh(
-          new THREE.PlaneGeometry(10, 1.55),
-          new THREE.MeshBasicMaterial({ map: wayfindingTexture, side: THREE.FrontSide })
-        );
-        wayfinding.position.set(0, 4.75, -18);
-        stationGroup.add(wayfinding);
-        const wayfindingBack = wayfinding.clone();
-        wayfindingBack.rotation.y = Math.PI;
-        stationGroup.add(wayfindingBack);
-      }
-    }
   }
 
   private buildSbahnStations(): void {
