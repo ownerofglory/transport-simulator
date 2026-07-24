@@ -9,7 +9,7 @@
     "glass": { "color": "#8fb9c7", "transparent": true, "opacity": 0.42, "roughness": 0.06, "doubleSided": true },
     "interior": { "color": "#e4e1d8", "roughness": 0.88 },
     "floor": { "color": "#8f9398", "roughness": 0.9 },
-    "seat": { "color": "#315f78", "roughness": 0.88 },
+    "seat": { "color": "#2454a6", "roughness": 0.88 },
     "metal": { "color": "#989d9e", "roughness": 0.35, "metalness": 0.7 },
     "headlight": { "color": "#ffffff", "emissive": "#fff4c7", "emissiveIntensity": 0.55 },
     "tailLamp": { "color": "#8c1f1c", "emissive": "#7a1512", "emissiveIntensity": 0.35 }

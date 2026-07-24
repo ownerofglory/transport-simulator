@@ -35,6 +35,7 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
 
   const m = makeSBahnMaterials(config.materials);
   const displayMaterial = context.makeInteriorDisplayMaterial();
+  const interior = makeSBahnInteriorMaterials(m);
   rig.headLampMaterials.push(m.headlight);
   rig.tailLampMaterials.push(m.tailLamp);
 
@@ -174,32 +175,44 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
     const floor = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.12, 15.5), m.floor);
     floor.position.y = 1.12;
     car.add(floor);
+    const aisle = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.018, 15.24), interior.aisle);
+    aisle.position.y = 1.19;
+    car.add(aisle);
+    for (const z of doorZs) {
+      const vestibuleFloor = new THREE.Mesh(new THREE.BoxGeometry(2.82, 0.02, 1.72), interior.vestibuleFloor);
+      vestibuleFloor.position.set(0, 1.2, z);
+      car.add(vestibuleFloor);
+    }
     const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.68, 0.08, 15.35), m.interior);
     ceiling.position.y = 3.32;
     car.add(ceiling);
-    addCabinLight(rig, car, 3.0, -4.5);
-    addCabinLight(rig, car, 3.0, 4.5);
+    addSBahnCeiling(car, interior);
+    addCabinLight(rig, car, 3.04, -4.5);
+    addCabinLight(rig, car, 3.04, 4.5);
     addOpaqueTransitInterior(car, 15.35, 1.4, m.interior, () => doorZs);
-    for (const z of seatRowZs) {
+    addSBahnVestibulePartitions(car, doorZs, interior);
+    seatRowZs.forEach((z, rowIndex) => {
       for (const x of seatXs) {
-        const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.13, 0.52), m.seat);
-        cushion.position.set(x, 1.37, z);
-        car.add(cushion);
-        const back = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.68, 0.11), m.seat);
-        back.position.set(x, 1.72, z - 0.25);
-        car.add(back);
+        addSBahnSeat(car, x, z, rowIndex % 2 === 0 ? 1 : -1, interior);
       }
-    }
+    });
     for (const z of poleZs) {
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2, 8), m.metal);
       pole.position.set(0, 2.1, z);
       car.add(pole);
     }
-    const monitor = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 0.54), displayMaterial);
-    monitor.position.set(0, 2.94, 0.15);
+    addSBahnHandrails(car, doorZs, m.metal);
+    const monitorHousing = new THREE.Mesh(new THREE.BoxGeometry(2.28, 0.68, 0.12), interior.displayHousing);
+    monitorHousing.position.set(0, 2.96, 0.15);
+    car.add(monitorHousing);
+    const monitor = new THREE.Mesh(new THREE.PlaneGeometry(2.04, 0.48), displayMaterial);
+    monitor.position.set(0, 2.96, 0.082);
     monitor.rotation.y = Math.PI;
     monitor.renderOrder = 18;
     car.add(monitor);
+    const monitorBracket = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.27, 8), m.metal);
+    monitorBracket.position.set(0, 3.18, 0.15);
+    car.add(monitorBracket);
     for (const z of bogieZs) {
       const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.42, 1.8), m.dark);
       bogie.position.set(0, 0.48, z);
@@ -223,7 +236,8 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
     cabDisplays,
     glassMaterial: m.glass,
     trainHalfLengthM,
-    setExteriorLightsOn: makeSetExteriorLightsOn(rig)
+    setExteriorLightsOn: makeSetExteriorLightsOn(rig),
+    dispose: () => disposeSBahnVehicle(root, displayMaterial)
   };
 }
 
@@ -233,6 +247,190 @@ function makeSBahnMaterials(configMaterials: SBahnBlueprintConfig['materials']):
     materials[role] = makeStandardMaterial(configMaterials[role]);
   }
   return materials;
+}
+
+type SBahnInteriorMaterials = {
+  aisle: THREE.MeshStandardMaterial;
+  vestibuleFloor: THREE.MeshStandardMaterial;
+  ceilingVent: THREE.MeshStandardMaterial;
+  ceilingLight: THREE.MeshStandardMaterial;
+  displayHousing: THREE.MeshStandardMaterial;
+  seatFabric: THREE.MeshStandardMaterial;
+  seatHeadrest: THREE.MeshStandardMaterial;
+  seatTrim: THREE.MeshStandardMaterial;
+  partitionGlass: THREE.MeshStandardMaterial;
+};
+
+function makeSBahnInteriorMaterials(m: SBahnMaterials): SBahnInteriorMaterials {
+  const seatFabric = m.seat.clone();
+  seatFabric.map = makeSBahnSeatFabricTexture();
+  seatFabric.needsUpdate = true;
+
+  const partitionGlass = m.glass.clone();
+  partitionGlass.color.set('#dff2f5');
+  partitionGlass.transparent = true;
+  partitionGlass.opacity = 0.24;
+  partitionGlass.depthWrite = false;
+  partitionGlass.needsUpdate = true;
+
+  return {
+    aisle: new THREE.MeshStandardMaterial({ color: '#4f585c', roughness: 0.93 }),
+    vestibuleFloor: new THREE.MeshStandardMaterial({ color: '#3e484d', roughness: 0.92 }),
+    ceilingVent: new THREE.MeshStandardMaterial({ color: '#6f7a7d', roughness: 0.58, metalness: 0.28 }),
+    ceilingLight: new THREE.MeshStandardMaterial({
+      color: '#fffdf4',
+      emissive: '#fff8dc',
+      emissiveIntensity: 0.75,
+      roughness: 0.42
+    }),
+    displayHousing: new THREE.MeshStandardMaterial({ color: '#182126', roughness: 0.36, metalness: 0.32 }),
+    seatFabric,
+    seatHeadrest: new THREE.MeshStandardMaterial({ color: '#111d31', roughness: 0.78 }),
+    seatTrim: new THREE.MeshStandardMaterial({ color: '#d9dfe0', roughness: 0.5, metalness: 0.12 }),
+    partitionGlass
+  };
+}
+
+function makeSBahnSeatFabricTexture(): THREE.DataTexture {
+  const size = 16;
+  const pixels = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const index = (y * size + x) * 4;
+      const brightDot = (x === 3 || x === 11) && (y === 3 || y === 11);
+      const weave = (x + y) % 4 === 0;
+      pixels[index] = brightDot ? 212 : weave ? 112 : 255;
+      pixels[index + 1] = brightDot ? 244 : weave ? 139 : 255;
+      pixels[index + 2] = brightDot ? 255 : weave ? 178 : 255;
+      pixels[index + 3] = 255;
+    }
+  }
+  const texture = new THREE.DataTexture(pixels, size, size, THREE.RGBAFormat);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(4, 6);
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function addSBahnCeiling(car: THREE.Group, m: SBahnInteriorMaterials): void {
+  const vent = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.024, 14.7), m.ceilingVent);
+  vent.position.set(0, 3.265, 0);
+  car.add(vent);
+  for (const x of [-0.93, 0.93]) {
+    const lightStrip = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.028, 14.7), m.ceilingLight);
+    lightStrip.position.set(x, 3.27, 0);
+    car.add(lightStrip);
+  }
+  for (let z = -7.05; z <= 7.05; z += 0.34) {
+    const grille = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.018, 0.035), m.seatTrim);
+    grille.position.set(0, 3.245, z);
+    car.add(grille);
+  }
+}
+
+function addSBahnSeat(
+  car: THREE.Group,
+  x: number,
+  z: number,
+  facing: -1 | 1,
+  m: SBahnInteriorMaterials
+): void {
+  const seat = new THREE.Group();
+  const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.56), m.seatFabric);
+  cushion.position.set(0, 1.39, 0);
+  seat.add(cushion);
+
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.54, 0.12), m.seatFabric);
+  back.position.set(0, 1.7, -facing * 0.23);
+  seat.add(back);
+  const headrest = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.14), m.seatHeadrest);
+  headrest.position.set(0, 2.04, -facing * 0.25);
+  seat.add(headrest);
+
+  for (const side of [-1, 1]) {
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.55, 0.58), m.seatTrim);
+    edge.position.set(side * 0.22, 1.64, -facing * 0.01);
+    seat.add(edge);
+  }
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.18, 0.47), m.displayHousing);
+  base.position.set(0, 1.23, 0);
+  seat.add(base);
+  seat.position.set(x, 0, z);
+  car.add(seat);
+}
+
+function addSBahnVestibulePartitions(car: THREE.Group, doorZs: number[], m: SBahnInteriorMaterials): void {
+  for (const doorZ of doorZs) {
+    for (const side of [-1, 1] as const) {
+      for (const offset of [-0.65, 0.65]) {
+        const z = doorZ + offset;
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(0.025, 1.72, 0.58), m.partitionGlass);
+        panel.position.set(side * 1.18, 2.03, z);
+        car.add(panel);
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.82, 8), m.seatTrim);
+        post.position.set(side * 1.19, 2.03, z + Math.sign(offset) * 0.3);
+        car.add(post);
+        const lowerRail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.11, 0.62), m.seatTrim);
+        lowerRail.position.set(side * 1.19, 1.28, z);
+        car.add(lowerRail);
+        for (let y = 1.62; y <= 2.35; y += 0.18) {
+          const dot = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.05, 0.035), m.seatTrim);
+          dot.position.set(side * 1.155, y, z);
+          car.add(dot);
+        }
+      }
+    }
+  }
+}
+
+function addSBahnHandrails(car: THREE.Group, doorZs: number[], material: THREE.Material): void {
+  for (const side of [-1, 1] as const) {
+    addCylinderBetween(car, new THREE.Vector3(side * 1.12, 2.76, -7.0), new THREE.Vector3(side * 1.12, 2.76, 7.0), material);
+  }
+  for (const doorZ of doorZs) {
+    for (const side of [-1, 1] as const) {
+      addCylinderBetween(
+        car,
+        new THREE.Vector3(side * 1.16, 1.24, doorZ - 0.56),
+        new THREE.Vector3(side * 0.74, 2.78, doorZ - 0.12),
+        material
+      );
+      addCylinderBetween(
+        car,
+        new THREE.Vector3(side * 1.16, 1.24, doorZ + 0.56),
+        new THREE.Vector3(side * 0.74, 2.78, doorZ + 0.12),
+        material
+      );
+    }
+  }
+}
+
+function addCylinderBetween(car: THREE.Group, start: THREE.Vector3, end: THREE.Vector3, material: THREE.Material): void {
+  const direction = end.clone().sub(start);
+  const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, direction.length(), 8), material);
+  rail.position.copy(start).add(end).multiplyScalar(0.5);
+  rail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+  car.add(rail);
+}
+
+function disposeSBahnVehicle(root: THREE.Group, sharedDisplayMaterial: THREE.Material): void {
+  const materials = new Set<THREE.Material>();
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    object.geometry.dispose();
+    const meshMaterials = Array.isArray(object.material) ? object.material : [object.material];
+    for (const material of meshMaterials) {
+      if (material !== sharedDisplayMaterial) materials.add(material);
+    }
+  });
+  for (const material of materials) {
+    if (material instanceof THREE.MeshStandardMaterial) material.map?.dispose();
+    material.dispose();
+  }
 }
 
 function makeSBahn430Body(lengthM: number): THREE.ExtrudeGeometry {
