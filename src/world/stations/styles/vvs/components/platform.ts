@@ -1,21 +1,24 @@
 import * as THREE from 'three';
 import type { WorldLayerContext } from '../../../../layers/WorldLayerContext';
-import type { RouteStation } from '../../../types';
+import type { RouteStation, StationPlatformDefinition } from '../../../types';
 import { platformSpanT } from '../../../placement';
 import type { VvsStationMaterials } from '../VvsStationMaterials';
 
 // Curved side platforms follow the route via world-space strips, so they attach
-// to the untransformed station root. Dimensions match the legacy rail builder.
-const PLATFORM_LENGTH_M = 76; // legacy halfLengthM = 38 → 76m platform
+// to the untransformed station root. Defaults match the legacy rail builder;
+// platform length comes from topology data (never seeded).
 const PLATFORM_OFFSET_M = 7.4;
+const DEFAULT_LENGTH_M = 76; // legacy halfLengthM = 38 → 76m platform
 
 export function buildVvsSidePlatforms(
   root: THREE.Group,
   layer: WorldLayerContext,
   materials: VvsStationMaterials,
-  station: RouteStation
+  station: RouteStation,
+  platform?: StationPlatformDefinition
 ): void {
-  const { startT, endT } = platformSpanT(station.distanceM, PLATFORM_LENGTH_M, layer.route.routeLengthM);
+  const lengthM = platform?.lengthM ?? DEFAULT_LENGTH_M;
+  const { startT, endT } = platformSpanT(station.distanceM, lengthM, layer.route.routeLengthM);
 
   for (const side of [-1, 1]) {
     const platformEdge = new THREE.Mesh(

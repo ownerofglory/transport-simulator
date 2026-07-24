@@ -1,40 +1,61 @@
 import * as THREE from 'three';
 import type { VvsStationMaterials } from '../VvsStationMaterials';
 
+export type VvsFurnitureCounts = {
+  benches: number;
+  ticketMachines: number;
+  bins: number;
+};
+
+// Anchor positions reproduce the legacy single-item layout; extra items are
+// distributed to additional deterministic slots so a count of 1 is unchanged.
+const BENCH_SLOTS = [8, -6, 20];
+const MACHINE_SLOTS = [-8, -2];
+const BIN_SLOTS = [14, 2];
+
+function slots(anchors: number[], count: number): number[] {
+  return anchors.slice(0, Math.max(1, Math.min(count, anchors.length)));
+}
+
 /**
- * Per-side platform furniture: bench, ticket machine, timetable case, and bin.
- * Bench sits slightly further along underground platforms, matching the legacy
- * rail builder. Screen/timetable faces are per-stop MeshBasicMaterials.
+ * Per-side platform furniture: benches, ticket machines, a timetable case, and
+ * bins. Counts come from resolved appearance data; a count of 1 matches the
+ * legacy rail builder exactly. Benches shift slightly along underground
+ * platforms. Screen/timetable faces are per-stop MeshBasicMaterials.
  */
 export function buildVvsFurniture(
   local: THREE.Group,
   materials: VvsStationMaterials,
   side: number,
-  underground: boolean
+  underground: boolean,
+  counts: VvsFurnitureCounts
 ): void {
-  const benchZ = underground ? 9 : 8;
+  const benchShift = underground ? 1 : 0;
+  for (const z of slots(BENCH_SLOTS, counts.benches)) {
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.48, 4.8), materials.bench);
+    bench.position.set(side * 8.8, 0.78, z + benchShift);
+    bench.castShadow = true;
+    local.add(bench);
 
-  const bench = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.48, 4.8), materials.bench);
-  bench.position.set(side * 8.8, 0.78, benchZ);
-  bench.castShadow = true;
-  local.add(bench);
+    const backrest = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.15, 4.8), materials.bench);
+    backrest.position.set(side * 9.32, 1.25, z + benchShift);
+    local.add(backrest);
+  }
 
-  const backrest = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.15, 4.8), materials.bench);
-  backrest.position.set(side * 9.32, 1.25, benchZ);
-  local.add(backrest);
+  for (const z of slots(MACHINE_SLOTS, counts.ticketMachines)) {
+    const ticketMachine = new THREE.Mesh(new THREE.BoxGeometry(0.72, 1.9, 1.05), materials.machine);
+    ticketMachine.position.set(side * 9.25, 1.18, z);
+    ticketMachine.castShadow = true;
+    local.add(ticketMachine);
 
-  const ticketMachine = new THREE.Mesh(new THREE.BoxGeometry(0.72, 1.9, 1.05), materials.machine);
-  ticketMachine.position.set(side * 9.25, 1.18, -8);
-  ticketMachine.castShadow = true;
-  local.add(ticketMachine);
-
-  const ticketScreen = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.48, 0.42),
-    new THREE.MeshBasicMaterial({ color: 0x82c9ef })
-  );
-  ticketScreen.position.set(side * 9.63, 1.52, -8);
-  ticketScreen.rotation.y = (side * Math.PI) / 2;
-  local.add(ticketScreen);
+    const ticketScreen = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.48, 0.42),
+      new THREE.MeshBasicMaterial({ color: 0x82c9ef })
+    );
+    ticketScreen.position.set(side * 9.63, 1.52, z);
+    ticketScreen.rotation.y = (side * Math.PI) / 2;
+    local.add(ticketScreen);
+  }
 
   const timetableCase = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.85, 1.35), materials.ssbBlue);
   timetableCase.position.set(side * 9.45, 1.46, -13);
@@ -48,7 +69,9 @@ export function buildVvsFurniture(
   timetable.rotation.y = (side * Math.PI) / 2;
   local.add(timetable);
 
-  const bin = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 0.95, 12), materials.ssbBlue);
-  bin.position.set(side * 9.35, 0.7, 14);
-  local.add(bin);
+  for (const z of slots(BIN_SLOTS, counts.bins)) {
+    const bin = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 0.95, 12), materials.ssbBlue);
+    bin.position.set(side * 9.35, 0.7, z);
+    local.add(bin);
+  }
 }

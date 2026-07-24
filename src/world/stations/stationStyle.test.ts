@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { createStationStyleRegistry } from './index';
+import { VvsStadtbahnStationProvider } from './styles/vvs/VvsStadtbahnStationProvider';
+import { VvsStationCatalog } from './styles/vvs/VvsStationCatalog';
+import { createSeededRandom, hashString } from './variation';
 import type { StationPlacement, RouteStation } from './types';
 
 function placementAt(station: RouteStation, underground: boolean): StationPlacement {
@@ -34,5 +37,45 @@ describe('station style registry', () => {
 
     const underground = provider.resolve(station, { layer: {} as never, placement: placementAt(station, true) });
     expect(underground.archetype).toBe('underground-side');
+  });
+
+  it('resolves the same appearance for a station across sessions (deterministic seed)', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    const station: RouteStation = { name: 'Bopser', distanceM: 900 };
+    const a = provider.resolve(station, { layer: {} as never, placement: placementAt(station, false) });
+    const b = provider.resolve(station, { layer: {} as never, placement: placementAt(station, false) });
+    expect(a.seed).toBe(b.seed);
+    expect(a.furniture).toEqual(b.furniture);
+  });
+
+  it('lets catalog overrides win over seeded defaults', () => {
+    const catalog = new VvsStationCatalog({
+      schemaVersion: 1,
+      style: 'vvs-stadtbahn',
+      stations: {
+        Bopser: { archetype: 'surface-interchange', furniture: { benches: 3, ticketMachines: 2 } }
+      }
+    });
+    const provider = new VvsStadtbahnStationProvider(catalog);
+    const station: RouteStation = { name: 'Bopser', distanceM: 900 };
+    const resolved = provider.resolve(station, { layer: {} as never, placement: placementAt(station, false) });
+    expect(resolved.archetype).toBe('surface-interchange');
+    expect(resolved.furniture?.benches).toBe(3);
+    expect(resolved.furniture?.ticketMachines).toBe(2);
+  });
+});
+
+describe('seeded variation', () => {
+  it('hashes strings to stable non-zero seeds', () => {
+    expect(hashString('vvs:Bopser')).toBe(hashString('vvs:Bopser'));
+    expect(hashString('vvs:Bopser')).not.toBe(hashString('vvs:Degerloch'));
+    expect(hashString('')).toBeGreaterThan(0);
+  });
+
+  it('produces a repeatable sequence for a given seed', () => {
+    const a = createSeededRandom(1234);
+    const b = createSeededRandom(1234);
+    expect([a.next(), a.next(), a.next()]).toEqual([b.next(), b.next(), b.next()]);
+    expect(createSeededRandom(42).int(1, 2)).toBe(createSeededRandom(42).int(1, 2));
   });
 });
