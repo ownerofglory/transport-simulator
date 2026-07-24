@@ -13,7 +13,8 @@ const stuttgartTransportModes: TransportModeDefinition[] = [
     guidewayKind: 'stadtbahn',
     interiorCameraProfile: 'rail',
     passengerOffsetM: 4.2,
-    lineAccentColor: '#ffd800'
+    lineAccentColor: '#ffd800',
+    stationStyleId: 'vvs-stadtbahn'
   },
   {
     id: 'bus',

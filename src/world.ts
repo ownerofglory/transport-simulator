@@ -322,6 +322,7 @@ export class TransitWorld {
       curve: this.curve,
       route: this.route,
       guidewayKind: this.guidewayKind,
+      stationStyleId: this.modeDefinition?.stationStyleId,
       activeLaneOffsetM: this.activeLaneOffsetM,
       oppositeLaneOffsetM: this.oppositeLaneOffsetM,
       railGaugeM: this.railGaugeM,

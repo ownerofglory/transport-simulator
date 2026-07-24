@@ -13,6 +13,9 @@ export type WorldLayerContext = {
   curve: THREE.CatmullRomCurve3;
   route: DemoRoute;
   guidewayKind: GuidewayKind;
+  // Station style provider id for the active mode; undefined uses the legacy
+  // per-guideway station builders.
+  stationStyleId?: string;
   activeLaneOffsetM: number;
   oppositeLaneOffsetM: number;
   railGaugeM: number;

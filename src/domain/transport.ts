@@ -44,6 +44,7 @@ export type TransportModeDefinition = {
   passengerOffsetM?: number; // route-forward offset for fallback passenger camera placement
   lineAccentColor?: string; // CSS/canvas color used for vehicle displays and route accents
   vehicleDesignId?: string; // optional explicit vehicle registry id, overrides vehicleFamily/vehicleKind resolution
+  stationStyleId?: string; // optional station style provider id (e.g. 'vvs-stadtbahn'); falls back to guideway station builders
 };
 
 // Default Stuttgart Stadtbahn behavior used when older route data has no transportMode.
@@ -56,7 +57,8 @@ export const fallbackTransportModeDefinition: TransportModeDefinition = {
   guidewayKind: 'stadtbahn',
   interiorCameraProfile: 'rail',
   passengerOffsetM: 4.2, // seated passenger camera offset in meters for rail fallback view
-  lineAccentColor: '#ffd800' // SSB-like yellow accent
+  lineAccentColor: '#ffd800', // SSB-like yellow accent
+  stationStyleId: 'vvs-stadtbahn'
 };
 
 // Normalizes optional/legacy route mode values to a usable transport mode id.
