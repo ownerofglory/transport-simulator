@@ -34,9 +34,16 @@ export function buildVvsDfiBoards(
   materials: VvsStationMaterials,
   side: number,
   station: RouteStation,
-  count: number
+  count: number,
+  platformLengthM = 76,
+  lateral = 0
 ): void {
-  const slots = [-4, 12, -18].slice(0, Math.max(0, Math.min(count, 3)));
+  const boards = Math.max(0, Math.min(count, 6));
+  const usable = Math.max(8, platformLengthM - 16);
+  // Evenly spread boards along the usable platform length (single board centered).
+  const slots = Array.from({ length: boards }, (_, i) =>
+    boards === 1 ? -4 : -usable / 2 + (usable / (boards - 1)) * i
+  );
   const face = makeLabelTexture(`${layer.route.line}  ${layer.route.destination}`, {
     width: 768,
     height: 140,
@@ -45,18 +52,18 @@ export function buildVvsDfiBoards(
   });
   for (const z of slots) {
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 3.2, 0.12), materials.ssbBlue);
-    post.position.set(side * 6.4, 1.6, z);
+    post.position.set(side * (6.4 + lateral), 1.6, z);
     local.add(post);
 
     const board = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.9, 3.4), materials.dfi);
-    board.position.set(side * 6.6, 3.05, z);
+    board.position.set(side * (6.6 + lateral), 3.05, z);
     local.add(board);
 
     const screen = new THREE.Mesh(
       new THREE.PlaneGeometry(3.2, 0.72),
       new THREE.MeshBasicMaterial({ map: face, side: THREE.FrontSide })
     );
-    screen.position.set(side * (6.6 - 0.09), 3.05, z);
+    screen.position.set(side * (6.6 + lateral - 0.09), 3.05, z);
     screen.rotation.y = (side * Math.PI) / 2;
     local.add(screen);
   }

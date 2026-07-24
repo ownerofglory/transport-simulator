@@ -129,7 +129,9 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     const accentColor = definition.architecture?.accentColor;
     const accent = materials.accent(accentColor);
     const roof = definition.architecture?.roof;
-    const fullCanopy = roof === 'full-canopy' || roof === 'hall';
+    // Interchanges default to a full canopy (unless the catalog says otherwise).
+    const interchange = definition.archetype === 'surface-interchange';
+    const fullCanopy = roof === 'full-canopy' || roof === 'hall' || (interchange && roof === undefined);
     const canopyLen = roof === 'none' ? 0 : fullCanopy ? Math.min(platformLengthM * 0.9, platformLengthM - 4) : canopyLengthM;
     const canopyCenterZ = fullCanopy ? 0 : 8;
 
@@ -153,7 +155,7 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       // Interchanges add track-facing departure boards (side 1 only to avoid
       // doubling; count spreads them along the platform).
       if (!underground && dfiDisplays > 0 && side === 1) {
-        buildVvsDfiBoards(scaffold.local, context.layer, materials, side, station, dfiDisplays);
+        buildVvsDfiBoards(scaffold.local, context.layer, materials, side, station, dfiDisplays, platformLengthM, lateral);
       }
     }
 
