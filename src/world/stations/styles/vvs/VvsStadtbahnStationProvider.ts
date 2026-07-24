@@ -112,8 +112,11 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
 
     if (underground) buildVvsUndergroundHall(scaffold.local, materials);
 
+    // Staggered stops offset the two side platforms along the route.
+    const staggerM = definition.platform?.staggerM ?? 0;
+
     // Curved platforms follow the route in world space → untransformed root.
-    buildVvsSidePlatforms(scaffold.root, context.layer, materials, station, definition.platform);
+    buildVvsSidePlatforms(scaffold.root, context.layer, materials, station, definition.platform, staggerM);
 
     const retainingWall = definition.environment?.retainingWall;
     const dfiDisplays = definition.furniture?.dfiDisplays ?? 0;
@@ -131,15 +134,16 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     const canopyCenterZ = fullCanopy ? 0 : 8;
 
     for (const side of [-1, 1]) {
+      const zShift = side * (staggerM / 2);
       if (underground) buildVvsUndergroundSideLighting(scaffold.local, materials, side);
       else buildVvsCanopy(scaffold.local, materials, side, {
         lengthM: canopyLen,
         platformOffsetM: platformOffset,
-        centerZ: canopyCenterZ,
+        centerZ: canopyCenterZ + zShift,
         accent
       });
-      buildVvsFurniture(scaffold.local, materials, side, underground, counts, lateral);
-      buildVvsStationSigns(scaffold.local, context.layer, side, station, underground, lateral, 0, accentColor);
+      buildVvsFurniture(scaffold.local, materials, side, underground, counts, lateral, zShift);
+      buildVvsStationSigns(scaffold.local, context.layer, side, station, underground, lateral, zShift, accentColor);
 
       // Hillside/cutting stops carry a retaining wall behind the platform.
       if (!underground && (retainingWall === 'both' || (retainingWall === 'left' && side === -1) ||
