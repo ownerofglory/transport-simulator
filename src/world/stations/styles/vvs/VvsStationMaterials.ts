@@ -28,6 +28,8 @@ export class VvsStationMaterials {
   readonly concrete = new THREE.MeshStandardMaterial({ color: 0x9a978d, roughness: 0.96 });
   // Dark DFI departure-board face; amber text is faked with the label texture.
   readonly dfi = new THREE.MeshBasicMaterial({ color: 0x111820 });
+  // Signal-red buffer stop (Prellbock) at terminus track ends.
+  readonly buffer = new THREE.MeshStandardMaterial({ color: 0xb0201f, roughness: 0.6, metalness: 0.2 });
 
   // Materials owned by this palette (reused across stops); per-stop disposal
   // must skip these so a removed station doesn't free shared resources.
@@ -43,7 +45,8 @@ export class VvsStationMaterials {
     this.light,
     this.undergroundWall,
     this.concrete,
-    this.dfi
+    this.dfi,
+    this.buffer
   ]);
 
   // Per-accent-color variants of the SSB-blue accent, cached and reused across

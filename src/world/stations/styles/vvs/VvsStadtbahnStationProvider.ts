@@ -18,6 +18,7 @@ import { buildVvsFurniture } from './components/furniture';
 import { buildVvsIslandStation } from './components/island';
 import { buildVvsDfiBoards, buildVvsRetainingWall } from './components/environment';
 import { buildVvsStationSigns, buildVvsWayfinding } from './components/signage';
+import { buildVvsTerminusBuffer } from './components/terminus';
 
 // Legacy single-item platform layout, used as the default so unlisted stops
 // keep close to the original look (seeded counts still allow 1–2 benches).
@@ -157,6 +158,13 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       if (!underground && dfiDisplays > 0 && side === 1) {
         buildVvsDfiBoards(scaffold.local, context.layer, materials, side, station, dfiDisplays, platformLengthM, lateral);
       }
+    }
+
+    // Terminus stops cap the outward track end (toward the nearer route end)
+    // with buffer stops and an end wall.
+    if (definition.archetype === 'terminus') {
+      const endSign = placement.t >= 0.5 ? 1 : -1;
+      buildVvsTerminusBuffer(scaffold.local, materials, platformLengthM, endSign);
     }
 
     if (underground) buildVvsWayfinding(scaffold.local, station);
