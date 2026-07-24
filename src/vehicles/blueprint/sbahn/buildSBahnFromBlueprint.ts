@@ -172,7 +172,7 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
       car.add(displayAssembly);
       cabDisplays.push(display);
     }
-    const floor = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.12, 15.5), m.floor);
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.12, 15.5), interior.floor);
     floor.position.y = 1.12;
     car.add(floor);
     const aisle = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.018, 15.24), interior.aisle);
@@ -191,6 +191,7 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
     addCabinLight(rig, car, 3.04, 4.5);
     addOpaqueTransitInterior(car, 15.35, 1.4, m.interior, () => doorZs);
     addSBahnVestibulePartitions(car, doorZs, interior);
+    addSBahnLuggageRacks(car, interior);
     seatRowZs.forEach((z, rowIndex) => {
       for (const x of seatXs) {
         addSBahnSeat(car, x, z, rowIndex % 2 === 0 ? 1 : -1, interior);
@@ -202,6 +203,7 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
       car.add(pole);
     }
     addSBahnHandrails(car, doorZs, m.metal);
+    addSBahnVestibuleMarkings(car, doorZs, interior.floorMarking);
     const monitorHousing = new THREE.Mesh(new THREE.BoxGeometry(2.28, 0.68, 0.12), interior.displayHousing);
     monitorHousing.position.set(0, 2.96, 0.15);
     car.add(monitorHousing);
@@ -250,11 +252,13 @@ function makeSBahnMaterials(configMaterials: SBahnBlueprintConfig['materials']):
 }
 
 type SBahnInteriorMaterials = {
+  floor: THREE.MeshStandardMaterial;
   aisle: THREE.MeshStandardMaterial;
   vestibuleFloor: THREE.MeshStandardMaterial;
   ceilingVent: THREE.MeshStandardMaterial;
   ceilingLight: THREE.MeshStandardMaterial;
   displayHousing: THREE.MeshStandardMaterial;
+  floorMarking: THREE.MeshBasicMaterial;
   seatFabric: THREE.MeshStandardMaterial;
   seatHeadrest: THREE.MeshStandardMaterial;
   seatTrim: THREE.MeshStandardMaterial;
@@ -262,9 +266,13 @@ type SBahnInteriorMaterials = {
 };
 
 function makeSBahnInteriorMaterials(m: SBahnMaterials): SBahnInteriorMaterials {
-  const seatFabric = m.seat.clone();
+  const seatFabric = m.seat;
   seatFabric.map = makeSBahnSeatFabricTexture();
   seatFabric.needsUpdate = true;
+
+  const floor = m.floor;
+  floor.map = makeSBahnFloorTexture();
+  floor.needsUpdate = true;
 
   const partitionGlass = m.glass.clone();
   partitionGlass.color.set('#dff2f5');
@@ -274,6 +282,7 @@ function makeSBahnInteriorMaterials(m: SBahnMaterials): SBahnInteriorMaterials {
   partitionGlass.needsUpdate = true;
 
   return {
+    floor,
     aisle: new THREE.MeshStandardMaterial({ color: '#4f585c', roughness: 0.93 }),
     vestibuleFloor: new THREE.MeshStandardMaterial({ color: '#3e484d', roughness: 0.92 }),
     ceilingVent: new THREE.MeshStandardMaterial({ color: '#6f7a7d', roughness: 0.58, metalness: 0.28 }),
@@ -284,6 +293,7 @@ function makeSBahnInteriorMaterials(m: SBahnMaterials): SBahnInteriorMaterials {
       roughness: 0.42
     }),
     displayHousing: new THREE.MeshStandardMaterial({ color: '#182126', roughness: 0.36, metalness: 0.32 }),
+    floorMarking: new THREE.MeshBasicMaterial({ color: '#e9edeb', transparent: true, opacity: 0.82, side: THREE.DoubleSide }),
     seatFabric,
     seatHeadrest: new THREE.MeshStandardMaterial({ color: '#111d31', roughness: 0.78 }),
     seatTrim: new THREE.MeshStandardMaterial({ color: '#d9dfe0', roughness: 0.5, metalness: 0.12 }),
@@ -292,16 +302,17 @@ function makeSBahnInteriorMaterials(m: SBahnMaterials): SBahnInteriorMaterials {
 }
 
 function makeSBahnSeatFabricTexture(): THREE.DataTexture {
-  const size = 16;
+  const size = 24;
   const pixels = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const index = (y * size + x) * 4;
-      const brightDot = (x === 3 || x === 11) && (y === 3 || y === 11);
-      const weave = (x + y) % 4 === 0;
-      pixels[index] = brightDot ? 212 : weave ? 112 : 255;
-      pixels[index + 1] = brightDot ? 244 : weave ? 139 : 255;
-      pixels[index + 2] = brightDot ? 255 : weave ? 178 : 255;
+      const brightDot = (x === 4 || x === 16) && (y === 4 || y === 16);
+      const smallDot = (x === 10 || x === 22) && (y === 10 || y === 22);
+      const weave = (x + y) % 5 === 0;
+      pixels[index] = brightDot ? 150 : smallDot ? 110 : weave ? 76 : 255;
+      pixels[index + 1] = brightDot ? 232 : smallDot ? 186 : weave ? 100 : 255;
+      pixels[index + 2] = brightDot ? 255 : smallDot ? 246 : weave ? 128 : 255;
       pixels[index + 3] = 255;
     }
   }
@@ -309,9 +320,34 @@ function makeSBahnSeatFabricTexture(): THREE.DataTexture {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(4, 6);
+  texture.repeat.set(5, 7);
   texture.magFilter = THREE.NearestFilter;
   texture.minFilter = THREE.NearestFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function makeSBahnFloorTexture(): THREE.DataTexture {
+  const size = 32;
+  const pixels = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const index = (y * size + x) * 4;
+      const seed = (x * 17 + y * 31 + x * y * 7) % 29;
+      const tone = seed < 3 ? 184 : seed > 25 ? 232 : 207;
+      pixels[index] = tone;
+      pixels[index + 1] = tone + 2;
+      pixels[index + 2] = tone + 2;
+      pixels[index + 3] = 255;
+    }
+  }
+  const texture = new THREE.DataTexture(pixels, size, size, THREE.RGBAFormat);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(8, 28);
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.LinearFilter;
   texture.needsUpdate = true;
   return texture;
 }
@@ -383,6 +419,44 @@ function addSBahnVestibulePartitions(car: THREE.Group, doorZs: number[], m: SBah
           car.add(dot);
         }
       }
+    }
+  }
+}
+
+function addSBahnLuggageRacks(car: THREE.Group, m: SBahnInteriorMaterials): void {
+  for (const side of [-1, 1] as const) {
+    const rackX = side * 1.15;
+    const shelf = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.045, 14.2), m.seatTrim);
+    shelf.position.set(rackX, 2.91, 0);
+    car.add(shelf);
+
+    const guard = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.23, 14.0), m.seatTrim);
+    guard.position.set(side * 0.93, 3.04, 0);
+    car.add(guard);
+
+    for (let z = -6.5; z <= 6.5; z += 1.3) {
+      addCylinderBetween(
+        car,
+        new THREE.Vector3(side * 1.36, 2.57, z),
+        new THREE.Vector3(side * 0.96, 3.0, z),
+        m.seatTrim
+      );
+    }
+  }
+}
+
+function addSBahnVestibuleMarkings(car: THREE.Group, doorZs: number[], material: THREE.Material): void {
+  for (const doorZ of doorZs) {
+    for (const side of [-1, 1] as const) {
+      const centre = new THREE.Mesh(new THREE.RingGeometry(0.15, 0.19, 20), material);
+      centre.rotation.x = -Math.PI / 2;
+      centre.position.set(side * 0.73, 1.215, doorZ);
+      car.add(centre);
+
+      const spoke = new THREE.Mesh(new THREE.PlaneGeometry(0.025, 0.38), material);
+      spoke.rotation.x = -Math.PI / 2;
+      spoke.position.set(side * 0.73, 1.216, doorZ);
+      car.add(spoke);
     }
   }
 }
