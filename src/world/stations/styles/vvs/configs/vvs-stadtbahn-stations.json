@@ -2,35 +2,1434 @@
   "schemaVersion": 1,
   "style": "vvs-stadtbahn",
   "stations": {
-    "Degerloch": {
-      "displayName": "Degerloch",
+    "Bad Cannstatt Wilhelmsplatz": {
       "archetype": "surface-interchange",
-      "furniture": { "dfiDisplays": 2, "benches": 3, "ticketMachines": 2, "bins": 2 },
-      "environment": { "plaza": true, "vegetation": "urban" }
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "keilbahnhof",
+        "roof": "full-canopy"
+      },
+      "furniture": {
+        "dfiDisplays": 4
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
     },
-    "Vaihingen Bf": {
-      "archetype": "surface-interchange",
-      "furniture": { "dfiDisplays": 2, "benches": 2, "ticketMachines": 2 }
+    "Bergfriedhof": {
+      "archetype": "surface-staggered",
+      "platform": {
+        "layout": "side",
+        "lengthM": 40,
+        "widthM": 8,
+        "heightM": 0.22,
+        "staggerM": 12,
+        "curved": true
+      },
+      "environment": {
+        "vegetation": "urban"
+      }
     },
-    "Möhringen Bf": {
-      "archetype": "surface-interchange",
-      "furniture": { "dfiDisplays": 2, "benches": 2 }
+    "Berliner Platz (Liederhalle)": {
+      "archetype": "surface-staggered",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "split-stop-complex"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Bihlplatz": {
+      "archetype": "surface-staggered",
+      "platform": {
+        "layout": "side",
+        "lengthM": 40,
+        "widthM": 8,
+        "heightM": 0.22,
+        "staggerM": 18,
+        "curved": true
+      },
+      "environment": {
+        "roadCrossing": true,
+        "vegetation": "urban"
+      }
     },
     "Bopser": {
       "archetype": "cutting",
-      "environment": { "retainingWall": "both", "vegetation": "wooded" }
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "tunnel-portal"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "wooded"
+      }
     },
-    "Weinsteige": {
+    "Bottroper Straße": {
       "archetype": "cutting",
-      "environment": { "retainingWall": "left", "vegetation": "wooded" }
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "open-cut-tunnel-portal"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "urban"
+      }
+    },
+    "Budapester Platz": {
+      "archetype": "landmark",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "bridge-station",
+        "roof": "full-canopy"
+      },
+      "environment": {
+        "vegetation": "urban"
+      }
     },
     "Charlottenplatz": {
       "archetype": "underground-interchange",
-      "furniture": { "benches": 2, "ticketMachines": 2 }
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 120,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "two-level-underground",
+        "roof": "hall"
+      },
+      "furniture": {
+        "dfiDisplays": 4,
+        "ticketMachines": 2
+      }
+    },
+    "Degerloch": {
+      "archetype": "underground-interchange",
+      "platform": {
+        "layout": "side",
+        "lengthM": 120,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "major-underground",
+        "roof": "hall"
+      },
+      "furniture": {
+        "dfiDisplays": 2,
+        "benches": 3,
+        "ticketMachines": 2,
+        "bins": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "EnBW-City": {
+      "archetype": "landmark",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "part-open-depressed"
+      }
+    },
+    "Europaplatz": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "open-cut"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "urban"
+      }
+    },
+    "Fasanenhof (Bonhoefferkirche)": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "open-cut-tunnel-approach"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "suburban"
+      }
+    },
+    "Feuerbach Bf": {
+      "archetype": "surface-interchange",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "rail-interchange"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Flughafen/Messe": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 120,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "airport-messe-cutting",
+        "roof": "full-canopy"
+      },
+      "furniture": {
+        "dfiDisplays": 4,
+        "ticketMachines": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Föhrich": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "tunnel-portal"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "urban"
+      }
+    },
+    "Gerlingen": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "tunnel-portal-terminus",
+        "roof": "full-canopy"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Gerlingen Siedlung": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "tunnel-ramp"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "suburban"
+      }
     },
     "Hauptbahnhof": {
       "archetype": "underground-interchange",
-      "furniture": { "benches": 2, "ticketMachines": 2 }
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 120,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "four-track-underground",
+        "roof": "hall"
+      },
+      "furniture": {
+        "dfiDisplays": 4,
+        "benches": 2,
+        "ticketMachines": 2
+      }
+    },
+    "Hauptfriedhof": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "open-cut-tunnel-approach"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "wooded"
+      }
+    },
+    "Herderplatz": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "urban-cutting"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "urban"
+      }
+    },
+    "Heslach Vogelrain": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "depot-terminus"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      }
+    },
+    "Heumaden": {
+      "archetype": "surface-interchange",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "three-track-junction"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "vegetation": "suburban"
+      }
+    },
+    "Inselstraße": {
+      "archetype": "surface-staggered",
+      "platform": {
+        "layout": "side",
+        "lengthM": 40,
+        "widthM": 8,
+        "heightM": 0.22,
+        "staggerM": 20,
+        "curved": true
+      },
+      "environment": {
+        "roadCrossing": true,
+        "vegetation": "urban"
+      }
+    },
+    "Jurastraße": {
+      "archetype": "landmark",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "bridge-station"
+      },
+      "environment": {
+        "vegetation": "suburban"
+      }
+    },
+    "Kirchtalstraße": {
+      "archetype": "landmark",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "open-ceiling-tunnel",
+        "roof": "hall"
+      }
+    },
+    "Leinfelden Bf": {
+      "archetype": "surface-interchange",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "rail-interchange"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Löwen-Markt": {
+      "archetype": "landmark",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "part-open-depressed"
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Löwentor": {
+      "archetype": "surface-staggered",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "staggerM": 18,
+        "curved": true
+      },
+      "architecture": {
+        "family": "split-alignments"
+      },
+      "furniture": {
+        "dfiDisplays": 3
+      },
+      "environment": {
+        "roadCrossing": true,
+        "vegetation": "urban"
+      }
+    },
+    "Marienplatz": {
+      "archetype": "underground-interchange",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "urban-underground",
+        "roof": "hall"
+      },
+      "furniture": {
+        "dfiDisplays": 2,
+        "ticketMachines": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Mercedesstraße": {
+      "archetype": "landmark",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "neckar-bridge-event"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "vegetation": "urban"
+      }
+    },
+    "Mineralbäder": {
+      "archetype": "surface-interchange",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "island-and-side-platforms"
+      },
+      "furniture": {
+        "dfiDisplays": 3
+      },
+      "environment": {
+        "vegetation": "urban"
+      }
+    },
+    "Möhringen Bf": {
+      "archetype": "surface-interchange",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "four-track-junction",
+        "roof": "full-canopy"
+      },
+      "furniture": {
+        "dfiDisplays": 4,
+        "benches": 2,
+        "ticketMachines": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Mühlhausen": {
+      "archetype": "surface-interchange",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "three-track-terminus"
+      },
+      "furniture": {
+        "dfiDisplays": 3
+      },
+      "environment": {
+        "vegetation": "suburban"
+      }
+    },
+    "Nordbahnhof": {
+      "archetype": "surface-interchange",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "under-rail-bridge"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "vegetation": "urban"
+      }
+    },
+    "Parksiedlung": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "open-cut"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "suburban"
+      }
+    },
+    "Pragsattel": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "spanish-solution-open-trough",
+        "roof": "full-canopy"
+      },
+      "furniture": {
+        "dfiDisplays": 4,
+        "ticketMachines": 2
+      },
+      "environment": {
+        "retainingWall": "both",
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Rastatter Straße": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "tunnel-ramp"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "urban"
+      }
+    },
+    "Rathaus": {
+      "archetype": "underground-interchange",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 120,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "three-track-underground",
+        "roof": "hall"
+      },
+      "furniture": {
+        "dfiDisplays": 3,
+        "ticketMachines": 2
+      }
+    },
+    "Rosensteinbrücke": {
+      "archetype": "surface-staggered",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 40,
+        "widthM": 8,
+        "heightM": 0.22,
+        "staggerM": 22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "perpendicular-split-stop"
+      },
+      "environment": {
+        "roadCrossing": true,
+        "vegetation": "urban"
+      }
+    },
+    "Rotebühlplatz (Stadtmitte)": {
+      "archetype": "underground-interchange",
+      "platform": {
+        "layout": "side",
+        "lengthM": 120,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "major-underground",
+        "roof": "hall"
+      },
+      "furniture": {
+        "dfiDisplays": 2,
+        "ticketMachines": 2
+      }
+    },
+    "Ruhbank (Fernsehturm)": {
+      "archetype": "surface-staggered",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "staggerM": 14,
+        "curved": true
+      },
+      "architecture": {
+        "family": "split-level-cutting"
+      },
+      "furniture": {
+        "dfiDisplays": 3
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "wooded"
+      }
+    },
+    "Ruit": {
+      "archetype": "landmark",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "part-open-tunnel",
+        "roof": "hall"
+      },
+      "environment": {
+        "vegetation": "suburban"
+      }
+    },
+    "Salzwiesenstraße": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "tunnel-ramp"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "urban"
+      }
+    },
+    "Schemppstraße": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "open-cut-tunnel-approach"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "suburban"
+      }
+    },
+    "Silberwald": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "tunnel-ramp"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "wooded"
+      }
+    },
+    "Sillenbuch": {
+      "archetype": "landmark",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "daylight-slot-tunnel",
+        "roof": "hall"
+      }
+    },
+    "SSB-Zentrum": {
+      "archetype": "surface-interchange",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "depot-headquarters"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Staatsgalerie": {
+      "archetype": "landmark",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "open-shell-three-platform",
+        "roof": "custom"
+      },
+      "furniture": {
+        "dfiDisplays": 3,
+        "ticketMachines": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Stadtbibliothek": {
+      "archetype": "landmark",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "part-open-covered-tunnel",
+        "roof": "hall"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Steinhaldenfeld": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "tunnel-ramp"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "suburban"
+      }
+    },
+    "Südheimer Platz": {
+      "archetype": "surface-interchange",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "funicular-transfer"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "roadCrossing": true,
+        "vegetation": "urban"
+      }
+    },
+    "Vaihingen Bf": {
+      "archetype": "surface-interchange",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "major-rail-bus-interchange",
+        "roof": "full-canopy"
+      },
+      "furniture": {
+        "dfiDisplays": 4,
+        "benches": 2,
+        "ticketMachines": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Waldau (Gazi-Stadion)": {
+      "archetype": "landmark",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "stadium-cutting",
+        "roof": "full-canopy"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "wooded"
+      }
+    },
+    "Wangener-/Landhausstraße": {
+      "archetype": "surface-staggered",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 40,
+        "widthM": 8,
+        "heightM": 0.22,
+        "staggerM": 16,
+        "curved": true
+      },
+      "architecture": {
+        "family": "split-level-junction"
+      },
+      "environment": {
+        "roadCrossing": true,
+        "vegetation": "urban"
+      }
+    },
+    "Wasenstraße": {
+      "archetype": "surface-staggered",
+      "platform": {
+        "layout": "side",
+        "lengthM": 40,
+        "widthM": 8,
+        "heightM": 0.22,
+        "staggerM": 20,
+        "curved": true
+      },
+      "architecture": {
+        "family": "separated-directional-platforms"
+      },
+      "environment": {
+        "roadCrossing": true,
+        "vegetation": "urban"
+      }
+    },
+    "Weinsteige": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "tunnel-portal"
+      },
+      "environment": {
+        "retainingWall": "left",
+        "vegetation": "wooded"
+      }
+    },
+    "Wilhelma": {
+      "archetype": "landmark",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "zoo-park-station"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Wilhelm-Geiger-Platz": {
+      "archetype": "landmark",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "half-open-tunnel",
+        "roof": "hall"
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Zinsholz": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "open-cut-tunnel-approach"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "vegetation": "suburban"
+      }
+    },
+    "Zuffenhausen Rathaus": {
+      "archetype": "cutting",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "tunnel-ramp-urban"
+      },
+      "environment": {
+        "retainingWall": "both",
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Botnang": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "side",
+        "lengthM": 40,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "urban-terminus"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      }
+    },
+    "Dürrlewang": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "suburban-terminus"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      }
+    },
+    "Fellbach Lutherkirche": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "urban-terminus"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Feuerbach Pfostenwäldle": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "urban-terminus"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      }
+    },
+    "Giebel": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "three-track-peak-terminus"
+      },
+      "furniture": {
+        "dfiDisplays": 3
+      }
+    },
+    "Hedelfingen": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "urban-terminus"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      }
+    },
+    "Hölderlinplatz": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "side",
+        "lengthM": 40,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "street-terminus"
+      },
+      "furniture": {
+        "dfiDisplays": 1
+      },
+      "environment": {
+        "roadCrossing": true,
+        "vegetation": "urban"
+      }
+    },
+    "Killesberg": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "park-terminus",
+        "roof": "hall"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Leinfelden Neuer Markt": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "town-centre-terminus"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Mönchfeld": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "suburban-terminus"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "vegetation": "suburban"
+      }
+    },
+    "Neckargröningen Remseck": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "park-and-ride-terminus",
+        "roof": "full-canopy"
+      },
+      "furniture": {
+        "dfiDisplays": 2,
+        "ticketMachines": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "suburban"
+      }
+    },
+    "NeckarPark (Stadion)": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "event-terminus",
+        "roof": "full-canopy"
+      },
+      "furniture": {
+        "dfiDisplays": 4,
+        "ticketMachines": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Nellingen Ostfildern": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "suburban-terminus",
+        "roof": "full-canopy"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "suburban"
+      }
+    },
+    "Neugereut": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "suburban-terminus",
+        "roof": "full-canopy"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "suburban"
+      }
+    },
+    "Plieningen": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "town-centre-terminus"
+      },
+      "furniture": {
+        "dfiDisplays": 2
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
+    },
+    "Stammheim": {
+      "archetype": "terminus",
+      "platform": {
+        "layout": "side",
+        "lengthM": 40,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "urban-terminus"
+      },
+      "furniture": {
+        "dfiDisplays": 1
+      },
+      "environment": {
+        "roadCrossing": true,
+        "vegetation": "urban"
+      }
+    },
+    "Untertürkheim Bf": {
+      "archetype": "surface-interchange",
+      "platform": {
+        "layout": "mixed",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.22,
+        "curved": true
+      },
+      "architecture": {
+        "family": "split-rail-interchange"
+      },
+      "furniture": {
+        "dfiDisplays": 3
+      },
+      "environment": {
+        "plaza": true,
+        "vegetation": "urban"
+      }
     }
   }
 }
