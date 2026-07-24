@@ -112,11 +112,16 @@ class ProceduralTransitVehicleFactory {
     const bwegtYellow = new THREE.MeshStandardMaterial({ color: 0xf2d21b, roughness: 0.38, metalness: 0.06 });
     const dark = new THREE.MeshStandardMaterial({ color: 0x1f2327, roughness: 0.28, metalness: 0.22 });
     const glass = new THREE.MeshStandardMaterial({ color: 0x95becb, transparent: true, opacity: 0.42, roughness: 0.06, side: THREE.DoubleSide });
-    const interior = new THREE.MeshStandardMaterial({ color: 0xe3e0d6, roughness: 0.88 });
-    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x868b8f, roughness: 0.92 });
-    const seat = new THREE.MeshStandardMaterial({ color: 0x2f3235, roughness: 0.84 });
-    const accentSeat = new THREE.MeshStandardMaterial({ color: 0xf2d21b, roughness: 0.82 });
+    const interior = new THREE.MeshStandardMaterial({ color: 0xe9e9e4, roughness: 0.86 });
+    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, map: this.makeBwegtFloorTexture() });
+    const aisleMaterial = new THREE.MeshStandardMaterial({ color: 0xa8acab, roughness: 0.94 });
+    const vestibuleFloor = new THREE.MeshStandardMaterial({ color: 0x34393b, roughness: 0.9 });
+    const seat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.88, map: this.makeBwegtSeatFabricTexture() });
+    const seatShell = new THREE.MeshStandardMaterial({ color: 0x3b4043, roughness: 0.6, metalness: 0.12 });
+    const seatTrim = new THREE.MeshStandardMaterial({ color: 0xc5cbca, roughness: 0.42, metalness: 0.38 });
     const metal = new THREE.MeshStandardMaterial({ color: 0x9a9fa1, roughness: 0.34, metalness: 0.72 });
+    const ceilingLight = new THREE.MeshStandardMaterial({ color: 0xfffdf2, emissive: 0xfffae1, emissiveIntensity: 0.8, roughness: 0.35 });
+    const displayHousing = new THREE.MeshStandardMaterial({ color: 0x20262a, roughness: 0.34, metalness: 0.26 });
     const displayMaterial = this.context.makeInteriorDisplayMaterial();
     this.glassMaterial = glass;
 
@@ -190,33 +195,46 @@ class ProceduralTransitVehicleFactory {
       const floor = new THREE.Mesh(new THREE.BoxGeometry(2.92, 0.12, 11.55), floorMaterial);
       floor.position.y = 1.12;
       car.add(floor);
+      const aisle = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.018, 11.32), aisleMaterial);
+      aisle.position.y = 1.19;
+      car.add(aisle);
+      for (const z of [-1.95, 1.95]) {
+        const vestibule = new THREE.Mesh(new THREE.BoxGeometry(2.76, 0.022, 1.68), vestibuleFloor);
+        vestibule.position.set(0, 1.2, z);
+        car.add(vestibule);
+      }
       const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.66, 0.08, 11.35), interior);
       ceiling.position.y = 3.28;
       car.add(ceiling);
       this.addOpaqueTransitInterior(car, 11.35, 1.34, interior, () => [-1.95, 1.95]);
+      this.addBwegtRegionalCeiling(car, ceilingLight, seatTrim);
+      this.addBwegtRegionalVestibules(car, bwegtYellow, displayHousing, glass, metal);
+      this.addBwegtRegionalLuggageRacks(car, metal, seatTrim);
 
-      for (const z of [-4.2, -2.65, 0, 2.65, 4.2]) {
-        for (const [x, material] of [[-0.98, seat], [-0.56, accentSeat], [0.56, accentSeat], [0.98, seat]] as const) {
-          const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.13, 0.5), material);
-          cushion.position.set(x, 1.36, z);
-          car.add(cushion);
-          const back = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.66, 0.1), material);
-          back.position.set(x, 1.7, z - 0.24);
-          car.add(back);
+      [-4.2, -2.65, 0, 2.65, 4.2].forEach((z, rowIndex) => {
+        const facing = rowIndex % 2 === 0 ? 1 : -1;
+        for (const x of [-0.98, -0.56, 0.56, 0.98]) {
+          this.addBwegtRegionalSeat(car, x, z, facing, seat, seatShell, seatTrim);
         }
-      }
+      });
 
-      for (const z of [-1.95, 0, 1.95]) {
+      for (const z of [-1.95, 1.95]) {
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2.0, 8), metal);
         pole.position.set(0, 2.08, z);
         car.add(pole);
       }
 
+      const monitorHousing = new THREE.Mesh(new THREE.BoxGeometry(2.22, 0.64, 0.12), displayHousing);
+      monitorHousing.position.set(0, 2.92, 0.13);
+      car.add(monitorHousing);
       const monitor = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.5), displayMaterial);
       monitor.position.set(0, 2.92, 0.1);
       monitor.rotation.y = Math.PI;
       monitor.renderOrder = 18;
       car.add(monitor);
+      const monitorBracket = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.24, 8), metal);
+      monitorBracket.position.set(0, 3.16, 0.13);
+      car.add(monitorBracket);
 
       for (const z of [-3.95, 3.95]) {
         const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.62, 0.4, 1.7), dark);
@@ -231,6 +249,169 @@ class ProceduralTransitVehicleFactory {
     this.trainHalfLengthM = 25.6;
     this.addPantograph(new THREE.Vector3(0, 3.82, 6.6), dark);
     return this.createVehicleInstance();
+  }
+
+  private addBwegtRegionalSeat(
+    car: THREE.Group,
+    x: number,
+    z: number,
+    facing: -1 | 1,
+    fabric: THREE.Material,
+    shell: THREE.Material,
+    trim: THREE.Material
+  ): void {
+    const seat = new THREE.Group();
+    const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.39, 0.13, 0.54), fabric);
+    cushion.position.set(0, 1.36, 0);
+    seat.add(cushion);
+
+    const backShell = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.7, 0.07), shell);
+    backShell.position.set(0, 1.72, -facing * 0.29);
+    seat.add(backShell);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.58, 0.075), fabric);
+    back.position.set(0, 1.7, -facing * 0.335);
+    seat.add(back);
+    const headrest = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.14, 0.1), shell);
+    headrest.position.set(0, 2.06, -facing * 0.31);
+    seat.add(headrest);
+
+    for (const side of [-1, 1] as const) {
+      const edge = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.6, 0.57), trim);
+      edge.position.set(side * 0.215, 1.68, -facing * 0.02);
+      seat.add(edge);
+    }
+    const pedestal = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.28, 0.22), shell);
+    pedestal.position.set(0, 1.2, 0);
+    seat.add(pedestal);
+    seat.position.set(x, 0, z);
+    car.add(seat);
+  }
+
+  private addBwegtRegionalCeiling(car: THREE.Group, light: THREE.Material, trim: THREE.Material): void {
+    const vent = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.026, 10.84), trim);
+    vent.position.set(0, 3.23, 0);
+    car.add(vent);
+    for (const x of [-0.82, 0.82]) {
+      const lightStrip = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.03, 10.84), light);
+      lightStrip.position.set(x, 3.24, 0);
+      car.add(lightStrip);
+    }
+    for (let z = -5.05; z <= 5.05; z += 0.34) {
+      const grille = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.014, 0.04), trim);
+      grille.position.set(0, 3.208, z);
+      car.add(grille);
+    }
+  }
+
+  private addBwegtRegionalVestibules(
+    car: THREE.Group,
+    yellow: THREE.Material,
+    dark: THREE.Material,
+    glass: THREE.Material,
+    metal: THREE.Material
+  ): void {
+    for (const doorZ of [-1.95, 1.95]) {
+      for (const side of [-1, 1] as const) {
+        const partition = new THREE.Mesh(new THREE.BoxGeometry(0.025, 1.62, 0.58), glass);
+        partition.position.set(side * 1.16, 2.0, doorZ - 0.62);
+        car.add(partition);
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.82, 0.16), dark);
+        panel.position.set(side * 1.19, 2.02, doorZ + 0.62);
+        car.add(panel);
+        const yellowPost = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.8, 0.08), yellow);
+        yellowPost.position.set(side * 1.17, 2.02, doorZ + 0.52);
+        car.add(yellowPost);
+        const handrail = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 1.52, 8), metal);
+        handrail.position.set(side * 1.09, 2.0, doorZ - 0.66);
+        car.add(handrail);
+      }
+      const secondClass = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.34, 0.3),
+        new THREE.MeshBasicMaterial({ map: makeLabelTexture('2', { width: 96, height: 96, bg: '#f2d21b', fg: '#202428' }), side: THREE.DoubleSide })
+      );
+      secondClass.position.set(0.76, 2.84, doorZ + 0.7);
+      secondClass.rotation.y = Math.PI;
+      car.add(secondClass);
+    }
+  }
+
+  private addBwegtRegionalLuggageRacks(car: THREE.Group, metal: THREE.Material, trim: THREE.Material): void {
+    for (const side of [-1, 1] as const) {
+      const shelf = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.05, 10.4), trim);
+      shelf.position.set(side * 1.12, 2.88, 0);
+      car.add(shelf);
+      const guard = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.2, 10.2), metal);
+      guard.position.set(side * 0.94, 3.0, 0);
+      car.add(guard);
+      for (let z = -4.8; z <= 4.8; z += 1.2) {
+        this.addBwegtRailBetween(
+          car,
+          new THREE.Vector3(side * 1.34, 2.55, z),
+          new THREE.Vector3(side * 0.98, 2.97, z),
+          metal
+        );
+      }
+    }
+  }
+
+  private addBwegtRailBetween(car: THREE.Group, start: THREE.Vector3, end: THREE.Vector3, material: THREE.Material): void {
+    const direction = end.clone().sub(start);
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, direction.length(), 8), material);
+    rail.position.copy(start).add(end).multiplyScalar(0.5);
+    rail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+    car.add(rail);
+  }
+
+  private makeBwegtSeatFabricTexture(): THREE.DataTexture {
+    const size = 32;
+    const pixels = new Uint8Array(size * size * 4);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const index = (y * size + x) * 4;
+        const stripe = y % 8 === 2;
+        const motif = (x % 16 === 4 || x % 16 === 5 || x % 16 === 9) && (y % 16 === 10 || y % 16 === 11);
+        const fleck = (x * 13 + y * 7) % 19 === 0;
+        const tone = stripe ? 98 : fleck ? 72 : 48;
+        pixels[index] = motif ? 242 : tone;
+        pixels[index + 1] = motif ? 210 : tone + 2;
+        pixels[index + 2] = motif ? 27 : tone + 5;
+        pixels[index + 3] = 255;
+      }
+    }
+    const texture = new THREE.DataTexture(pixels, size, size, THREE.RGBAFormat);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(4, 6);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.LinearFilter;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  private makeBwegtFloorTexture(): THREE.DataTexture {
+    const size = 32;
+    const pixels = new Uint8Array(size * size * 4);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const index = (y * 32 + x) * 4;
+        const seed = (x * 19 + y * 23 + x * y * 3) % 31;
+        const tone = seed < 3 ? 168 : seed > 27 ? 228 : 201;
+        pixels[index] = tone;
+        pixels[index + 1] = tone + 2;
+        pixels[index + 2] = tone + 1;
+        pixels[index + 3] = 255;
+      }
+    }
+    const texture = new THREE.DataTexture(pixels, size, size, THREE.RGBAFormat);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(8, 22);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.LinearFilter;
+    texture.needsUpdate = true;
+    return texture;
   }
 
   // Stuttgart Zahnradbahn ("Zacke") rack railcar, styled after the DT8 Stadtbahn:
