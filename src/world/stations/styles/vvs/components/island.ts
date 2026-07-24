@@ -15,19 +15,16 @@ const BENCH_SLOTS = [6, -8, 18];
 const BIN_SLOTS = [12, 0];
 
 /**
- * Surface island-platform station: one central platform, a central canopy, and
- * track-facing signage on both edges. Platform strips follow the route in world
- * space (attach to `root`); canopy, furniture, and signs attach to `local`.
+ * Central island deck with outward-facing edges/tactile strips. Shared by the
+ * full island station and by mixed (side + center) layouts. World-space strips
+ * attach to `root`.
  */
-export function buildVvsIslandStation(
+export function buildVvsCenterPlatform(
   root: THREE.Group,
-  local: THREE.Group,
   layer: WorldLayerContext,
   materials: VvsStationMaterials,
   station: RouteStation,
-  platform: StationPlatformDefinition | undefined,
-  canopyLengthM: number,
-  counts: VvsFurnitureCounts
+  platform: StationPlatformDefinition | undefined
 ): void {
   const lengthM = platform?.lengthM ?? DEFAULT_LENGTH_M;
   const { startT, endT } = platformSpanT(station.distanceM, lengthM, layer.route.routeLengthM);
@@ -53,6 +50,25 @@ export function buildVvsIslandStation(
     tactile.name = `Island tactile edge ${station.name}`;
     root.add(tactile);
   }
+}
+
+/**
+ * Surface island-platform station: one central platform, a central canopy, and
+ * track-facing signage on both edges. Platform strips follow the route in world
+ * space (attach to `root`); canopy, furniture, and signs attach to `local`.
+ */
+export function buildVvsIslandStation(
+  root: THREE.Group,
+  local: THREE.Group,
+  layer: WorldLayerContext,
+  materials: VvsStationMaterials,
+  station: RouteStation,
+  platform: StationPlatformDefinition | undefined,
+  canopyLengthM: number,
+  counts: VvsFurnitureCounts,
+  accent: THREE.Material = materials.ssbBlue
+): void {
+  buildVvsCenterPlatform(root, layer, materials, station, platform);
 
   // Central canopy: single ridge roof over the platform with a row of posts.
   const center = 8;
@@ -61,11 +77,11 @@ export function buildVvsIslandStation(
   roof.position.set(0, 4.35, center);
   roof.castShadow = true;
   local.add(roof);
-  const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.34, canopyLengthM + 0.2), materials.ssbBlue);
+  const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.34, canopyLengthM + 0.2), accent);
   ridge.position.set(0, 4.5, center);
   local.add(ridge);
   for (const z of [center - half + 2, center, center + half - 2]) {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.18, 4.2, 0.18), materials.ssbBlue);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.18, 4.2, 0.18), accent);
     post.position.set(0, 2.1, z);
     post.castShadow = true;
     local.add(post);

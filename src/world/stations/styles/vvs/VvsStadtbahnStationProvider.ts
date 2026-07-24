@@ -15,7 +15,7 @@ import { buildVvsSidePlatforms, sidePlatformOffset } from './components/platform
 import { buildVvsUndergroundHall, buildVvsUndergroundSideLighting } from './components/undergroundHall';
 import { buildVvsCanopy } from './components/canopy';
 import { buildVvsFurniture } from './components/furniture';
-import { buildVvsIslandStation } from './components/island';
+import { buildVvsCenterPlatform, buildVvsIslandStation } from './components/island';
 import { buildVvsDfiBoards, buildVvsRetainingWall } from './components/environment';
 import { buildVvsStationSigns, buildVvsWayfinding } from './components/signage';
 import { buildVvsTerminusBuffer } from './components/terminus';
@@ -85,6 +85,9 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       ticketMachines: furniture.ticketMachines ?? 1,
       bins: furniture.bins ?? 1
     };
+    const accentColor = definition.architecture?.accentColor;
+    const accent = materials.accent(accentColor);
+    const layout = definition.platform?.layout;
 
     const scaffold = createStationScaffold(
       `${underground ? 'Underground' : 'Surface'} station ${station.name}`,
@@ -92,9 +95,10 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     );
     context.root.add(scaffold.root);
 
-    // Surface island platforms are a distinct topology; everything else uses the
-    // paired side-platform layout (surface or underground).
-    if (!underground && definition.archetype === 'surface-island') {
+    // Island platforms are a distinct topology; everything else uses the paired
+    // side-platform layout (surface or underground). Selected by explicit layout
+    // or the surface-island archetype.
+    if (!underground && (layout === 'island' || definition.archetype === 'surface-island')) {
       buildVvsIslandStation(
         scaffold.root,
         scaffold.local,
@@ -103,7 +107,8 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
         station,
         definition.platform,
         canopyLengthM,
-        counts
+        counts,
+        accent
       );
       return {
         root: scaffold.root,
@@ -118,6 +123,10 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
 
     // Curved platforms follow the route in world space → untransformed root.
     buildVvsSidePlatforms(scaffold.root, context.layer, materials, station, definition.platform, staggerM);
+    // Mixed layouts (side + center) add a narrow island deck between the tracks.
+    if (layout === 'mixed') {
+      buildVvsCenterPlatform(scaffold.root, context.layer, materials, station, definition.platform);
+    }
 
     const retainingWall = definition.environment?.retainingWall;
     const dfiDisplays = definition.furniture?.dfiDisplays ?? 0;
@@ -127,8 +136,6 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     const platformLengthM = definition.platform?.lengthM ?? 76;
     const platformOffset = sidePlatformOffset(definition.platform?.widthM ?? 8);
     const lateral = platformOffset - 7.4;
-    const accentColor = definition.architecture?.accentColor;
-    const accent = materials.accent(accentColor);
     const roof = definition.architecture?.roof;
     // Interchanges default to a full canopy (unless the catalog says otherwise).
     const interchange = definition.archetype === 'surface-interchange';
