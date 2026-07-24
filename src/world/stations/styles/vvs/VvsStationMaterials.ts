@@ -46,6 +46,22 @@ export class VvsStationMaterials {
     this.dfi
   ]);
 
+  // Per-accent-color variants of the SSB-blue accent, cached and reused across
+  // every stop that requests the same color so accent tinting stays share-safe.
+  private readonly accentCache = new Map<string, THREE.MeshStandardMaterial>();
+
+  /** Accent material for a station family color; falls back to the shared blue. */
+  accent(color: string | undefined): THREE.MeshStandardMaterial {
+    if (!color) return this.ssbBlue;
+    let material = this.accentCache.get(color);
+    if (!material) {
+      material = new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: 0.45, metalness: 0.28 });
+      this.accentCache.set(color, material);
+      this.shared.add(material);
+    }
+    return material;
+  }
+
   dispose(): void {
     for (const material of this.shared) material.dispose();
   }

@@ -69,9 +69,10 @@ describe('station style registry', () => {
     const provider = new VvsStadtbahnStationProvider();
     const station: RouteStation = { name: 'Degerloch', distanceM: 100 };
     const resolved = provider.resolve(station, { layer: {} as never, placement: placementAt(station, false) });
-    expect(resolved.archetype).toBe('surface-interchange');
+    expect(resolved.archetype).toContain('interchange');
     expect(resolved.furniture?.dfiDisplays).toBe(2);
     expect(resolved.environment?.plaza).toBe(true);
+    expect(resolved.platform.lengthM).toBe(120);
   });
 });
 

@@ -13,12 +13,15 @@ export function buildVvsStationSigns(
   layer: WorldLayerContext,
   side: number,
   station: RouteStation,
-  underground: boolean
+  underground: boolean,
+  lateral = 0, // extra outward shift when the platform is wider than default
+  zShift = 0, // along-route shift for staggered platforms
+  accentBg = '#174a73' // station-family accent color for the sign background
 ): void {
   const signTexture = makeLabelTexture(`${layer.route.line}  ${station.name}`, {
     width: 1024,
     height: 180,
-    bg: '#174a73',
+    bg: accentBg,
     fg: '#ffffff'
   });
   for (const z of [-21, 21]) {
@@ -26,7 +29,7 @@ export function buildVvsStationSigns(
       new THREE.PlaneGeometry(8.6, 1.5),
       new THREE.MeshBasicMaterial({ map: signTexture, side: THREE.FrontSide })
     );
-    sign.position.set(side * 10.75, underground ? 3.55 : 3.05, z);
+    sign.position.set(side * (10.75 + lateral), underground ? 3.55 : 3.05, z + zShift);
     sign.rotation.y = (side * Math.PI) / 2;
     local.add(sign);
     const signBack = sign.clone();

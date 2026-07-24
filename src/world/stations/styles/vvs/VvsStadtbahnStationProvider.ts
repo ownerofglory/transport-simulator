@@ -11,7 +11,7 @@ import type {
 import { createSeededRandom, hashString } from '../../variation';
 import { VvsStationCatalog } from './VvsStationCatalog';
 import { VvsStationMaterials } from './VvsStationMaterials';
-import { buildVvsSidePlatforms } from './components/platform';
+import { buildVvsSidePlatforms, sidePlatformOffset } from './components/platform';
 import { buildVvsUndergroundHall, buildVvsUndergroundSideLighting } from './components/undergroundHall';
 import { buildVvsCanopy } from './components/canopy';
 import { buildVvsFurniture } from './components/furniture';
@@ -118,11 +118,28 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     const retainingWall = definition.environment?.retainingWall;
     const dfiDisplays = definition.furniture?.dfiDisplays ?? 0;
 
+    // Appearance from architecture data: platform width shifts furniture/canopy
+    // outward; roof kind sets canopy length; accent color tints fascia/posts.
+    const platformLengthM = definition.platform?.lengthM ?? 76;
+    const platformOffset = sidePlatformOffset(definition.platform?.widthM ?? 8);
+    const lateral = platformOffset - 7.4;
+    const accentColor = definition.architecture?.accentColor;
+    const accent = materials.accent(accentColor);
+    const roof = definition.architecture?.roof;
+    const fullCanopy = roof === 'full-canopy' || roof === 'hall';
+    const canopyLen = roof === 'none' ? 0 : fullCanopy ? Math.min(platformLengthM * 0.9, platformLengthM - 4) : canopyLengthM;
+    const canopyCenterZ = fullCanopy ? 0 : 8;
+
     for (const side of [-1, 1]) {
       if (underground) buildVvsUndergroundSideLighting(scaffold.local, materials, side);
-      else buildVvsCanopy(scaffold.local, materials, side, canopyLengthM);
-      buildVvsFurniture(scaffold.local, materials, side, underground, counts);
-      buildVvsStationSigns(scaffold.local, context.layer, side, station, underground);
+      else buildVvsCanopy(scaffold.local, materials, side, {
+        lengthM: canopyLen,
+        platformOffsetM: platformOffset,
+        centerZ: canopyCenterZ,
+        accent
+      });
+      buildVvsFurniture(scaffold.local, materials, side, underground, counts, lateral);
+      buildVvsStationSigns(scaffold.local, context.layer, side, station, underground, lateral, 0, accentColor);
 
       // Hillside/cutting stops carry a retaining wall behind the platform.
       if (!underground && (retainingWall === 'both' || (retainingWall === 'left' && side === -1) ||
