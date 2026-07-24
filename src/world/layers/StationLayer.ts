@@ -25,12 +25,23 @@ export class StationLayer {
   constructor(private readonly ctx: WorldLayerContext) {}
 
   build(): void {
-    const style = this.styleRegistry.resolveOptional(this.ctx.stationStyleId);
+    const style = this.resolveStationStyle();
     if (style) {
       this.buildStyledStations(style);
       return;
     }
     this.builders.resolve(this.ctx.guidewayKind)();
+  }
+
+  // Prefer the mode's explicit stationStyleId; otherwise every stadtbahn-guideway
+  // city (Odessa/Ulm/… trams, not just Stuttgart) falls back to the vvs-stadtbahn
+  // provider, which is the generic light-rail design the legacy buildRailStations
+  // produced. Non-rail guideways use their dedicated builders.
+  private resolveStationStyle(): StationStyleProvider | undefined {
+    const explicit = this.styleRegistry.resolveOptional(this.ctx.stationStyleId);
+    if (explicit) return explicit;
+    if (this.ctx.guidewayKind === 'stadtbahn') return this.styleRegistry.resolveOptional('vvs-stadtbahn');
+    return undefined;
   }
 
   // Coordinator path for data-driven station styles: resolve placement + a
