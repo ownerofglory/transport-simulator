@@ -15,6 +15,7 @@ import { buildVvsSidePlatforms } from './components/platform';
 import { buildVvsUndergroundHall, buildVvsUndergroundSideLighting } from './components/undergroundHall';
 import { buildVvsCanopy } from './components/canopy';
 import { buildVvsFurniture } from './components/furniture';
+import { buildVvsIslandStation } from './components/island';
 import { buildVvsStationSigns, buildVvsWayfinding } from './components/signage';
 
 // Legacy single-item platform layout, used as the default so unlisted stops
@@ -77,12 +78,36 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     // but not identical. Never affects platform length or track geometry.
     const canopyLengthM = 22 + rng.next() * 5;
     const furniture = definition.furniture ?? {};
+    const counts = {
+      benches: furniture.benches ?? 1,
+      ticketMachines: furniture.ticketMachines ?? 1,
+      bins: furniture.bins ?? 1
+    };
 
     const scaffold = createStationScaffold(
       `${underground ? 'Underground' : 'Surface'} station ${station.name}`,
       placement
     );
     context.root.add(scaffold.root);
+
+    // Surface island platforms are a distinct topology; everything else uses the
+    // paired side-platform layout (surface or underground).
+    if (!underground && definition.archetype === 'surface-island') {
+      buildVvsIslandStation(
+        scaffold.root,
+        scaffold.local,
+        context.layer,
+        materials,
+        station,
+        definition.platform,
+        canopyLengthM,
+        counts
+      );
+      return {
+        root: scaffold.root,
+        dispose: () => disposeStation(scaffold.root, materials.shared)
+      };
+    }
 
     if (underground) buildVvsUndergroundHall(scaffold.local, materials);
 
@@ -92,11 +117,7 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     for (const side of [-1, 1]) {
       if (underground) buildVvsUndergroundSideLighting(scaffold.local, materials, side);
       else buildVvsCanopy(scaffold.local, materials, side, canopyLengthM);
-      buildVvsFurniture(scaffold.local, materials, side, underground, {
-        benches: furniture.benches ?? 1,
-        ticketMachines: furniture.ticketMachines ?? 1,
-        bins: furniture.bins ?? 1
-      });
+      buildVvsFurniture(scaffold.local, materials, side, underground, counts);
       buildVvsStationSigns(scaffold.local, context.layer, side, station, underground);
     }
 
