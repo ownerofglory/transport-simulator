@@ -1,6 +1,7 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { LiveMapControls } from './LiveMapControls';
 import type { LiveVehicleStore, TrackedVehicle } from './LiveVehicleStore';
 import { delayLevel, modeColor } from './liveTypes';
 import type { BBox } from './viewport';
@@ -8,6 +9,8 @@ import type { BBox } from './viewport';
 // Whole-VVS overview: the S-Bahn bounding box, city tier by default (§2.2).
 const STUTTGART_CENTER: [number, number] = [48.7827, 9.18];
 const INITIAL_ZOOM = 11;
+const MIN_ZOOM = 8;
+const MAX_ZOOM = 19;
 // Line badges fade in below the mid-altitude band (§2.3); on the map that is
 // district zoom and closer.
 const BADGE_MIN_ZOOM = 13;
@@ -44,7 +47,9 @@ export function LiveMap({
   selectedRunId,
   followRunId,
   delayObserved = false,
-  initialView
+  initialView,
+  onEnter3D,
+  onStopFollow
 }: {
   store: LiveVehicleStore;
   onViewportChange: (bbox: BBox, zoom: number) => void;
@@ -55,6 +60,11 @@ export function LiveMap({
   delayObserved?: boolean;
   /** Restores map center/zoom when returning from the 3D view. */
   initialView?: { lat: number; lon: number; zoom: number };
+  /** Hands off to the 3D view. The map supplies its own center, which it always
+   * knows — waiting on a viewport report would leave the control dead on load. */
+  onEnter3D: (center: { lat: number; lon: number }) => void;
+  /** Released before recentering, or a follow would fight the camera move. */
+  onStopFollow: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -62,6 +72,8 @@ export function LiveMap({
   const bearings = useRef(new Map<string, number>());
   const rafRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
+  // Mirrors the map zoom so the bar can disable its buttons at the limits.
+  const [zoom, setZoom] = useState(initialView?.zoom ?? INITIAL_ZOOM);
 
   // Latest prop values read inside the imperative loop without re-subscribing.
   const onViewportRef = useRef(onViewportChange);
@@ -74,23 +86,35 @@ export function LiveMap({
   followRef.current = followRunId;
   const delayObservedRef = useRef(delayObserved);
   delayObservedRef.current = delayObserved;
+  const onStopFollowRef = useRef(onStopFollow);
+  onStopFollowRef.current = onStopFollow;
+  const onEnter3DRef = useRef(onEnter3D);
+  onEnter3DRef.current = onEnter3D;
 
   // Create the map once and drive the animation loop for its lifetime.
   useEffect(() => {
     if (!containerRef.current) return;
     const startCenter: [number, number] = initialView ? [initialView.lat, initialView.lon] : STUTTGART_CENTER;
     const startZoom = initialView ? initialView.zoom : INITIAL_ZOOM;
-    const map = L.map(containerRef.current, { zoomControl: true, attributionControl: true, preferCanvas: true }).setView(
-      startCenter,
-      startZoom
-    );
+    // Leaflet's own zoom control lands in the top-left corner, underneath the
+    // live HUD panel; the shared control bar carries zoom instead.
+    const map = L.map(containerRef.current, {
+      zoomControl: false,
+      attributionControl: true,
+      preferCanvas: true,
+      minZoom: MIN_ZOOM,
+      maxZoom: MAX_ZOOM
+    }).setView(startCenter, startZoom);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
+      maxZoom: MAX_ZOOM,
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
     mapRef.current = map;
 
-    const report = () => onViewportRef.current(boundsToBBox(map.getBounds()), map.getZoom());
+    const report = () => {
+      setZoom(map.getZoom());
+      onViewportRef.current(boundsToBBox(map.getBounds()), map.getZoom());
+    };
     map.on('moveend', report);
     map.on('zoomend', report);
     map.on('click', () => onSelectRef.current(null));
@@ -99,6 +123,14 @@ export function LiveMap({
       map.invalidateSize();
       report();
     });
+
+    // Leaflet caches the container size, so a window resize or an orientation
+    // change leaves the map rendering at the old dimensions until it is told.
+    const onResize = () => {
+      map.invalidateSize();
+      report();
+    };
+    window.addEventListener('resize', onResize);
 
     const frame = (time: number) => {
       const dt = lastTimeRef.current ? Math.min(0.1, (time - lastTimeRef.current) / 1000) : 0.016;
@@ -114,6 +146,7 @@ export function LiveMap({
 
     return () => {
       cancelAnimationFrame(raf);
+      window.removeEventListener('resize', onResize);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
       lastTimeRef.current = 0;
@@ -195,9 +228,32 @@ export function LiveMap({
     }
   }
 
+  const zoomBy = useCallback((delta: number) => {
+    const map = mapRef.current;
+    if (map) map.setZoom(map.getZoom() + delta);
+  }, []);
+
+  const overview = useCallback(() => {
+    onStopFollowRef.current();
+    mapRef.current?.setView(STUTTGART_CENTER, INITIAL_ZOOM);
+  }, []);
+
+  const enter3D = useCallback(() => {
+    const center = mapRef.current?.getCenter();
+    if (center) onEnter3DRef.current({ lat: center.lat, lon: center.lng });
+  }, []);
+
   return (
     <div className="lv-map">
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      <LiveMapControls
+        onZoomIn={() => zoomBy(1)}
+        onZoomOut={() => zoomBy(-1)}
+        onOverview={overview}
+        onEnter3D={enter3D}
+        canZoomIn={zoom < MAX_ZOOM}
+        canZoomOut={zoom > MIN_ZOOM}
+      />
     </div>
   );
 }

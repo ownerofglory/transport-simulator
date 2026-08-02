@@ -103,6 +103,14 @@ export function LiveView({ onExit, city }: { onExit: () => void; city?: CityDefi
   // moving several times a second never re-renders the HUD.
   const getSearchOrigin = useCallback(() => viewCenterRef.current, []);
 
+  // Explicit hand-off to 3D from the map control bar, at whatever the map is
+  // showing — the zoom-in threshold is not the only way in.
+  const enter3D = useCallback((center: LatLon) => {
+    setOrigin(center);
+    setSelectedRunId(null);
+    setMode('3d');
+  }, []);
+
   const backToMap = useCallback(() => {
     const f = focus3DRef.current;
     if (f) setReturnView({ lat: f.lat, lon: f.lon, zoom: RETURN_MAP_ZOOM });
@@ -189,6 +197,10 @@ export function LiveView({ onExit, city }: { onExit: () => void; city?: CityDefi
 
   const delayObserved = useMemo(() => delayObservedFor(summary.positionModel), [summary.positionModel]);
 
+  // Both null must not read as "following" — that would show the follow camera
+  // controls and the leave-follow hint with nothing selected at all.
+  const following = !!selectedRunId && followRunId === selectedRunId;
+
   if (mode === '3d' && origin) {
     return (
       <Suspense fallback={<div className="lv-3d-root" />}>
@@ -202,7 +214,7 @@ export function LiveView({ onExit, city }: { onExit: () => void; city?: CityDefi
           onBackToMap={backToMap}
           onExitLive={onExit}
           selectedVehicle={selectedVehicle}
-          following={followRunId === selectedRunId}
+          following={following}
           delayObserved={delayObserved}
           onSelect={handleSelect}
           onToggleFollow={toggleFollow}
@@ -228,6 +240,8 @@ export function LiveView({ onExit, city }: { onExit: () => void; city?: CityDefi
         followRunId={followRunId}
         delayObserved={delayObserved}
         initialView={returnView}
+        onEnter3D={enter3D}
+        onStopFollow={() => setFollowRunId(null)}
       />
       <LiveModePanel
         summary={summary}
@@ -241,7 +255,7 @@ export function LiveView({ onExit, city }: { onExit: () => void; city?: CityDefi
       {selectedVehicle && (
         <LiveVehicleCard
           vehicle={selectedVehicle}
-          following={followRunId === selectedRunId}
+          following={following}
           delayObserved={delayObserved}
           onToggleFollow={toggleFollow}
           onDepartures={openDepartures}

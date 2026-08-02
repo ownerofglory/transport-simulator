@@ -18,6 +18,7 @@ import type { CameraMode, CameraUpdateInput } from '../../world/CameraController
 import { LiveFollowVehicle } from './LiveFollowVehicle';
 import { LiveStationMarker } from './LiveStationMarker';
 import { advanceFlight, flightDuration, type CameraFlight } from './cameraFlight';
+import { panOffset, panScale } from './cameraPan';
 import { resolveLiveVehicleDefinition } from './liveVehicleDefinition';
 import { isTypingTarget } from '../../app/typingTarget';
 import type { CityDefinition } from '../../cities';
@@ -36,6 +37,7 @@ function followBaseOffset(underground: boolean): number {
 // the same ground.
 
 const DEG = Math.PI / 180;
+const UP = new THREE.Vector3(0, 1, 0);
 
 // Camera altitude clamp (concept §2.2: ~80 m to ~12 km). Above the top we hand
 // back to the map.
@@ -138,6 +140,9 @@ export class Live3DScene {
   private readonly _followPos = new THREE.Vector3();
   private readonly _followTan = new THREE.Vector3();
   private readonly _followOff = new THREE.Vector3();
+  // Scratch for the pan basis, rebuilt on every pointermove.
+  private readonly _panRight = new THREE.Vector3();
+  private readonly _panForward = new THREE.Vector3();
 
   private raf: number | null = null;
   private lastTime = 0;
@@ -534,12 +539,13 @@ export class Live3DScene {
       this.azimuth -= dx * 0.005;
       this.polar = THREE.MathUtils.clamp(this.polar - dy * 0.005, 0.15, this.followRunId ? 1.58 : 1.4);
     } else {
-      // Grab-and-drag pan: the ground point under the cursor tracks the cursor,
-      // so dragging right moves the world right (target moves the opposite way).
-      const panScale = this.distance * 0.0018;
-      const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 0).setY(0).normalize();
-      const forward = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), right).normalize();
-      this.target.addScaledVector(right, -dx * panScale).addScaledVector(forward, -dy * panScale);
+      // Camera-drag pan: the drag moves the camera, so dragging right pushes the
+      // view right and the world slides left (see cameraPan for the convention).
+      const right = this._panRight.setFromMatrixColumn(this.camera.matrix, 0).setY(0).normalize();
+      const forward = this._panForward.crossVectors(UP, right).normalize();
+      const offset = panOffset(right, forward, dx, dy, panScale(this.distance));
+      this.target.x += offset.x;
+      this.target.z += offset.z;
     }
     this.cameraDirty = true;
     this.updateCamera();
