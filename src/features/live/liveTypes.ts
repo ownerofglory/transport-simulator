@@ -75,12 +75,28 @@ export function modeLabel(mode: LivetrafficVehicleMode | undefined): string {
 }
 
 /** Delay severity for badge coloring (on time / amber / red per concept §2.3). */
-export type DelayLevel = 'on-time' | 'minor' | 'major';
+export type DelayLevel = 'unknown' | 'on-time' | 'minor' | 'major';
 
-export function delayLevel(delaySeconds: number | undefined): DelayLevel {
-  const s = delaySeconds ?? 0;
-  if (s > 300) return 'major';
-  if (s >= 120) return 'minor';
+/**
+ * Whether a snapshot's `delaySeconds` is an observation at all.
+ *
+ * While the backend reports `positionModel: "schedule"` it has no realtime delay
+ * input, and the `delaySeconds: 0` it sends is the schedule estimator's zero-value
+ * — not a confirmed on-time run. Rendering that as a green "on time" states
+ * something the backend never asserted, so it is surfaced as unknown instead.
+ *
+ * The gate is the snapshot-level model rather than a vehicle's `source`: once
+ * delay integration lands, a vehicle may legitimately be schedule-*positioned*
+ * while its delay is TRIAS-*observed*, and that must still show through.
+ */
+export function delayObservedFor(positionModel: string | null | undefined): boolean {
+  return positionModel != null && positionModel !== 'schedule';
+}
+
+export function delayLevel(delaySeconds: number | undefined, observed = true): DelayLevel {
+  if (!observed || delaySeconds == null) return 'unknown';
+  if (delaySeconds > 300) return 'major';
+  if (delaySeconds >= 120) return 'minor';
   return 'on-time';
 }
 

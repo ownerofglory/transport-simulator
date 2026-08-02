@@ -5,7 +5,7 @@ import type { EndpointValue } from '../realtime/LocationField';
 import { LiveMap } from './LiveMap';
 import { LiveModePanel } from './LiveModePanel';
 import { LiveVehicleCard } from './LiveVehicleCard';
-import { ALL_LIVE_MODES, type LiveMode, type LiveVehicle } from './liveTypes';
+import { ALL_LIVE_MODES, delayObservedFor, type LiveMode, type LiveVehicle } from './liveTypes';
 import type { LatLon } from './liveProjection';
 import type { BBox } from './viewport';
 import { useLiveVehicles } from './useLiveVehicles';
@@ -153,6 +153,8 @@ export function LiveView({ onExit, city }: { onExit: () => void; city?: CityDefi
     [mode, summary]
   );
 
+  const delayObserved = useMemo(() => delayObservedFor(summary.positionModel), [summary.positionModel]);
+
   if (mode === '3d' && origin) {
     return (
       <Suspense fallback={<div className="lv-3d-root" />}>
@@ -167,6 +169,7 @@ export function LiveView({ onExit, city }: { onExit: () => void; city?: CityDefi
           onExitLive={onExit}
           selectedVehicle={selectedVehicle}
           following={followRunId === selectedRunId}
+          delayObserved={delayObserved}
           onSelect={handleSelect}
           onToggleFollow={toggleFollow}
           onStopFollow={() => setFollowRunId(null)}
@@ -186,6 +189,7 @@ export function LiveView({ onExit, city }: { onExit: () => void; city?: CityDefi
         onSelect={handleSelect}
         selectedRunId={selectedRunId}
         followRunId={followRunId}
+        delayObserved={delayObserved}
         initialView={returnView}
       />
       <LiveModePanel summary={summary} userModes={userModes} onToggleMode={toggleMode} onExit={onExit} />
@@ -194,6 +198,7 @@ export function LiveView({ onExit, city }: { onExit: () => void; city?: CityDefi
         <LiveVehicleCard
           vehicle={selectedVehicle}
           following={followRunId === selectedRunId}
+          delayObserved={delayObserved}
           onToggleFollow={toggleFollow}
           onDepartures={openDepartures}
           onClose={() => setSelectedRunId(null)}

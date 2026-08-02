@@ -1,9 +1,9 @@
 import { delayLevel, modeColor, modeLabel, type LiveVehicle } from './liveTypes';
 
-function delayText(delaySeconds: number | undefined): string {
-  const s = delaySeconds ?? 0;
-  if (Math.abs(s) < 60) return 'on time';
-  const min = Math.round(s / 60);
+function delayText(delaySeconds: number | undefined, observed: boolean): string {
+  if (!observed || delaySeconds == null) return 'delay unknown';
+  if (Math.abs(delaySeconds) < 60) return 'on time';
+  const min = Math.round(delaySeconds / 60);
   return min > 0 ? `+${min} min` : `${min} min`;
 }
 
@@ -36,18 +36,21 @@ function confidenceText(v: LiveVehicle): string {
 export function LiveVehicleCard({
   vehicle,
   following,
+  delayObserved = false,
   onToggleFollow,
   onDepartures,
   onClose
 }: {
   vehicle: LiveVehicle;
   following: boolean;
+  /** False while the backend cannot observe delay — see `delayObservedFor`. */
+  delayObserved?: boolean;
   onToggleFollow: () => void;
   onDepartures: () => void;
   onClose: () => void;
 }) {
   const color = modeColor(vehicle.mode);
-  const delay = delayLevel(vehicle.delaySeconds);
+  const delay = delayLevel(vehicle.delaySeconds, delayObserved);
   const planned = vehicle.source === 'schedule';
 
   return (
@@ -62,7 +65,7 @@ export function LiveVehicleCard({
         <span className="lv-card-dest">→ {vehicle.direction || 'Unknown'}</span>
       </div>
       <div className="lv-card-row">
-        <span className={`lv-delay-tag lv-delay-${delay}`}>{delayText(vehicle.delaySeconds)}</span>
+        <span className={`lv-delay-tag lv-delay-${delay}`}>{delayText(vehicle.delaySeconds, delayObserved)}</span>
         <span className="lv-card-status">{statusText(vehicle.status)}</span>
         <span className="lv-card-conf" title="confidence · source">
           {planned ? '◔' : '●'} {confidenceText(vehicle)}
