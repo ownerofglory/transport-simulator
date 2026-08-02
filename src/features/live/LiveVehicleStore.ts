@@ -18,6 +18,13 @@ export type TrackedVehicle = {
   speedMps: number; // inferred from consecutive server fixes
   lastFixMs: number; // wall-clock ms of the latest server fix
   misses: number; // consecutive polls this run was absent from
+  /**
+   * False until a second fix has given the run a real speed. A single fix carries
+   * no speed, so such a run would stand still for a whole poll interval and then
+   * teleport the entire distance it actually travelled (measured: mean 136 m,
+   * worst 694 m in one frame). Unseeded runs are tracked but not rendered.
+   */
+  seeded: boolean;
 };
 
 // A run absent from this many consecutive polls is despawned; one miss is
@@ -26,10 +33,12 @@ const MAX_MISSES = 2;
 
 // Inferred-speed bounds. The backend positions are schedule estimates, so the
 // speed we derive from consecutive fixes is noisy — especially around stops,
-// where a stop→depart pair produces a spurious burst. We cap it to a plausible
-// Stadtbahn/regional display speed and rate-limit how fast it can change so a bad
-// fix can't fling the marker forward and then jerk it back (concept §7).
-const MAX_INFERRED_SPEED_MPS = 35; // ~126 km/h; display cap, below the rail cap
+// where a stop→depart pair produces a spurious burst. We rate-limit how fast it
+// can change so a bad fix can't fling the marker forward and then jerk it back
+// (concept §7). The ceiling matches predict()'s own clampSpeed cap: it used to be
+// 35, which sat *below* that cap, so regional RE/MEX runs (measured up to 43.7 m/s
+// ≈ 157 km/h) could never be tracked and fell behind on every poll.
+const MAX_INFERRED_SPEED_MPS = 45; // ~160 km/h
 const MAX_ACCEL_MPS2 = 1.4; // realistic light-rail acceleration
 const MAX_BRAKE_MPS2 = 2.2; // realistic service braking
 
@@ -48,7 +57,15 @@ export class LiveVehicleStore {
     this.vehicles.clear();
   }
 
+  /** Renderable runs only — matches what {@link list} returns. */
   get size(): number {
+    let n = 0;
+    for (const v of this.vehicles.values()) if (v.seeded) n++;
+    return n;
+  }
+
+  /** Every run being tracked, including ones still waiting for a second fix. */
+  get trackedSize(): number {
     return this.vehicles.size;
   }
 
@@ -57,7 +74,9 @@ export class LiveVehicleStore {
   }
 
   list(): TrackedVehicle[] {
-    return [...this.vehicles.values()];
+    const out: TrackedVehicle[] = [];
+    for (const v of this.vehicles.values()) if (v.seeded) out.push(v);
+    return out;
   }
 
   /**
@@ -104,7 +123,8 @@ export class LiveVehicleStore {
         bearing: v.bearing ?? 0,
         speedMps: 0,
         lastFixMs: fixMs,
-        misses: 0
+        misses: 0,
+        seeded: false
       });
       return;
     }
@@ -124,11 +144,18 @@ export class LiveVehicleStore {
     const bearing = v.bearing ?? (movedM > 2 ? bearingDeg(existing.server, server) : existing.bearing);
     existing.data = v;
     existing.server = server;
-    existing.speedMps = this.inferSpeed(existing.speedMps, movedM, dtSec, v.status);
+    existing.speedMps = this.inferSpeed(existing.speedMps, movedM, dtSec, v.status, existing.seeded);
     existing.bearing = bearing;
     existing.lastFixMs = fixMs;
     existing.misses = 0;
-    // A large jump means our render lagged badly — snap on the next tick.
+    // Second fix: the run now has a real speed, so it becomes renderable. Anchor
+    // the display position to this fix (only on that transition — afterwards
+    // `render` is the eased position and must not be snapped) so the run appears
+    // already moving instead of popping in and teleporting one interval later.
+    if (!existing.seeded) {
+      existing.seeded = true;
+      existing.render = server;
+    }
   }
 
   /** Removes a single run (e.g. the follow endpoint reports it finished). */
@@ -140,10 +167,23 @@ export class LiveVehicleStore {
   // speed is forced to zero; otherwise the measurement is capped and rate-limited
   // by plausible acceleration/braking so a noisy schedule estimate can't produce
   // the "stop → sudden lurch → snap back" the raw movedM/dt did.
-  private inferSpeed(prevMps: number, movedM: number, dtSec: number, status: LiveVehicle['status']): number {
+  //
+  // The rate limit only applies between two *known* speeds. On the first
+  // measurement `prevMps` is 0 because the run had a single fix, not because it was
+  // standing still, so limiting from it would starve the estimate — badly with the
+  // short gaps SSE upserts produce (a 2 s gap would allow just 2.8 m/s). The cap
+  // still applies, so an implausible measurement can't get through either way.
+  private inferSpeed(
+    prevMps: number,
+    movedM: number,
+    dtSec: number,
+    status: LiveVehicle['status'],
+    seeded: boolean
+  ): number {
     if (status === 'at_stop' || status === 'not_started') return 0;
     if (dtSec <= 0) return prevMps;
     const measured = Math.max(0, Math.min(movedM / dtSec, MAX_INFERRED_SPEED_MPS));
+    if (!seeded) return measured;
     const lower = Math.max(0, prevMps - MAX_BRAKE_MPS2 * dtSec);
     const upper = prevMps + MAX_ACCEL_MPS2 * dtSec;
     return Math.max(lower, Math.min(measured, upper));

@@ -32,6 +32,7 @@ export function Live3DView({
   onExitLive,
   selectedVehicle,
   following,
+  delayObserved = false,
   onSelect,
   onToggleFollow,
   onStopFollow,
@@ -49,6 +50,8 @@ export function Live3DView({
   onExitLive: () => void;
   selectedVehicle: LiveVehicle | null;
   following: boolean;
+  /** False while the backend cannot observe delay — see `delayObservedFor`. */
+  delayObserved?: boolean;
   onSelect: (runId: string) => void;
   onToggleFollow: () => void;
   onStopFollow: () => void;
@@ -124,6 +127,7 @@ export function Live3DView({
         <LiveVehicleCard
           vehicle={selectedVehicle}
           following={following}
+          delayObserved={delayObserved}
           onToggleFollow={onToggleFollow}
           onDepartures={onDepartures}
           onClose={onCloseSelection}

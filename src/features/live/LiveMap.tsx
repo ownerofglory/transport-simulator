@@ -16,10 +16,10 @@ function boundsToBBox(b: L.LatLngBounds): BBox {
   return { latMin: b.getSouth(), lonMin: b.getWest(), latMax: b.getNorth(), lonMax: b.getEast() };
 }
 
-function markerHtml(v: TrackedVehicle): string {
+function markerHtml(v: TrackedVehicle, delayObserved: boolean): string {
   const color = modeColor(v.data.mode);
   const planned = v.data.source === 'schedule';
-  const delay = delayLevel(v.data.delaySeconds);
+  const delay = delayLevel(v.data.delaySeconds, delayObserved);
   const line = v.data.line ?? '';
   return (
     `<span class="lv-arrow" style="--c:${color}"></span>` +
@@ -43,6 +43,7 @@ export function LiveMap({
   onSelect,
   selectedRunId,
   followRunId,
+  delayObserved = false,
   initialView
 }: {
   store: LiveVehicleStore;
@@ -50,6 +51,8 @@ export function LiveMap({
   onSelect: (runId: string | null) => void;
   selectedRunId: string | null;
   followRunId: string | null;
+  /** False while the backend cannot observe delay — see `delayObservedFor`. */
+  delayObserved?: boolean;
   /** Restores map center/zoom when returning from the 3D view. */
   initialView?: { lat: number; lon: number; zoom: number };
 }) {
@@ -69,6 +72,8 @@ export function LiveMap({
   selectedRef.current = selectedRunId;
   const followRef = useRef(followRunId);
   followRef.current = followRunId;
+  const delayObservedRef = useRef(delayObserved);
+  delayObservedRef.current = delayObserved;
 
   // Create the map once and drive the animation loop for its lifetime.
   useEffect(() => {
@@ -135,7 +140,12 @@ export function LiveMap({
       let marker = markers.current.get(v.runId);
       if (!marker) {
         marker = L.marker([v.render.lat, v.render.lon], {
-          icon: L.divIcon({ className: 'lv-icon', html: markerHtml(v), iconSize: [26, 26], iconAnchor: [13, 13] }),
+          icon: L.divIcon({
+            className: 'lv-icon',
+            html: markerHtml(v, delayObservedRef.current),
+            iconSize: [26, 26],
+            iconAnchor: [13, 13]
+          }),
           keyboard: false,
           riseOnHover: true
         });
@@ -174,7 +184,15 @@ export function LiveMap({
       }
     }
     const badge = el.querySelector<HTMLElement>('.lv-badge');
-    if (badge) badge.style.display = showBadges && v.data.line ? '' : 'none';
+    if (badge) {
+      badge.style.display = showBadges && v.data.line ? '' : 'none';
+      // Delay severity changes over a run's life (and flips wholesale once the
+      // backend can observe delay at all), so restyle rather than leaving the
+      // class the marker was created with.
+      const level = delayLevel(v.data.delaySeconds, delayObservedRef.current);
+      const cls = `lv-badge lv-delay-${level}`;
+      if (badge.className !== cls) badge.className = cls;
+    }
   }
 
   return (

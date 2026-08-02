@@ -1007,6 +1007,11 @@ body.photo-capture .photo-overlay {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
+/* Unknown delay keeps the neutral badge — the line colour still identifies it. */
+.lv-badge.lv-delay-unknown {
+  background: #f7f7f7;
+}
+
 .lv-badge.lv-delay-minor {
   background: #ffb44a;
 }
@@ -1232,6 +1237,13 @@ body.photo-capture .photo-overlay {
   font-weight: 600;
   color: #0b0f14;
   background: #64d98a;
+}
+
+/* No realtime delay input from the backend — say nothing rather than "on time". */
+.lv-delay-tag.lv-delay-unknown {
+  background: #3a4551;
+  color: #c3ced9;
+  font-weight: 500;
 }
 
 .lv-delay-tag.lv-delay-minor {
