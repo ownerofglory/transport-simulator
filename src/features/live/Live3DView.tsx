@@ -129,20 +129,20 @@ export function Live3DView({
         onPickStation={onPickStation}
         getSearchOrigin={getSearchOrigin}
       />
-      <div className="lv-3d-bar">
-        <button className="lv-3d-back" onClick={onBackToMap}>
+      <div className="lv-bar">
+        <button className="lv-bar-btn" onClick={onBackToMap}>
           ↩ Map view
         </button>
         {following && (
           <button
-            className="lv-3d-back"
+            className="lv-bar-btn"
             onClick={() => sceneRef.current?.cycleCameraMode()}
             title="Switch view (C)"
           >
             View: {CAMERA_MODE_LABEL[cameraMode]}
           </button>
         )}
-        <span className="lv-3d-hint">
+        <span className="lv-bar-hint">
           {following ? 'C to switch view · drag to leave follow' : 'drag to pan · scroll to zoom · right-drag to rotate'}
         </span>
       </div>

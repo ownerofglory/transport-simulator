@@ -38,6 +38,8 @@ export function LiveModePanel({
   getSearchOrigin?: () => LatLon | null;
 }) {
   const [now, setNow] = useState(() => Date.now());
+  // Start folded on phones, where the panel would otherwise cover the map.
+  const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 760px)').matches);
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
@@ -57,14 +59,25 @@ export function LiveModePanel({
   const clock = new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <div className="lv-hud">
+    <div className={`lv-hud ${collapsed ? 'collapsed' : ''}`}>
       <div className="lv-hud-top">
         <span className="lv-hud-title">Live · VVS</span>
-        <button className="lv-exit" onClick={onExit}>
-          Exit Live
-        </button>
+        <div className="lv-hud-actions">
+          <button className="lv-exit" onClick={onExit}>
+            Exit Live
+          </button>
+          <button
+            className="lv-fold"
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? 'Expand live controls' : 'Collapse live controls'}
+            onClick={() => setCollapsed((value) => !value)}
+          >
+            {collapsed ? '+' : '−'}
+          </button>
+        </div>
       </div>
 
+      <div className="lv-hud-content">
       <LiveStationSearch onPick={onPickStation} getNear={getSearchOrigin} />
 
       <div className="lv-chips">
@@ -88,10 +101,11 @@ export function LiveModePanel({
         })}
       </div>
 
-      <div className="lv-hud-foot">
-        <span className={`lv-fresh ${freshnessClass}`}>{freshnessText}</span>
-        <span className="lv-count">{summary.count} in view</span>
-        <span className="lv-clock">{clock}</span>
+        <div className="lv-hud-foot">
+          <span className={`lv-fresh ${freshnessClass}`}>{freshnessText}</span>
+          <span className="lv-count">{summary.count} in view</span>
+          <span className="lv-clock">{clock}</span>
+        </div>
       </div>
     </div>
   );

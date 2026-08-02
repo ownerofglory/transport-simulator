@@ -1066,6 +1066,30 @@ body.photo-capture .photo-overlay {
   letter-spacing: 0.02em;
 }
 
+.lv-hud-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Fold control: phones only, where the panel would otherwise cover the map. */
+.lv-fold {
+  display: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f7f7f7;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.lv-fold:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
 .lv-hud-title::before {
   content: '';
   display: inline-block;
@@ -1268,6 +1292,34 @@ body.photo-capture .photo-overlay {
   font-variant-numeric: tabular-nums;
 }
 
+@media (max-width: 760px) {
+  .lv-hud {
+    left: 8px;
+    top: 8px;
+    width: calc(100vw - 16px);
+    box-sizing: border-box;
+    padding: 10px 12px;
+  }
+
+  .lv-fold {
+    display: grid;
+    place-items: center;
+  }
+
+  .lv-hud.collapsed {
+    width: auto;
+    max-width: calc(100vw - 16px);
+  }
+
+  .lv-hud.collapsed .lv-hud-content {
+    display: none;
+  }
+
+  .lv-hud.collapsed .lv-hud-top {
+    margin-bottom: 0;
+  }
+}
+
 /* Empty-viewport hint */
 .lv-empty {
   position: fixed;
@@ -1443,6 +1495,8 @@ body.photo-capture .photo-overlay {
   .lv-card {
     left: 16px;
     right: 16px;
+    /* Clear of the bottom control bar. */
+    bottom: 68px;
     width: auto;
   }
 }
@@ -1466,7 +1520,8 @@ body.photo-capture .photo-overlay {
   touch-action: none;
 }
 
-.lv-3d-bar {
+/* Shared control bar for both live views (map and 3D). */
+.lv-bar {
   position: fixed;
   left: 50%;
   bottom: 18px;
@@ -1474,7 +1529,8 @@ body.photo-capture .photo-overlay {
   z-index: 1100;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  max-width: calc(100vw - 16px);
   padding: 8px 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 10px;
@@ -1482,26 +1538,67 @@ body.photo-capture .photo-overlay {
   backdrop-filter: blur(16px);
 }
 
-.lv-3d-back {
+.lv-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 5px 12px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.1);
   color: #f7f7f7;
+  font: inherit;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.lv-3d-back:hover {
+.lv-bar-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.18);
 }
 
-.lv-3d-hint {
+.lv-bar-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Zoom steppers stay square so + and − read as a pair. */
+.lv-bar-icon {
+  justify-content: center;
+  min-width: 34px;
+  padding: 5px 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.lv-bar-hint {
   font-size: 12px;
   color: #aab6c1;
+  white-space: nowrap;
+}
+
+/* The hint is the first thing to go: it is the widest item and the least
+ * useful once the controls themselves are visible. */
+@media (max-width: 900px) {
+  .lv-bar-hint {
+    display: none;
+  }
 }
 
 @media (max-width: 760px) {
-  .lv-3d-hint {
+  .lv-bar {
+    gap: 6px;
+    bottom: 12px;
+    padding: 7px 9px;
+  }
+
+  .lv-bar-btn {
+    padding: 6px 11px;
+  }
+}
+
+/* Narrowest phones: buttons fall back to their icons so the bar still fits. */
+@media (max-width: 420px) {
+  .lv-bar-label {
     display: none;
   }
 }
