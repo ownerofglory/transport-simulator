@@ -1,3 +1,5 @@
+import { isTypingTarget } from './typingTarget';
+
 export type InputCallbacks = {
   onThrottle(held: boolean): void;
   onBrake(held: boolean): void;
@@ -50,6 +52,9 @@ export class InputController {
 
   private keyDown = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') this.callbacks.onPhotoExit();
+    // Never eat keystrokes destined for a text field: 'p', 'w' and 's' are just
+    // letters while the user is typing a station name.
+    if (isTypingTarget(e.target)) return;
     if ((e.key === 'p' || e.key === 'P') && !e.repeat) {
       e.preventDefault();
       this.callbacks.onPhotoToggle();
