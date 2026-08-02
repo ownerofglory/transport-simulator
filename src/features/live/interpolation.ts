@@ -73,8 +73,12 @@ export const SNAP_THRESHOLD_M = 300;
  * Eases `current` toward `target` by a time-based factor (frame-rate independent).
  * `tauSeconds` is the smoothing time constant; larger = slower correction.
  * Snaps outright when the two are more than {@link SNAP_THRESHOLD_M} apart.
+ *
+ * Tau is deliberately of the same order as the correction itself: at 0.4 s even a
+ * routine 60 m poll correction was covered at ~150 m/s, which reads as a jump
+ * rather than motion.
  */
-export function easeTowards(current: LatLon, target: LatLon, dtSeconds: number, tauSeconds = 0.4): LatLon {
+export function easeTowards(current: LatLon, target: LatLon, dtSeconds: number, tauSeconds = 1.2): LatLon {
   if (haversineM(current, target) > SNAP_THRESHOLD_M) return target;
   const alpha = 1 - Math.exp(-dtSeconds / tauSeconds);
   return {

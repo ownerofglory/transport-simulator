@@ -20,7 +20,7 @@ describe('LiveVehicleStore.patchOne', () => {
     const store = new LiveVehicleStore();
     const t0 = 1_000_000;
     store.applySnapshot([veh('a'), veh('b'), veh('c')], t0);
-    expect(store.size).toBe(3);
+    expect(store.trackedSize).toBe(3);
 
     // The 5 s follow poll patches only the followed run, repeatedly. Before the
     // fix this ran a full-snapshot merge and aged out a, b, c after two misses.
@@ -28,7 +28,7 @@ describe('LiveVehicleStore.patchOne', () => {
       store.patchOne(veh('b', { estimatedAt: new Date(t0 + i * 1000).toISOString() }), t0 + i * 1000);
     }
 
-    expect(store.size).toBe(3);
+    expect(store.trackedSize).toBe(3);
     expect(store.get('a')).toBeDefined();
     expect(store.get('c')).toBeDefined();
   });
@@ -39,9 +39,49 @@ describe('LiveVehicleStore snapshot despawn', () => {
     const store = new LiveVehicleStore();
     store.applySnapshot([veh('a'), veh('b')], 0);
     store.applySnapshot([veh('a')], 1000); // b miss 1
-    expect(store.size).toBe(2);
+    expect(store.trackedSize).toBe(2);
     store.applySnapshot([veh('a')], 2000); // b miss 2 -> despawn
     expect(store.get('b')).toBeUndefined();
+  });
+});
+
+describe('LiveVehicleStore seeding', () => {
+  const at = (ms: number) => new Date(ms).toISOString();
+
+  it('does not render a run until a second fix has given it a speed', () => {
+    const store = new LiveVehicleStore();
+    store.applySnapshot([veh('a', { estimatedAt: at(0) })], 0);
+    expect(store.trackedSize).toBe(1);
+    expect(store.size).toBe(0); // tracked, but not drawn yet
+    expect(store.list()).toEqual([]);
+
+    store.applySnapshot([veh('a', { lat: BASE.lat + 0.002, estimatedAt: at(15_000) })], 15_000);
+    expect(store.size).toBe(1);
+    expect(store.get('a')!.speedMps).toBeGreaterThan(0);
+  });
+
+  it('shows a newly seeded run at its latest fix, not a stale first position', () => {
+    // Regression: a one-fix run stood still for a whole poll interval and then
+    // teleported the full distance it had actually travelled.
+    const store = new LiveVehicleStore();
+    store.applySnapshot([veh('a', { estimatedAt: at(0) })], 0);
+    const spawnLat = store.get('a')!.render.lat;
+
+    store.applySnapshot([veh('a', { lat: BASE.lat + 0.005, estimatedAt: at(15_000) })], 15_000);
+    const seeded = store.get('a')!;
+    expect(seeded.render.lat).toBeCloseTo(BASE.lat + 0.005, 6);
+    expect(seeded.render.lat).not.toBeCloseTo(spawnLat, 6);
+  });
+
+  it('keeps easing after seeding instead of snapping every fix', () => {
+    const store = new LiveVehicleStore();
+    store.applySnapshot([veh('a', { estimatedAt: at(0) })], 0);
+    store.applySnapshot([veh('a', { lat: BASE.lat + 0.002, estimatedAt: at(15_000) })], 15_000);
+
+    // A third fix must not re-anchor `render` onto the server position.
+    store.applySnapshot([veh('a', { lat: BASE.lat + 0.004, estimatedAt: at(30_000) })], 30_000);
+    const t = store.get('a')!;
+    expect(t.render.lat).not.toBeCloseTo(t.server.lat, 6);
   });
 });
 
@@ -53,14 +93,27 @@ describe('LiveVehicleStore.upsert speed inference', () => {
     expect(store.get('a')!.speedMps).toBe(0);
   });
 
-  it('rate-limits inferred speed so a single fix cannot spike it', () => {
+  it('caps — but does not rate-limit — the first measurement', () => {
+    // `prevMps` is 0 here because the run had one fix, not because it was standing
+    // still, so the acceleration limit must not apply. It would otherwise starve
+    // the estimate to 2.8 m/s and the run would immediately fall behind.
     const store = new LiveVehicleStore();
     store.upsert(veh('a'), 0);
-    // ~111 m north over 2 s => raw ~55 m/s, but acceleration is capped.
+    // ~111 m north over 2 s => raw ~55 m/s, clamped to the 45 m/s ceiling.
     store.upsert(veh('a', { lat: BASE.lat + 0.001, estimatedAt: new Date(2000).toISOString() }), 2000);
-    const speed = store.get('a')!.speedMps;
-    expect(speed).toBeGreaterThan(0);
-    expect(speed).toBeLessThanOrEqual(1.4 * 2 + 1e-6); // MAX_ACCEL_MPS2 * dt
+    expect(store.get('a')!.speedMps).toBeCloseTo(45, 5);
+  });
+
+  it('rate-limits once a speed is known, so one bad fix cannot spike it', () => {
+    const store = new LiveVehicleStore();
+    store.upsert(veh('a'), 0);
+    // Seed a slow speed: ~11 m north over 2 s ≈ 5.6 m/s.
+    store.upsert(veh('a', { lat: BASE.lat + 0.0001, estimatedAt: new Date(2000).toISOString() }), 2000);
+    const seeded = store.get('a')!.speedMps;
+
+    // Now a 111 m jump over 2 s: acceleration-limited from the known speed.
+    store.upsert(veh('a', { lat: BASE.lat + 0.0011, estimatedAt: new Date(4000).toISOString() }), 4000);
+    expect(store.get('a')!.speedMps).toBeLessThanOrEqual(seeded + 1.4 * 2 + 1e-6);
   });
 
   it('ignores a stale (older) fix instead of rewinding', () => {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { fetchVehicle, fetchVehicles } from './liveApi';
+import { fetchVehicle, fetchVehicles, openVehicleStream } from './liveApi';
 import { LiveVehicleStore } from './LiveVehicleStore';
 import type { LiveMode } from './liveTypes';
 import {
@@ -41,6 +41,14 @@ const FOLLOW_INTERVAL_MS = 5_000;
 const BACKOFF_BASE_MS = 2_000;
 const BACKOFF_CAP_MS = 60_000;
 
+// Newly spawned runs carry no speed and stay unrendered until a second fix (see
+// LiveVehicleStore.seeded). After a wave of spawns — entering Live, or a pan that
+// pulls in a fresh fleet — following up quickly fills the map in seconds instead of
+// a whole city-tier interval. Guarded so it costs at most one extra request per
+// wave: it needs a large unseeded share and never fires on consecutive polls.
+const SEED_POLL_MS = 3_000;
+const SEED_WAVE_RATIO = 0.25;
+
 type Options = {
   enabled: boolean;
   userModes: Set<LiveMode>;
@@ -72,6 +80,7 @@ export function useLiveVehicles({ enabled, userModes, followRunId, at, onFollowE
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const backoffRef = useRef(0);
+  const lastWasSeedPollRef = useRef(false);
   const onFollowEndedRef = useRef(onFollowEnded);
   onFollowEndedRef.current = onFollowEnded;
 
@@ -118,7 +127,11 @@ export function useLiveVehicles({ enabled, userModes, followRunId, at, onFollowE
           lastUpdatedMs: Date.now(),
           error: null
         });
-        scheduleNext(pollIntervalMs(tier), fetchLoop);
+        const unseeded = store.trackedSize - store.size;
+        const seedWave =
+          !lastWasSeedPollRef.current && unseeded > 0 && unseeded >= store.trackedSize * SEED_WAVE_RATIO;
+        lastWasSeedPollRef.current = seedWave;
+        scheduleNext(seedWave ? SEED_POLL_MS : pollIntervalMs(tier), fetchLoop);
       } catch (err) {
         if (controller.signal.aborted || (err as Error)?.name === 'AbortError') return;
         backoffRef.current += 1;
@@ -152,6 +165,7 @@ export function useLiveVehicles({ enabled, userModes, followRunId, at, onFollowE
       clearPoll();
       abortRef.current?.abort();
       store.clear();
+      lastWasSeedPollRef.current = false;
       setSummary(INITIAL_SUMMARY);
       return;
     }
@@ -169,6 +183,21 @@ export function useLiveVehicles({ enabled, userModes, followRunId, at, onFollowE
     if (enabled && visibleRef.current) void doFetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modeKey]);
+
+  // Incremental push updates between polls. The stream is not viewport- or
+  // mode-filtered, so it may only *refresh* runs the poll loop already selected —
+  // spawning from it would bypass the bbox and the user's mode filter and drag the
+  // whole network into the store. `patchOne` touches one run and drops fixes older
+  // than the one held, so a stream event can never rewind a newer poll or per-run
+  // sample, whichever order they arrive in.
+  useEffect(() => {
+    if (!enabled) return;
+    return openVehicleStream({
+      onVehicle: (v) => {
+        if (v.runId && store.get(v.runId)) store.patchOne(v);
+      }
+    });
+  }, [enabled, store]);
 
   // Pause polling while the tab is hidden; refetch once on return (§5.4).
   useEffect(() => {
