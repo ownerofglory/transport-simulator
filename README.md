@@ -1,25 +1,41 @@
-# Stuttgart Transit Simulator
+# Transit Simulator
 
-Free, non-commercial browser prototype for Stuttgart public transport.
+Free, non-commercial browser prototype for public transport simulation, covering ten city/network modules.
 
-The app is now structured so Stuttgart is the first city module rather than a hard-coded one-off. New cities can be added through a city catalog entry, a city definition, and city-specific route manifests while reusing the shared renderer, simulator, HUD, minimap, and route diagram. Transport modes and vehicle families are now defined per city, so another city can expose a different set of modes and map those modes onto different vehicle and guideway behaviors.
+The app started as a Stuttgart-only prototype and is now structured as a multi-city platform: Stuttgart was the first city module rather than a hard-coded one-off. New cities are added through a city catalog entry, a city definition, and city-specific route manifests while reusing the shared renderer, simulator, HUD, minimap, and route diagram. Transport modes and vehicle families are defined per city, so each city can expose a different set of modes and map those modes onto different vehicle and guideway behaviors.
 
-The repository now includes two city modules:
+The repository currently includes ten city modules:
 
-- Stuttgart with Stadtbahn, bus, S-Bahn, Zacke and Seilbahn
-- Ulm with tram lines 1 and 2 plus SWU bus line 5
-- Odessa with tram line 28, trolleybus line 7, and bus line 117
+- **Stuttgart** — Stadtbahn, bus, S-Bahn, Zacke and Seilbahn; also the only city with [live mode](#live-mode) (real-time VVS traffic)
+- **Ulm/Neu-Ulm** — SWU tram lines 1 and 2 plus bus line 5
+- **Odesa** — tram line 28, trolleybus line 7, and bus line 117
+- **Zurich** — VBZ tram, bus, S-Bahn and funicular
+- **Freiburg** — RVF tram, S-Bahn, bus and rail
+- **Lviv** — tram and bus
+- **Mexico City** — metro, tram, rail, Cablebús, trolleybus and bus
+- **Bodensee** — bodo regional ferry, S-Bahn, rail and bus
+- **Baden-Württemberg Rail** — regional and inter-regional trains across the state
+- **Wuppertal** — the Wuppertaler Schwebebahn suspended railway
 
-This first slice uses:
+The app uses:
 
 - **TypeScript + Three.js** for browser rendering
 - **Leaflet** for the live minimap
 - **Go + WebAssembly** for simulator state, station stops, dwell time, speed and braking logic
 - **Vite** as the local dev server and bundler
 
-No Rust is used.
+## Screenshots
+
+| | |
+|---|---|
+| ![Simulator chase view](docs/assets/01_simulator_chase_view.png) Chase-camera view of a Stadtbahn U12 service | ![Simulator passenger view](docs/assets/02_simulator_passenger_view.png) Passenger ride view |
+| ![Simulator tunnel](docs/assets/03_simulator_tunnel.png) Underground Stadtbahn tunnel section | ![Simulator photo mode](docs/assets/04_simulator_photo_mode.png) Photo mode |
+| ![Simulator S-Bahn](docs/assets/05_simulator_s-bahn.png) S-Bahn service | ![Live mode 3D map](docs/assets/06_live_mode_3d_map.png) Live mode, 3D map |
+| ![Live mode 2D top view](docs/assets/07_live_mode_2d_map_top_view.png) Live mode, 2D top-down map | ![Live mode follow view](docs/assets/08_live_mode_follow_view.png) Live mode, follow view |
 
 ## What is included
+
+The list below describes the Stuttgart module, the most detailed and the origin of the shared simulator engine. The other nine cities reuse the same renderer, simulator, HUD, minimap and route diagram with their own GTFS-derived route packages and vehicle models, at varying levels of scenery and vehicle detail.
 
 - 50 generated directional VVS GTFS route packages: 36 Stadtbahn services, central bus lines 40/42/43/44, S1 Herrenberg–Kirchheim (Teck), Zacke line 10, and Seilbahn line 20
 - Active transport tabs and a mode-neutral route domain for Stadtbahn, bus, S-Bahn, Zacke and Seilbahn
@@ -59,6 +75,10 @@ No Rust is used.
 - Spring, summer, autumn and winter visual modes
 - Automatic Stuttgart local-time lighting plus selectable dawn, day, evening and night previews
 - Go/WASM simulation bridge exposed as `window.ssim`
+
+## Live mode
+
+Live mode shows real-time vehicle positions on a 3D or 2D map, sourced from the VVS network's realtime data (see [Realtime API types](#realtime-api-types)). It is currently available for **Stuttgart only**; the other nine city modules offer the offline simulator (passenger ride and driver training) without a live-traffic layer. A city opts into live mode by declaring a `liveTraffic` network in its city definition (`src/cities/stuttgart.ts`), so adding live support for another city means wiring up a realtime data source for that network first.
 
 ## Requirements
 
