@@ -13,7 +13,6 @@ The repository currently includes ten city modules:
 - **Freiburg** — RVF tram, S-Bahn, bus and rail
 - **Lviv** — tram and bus
 - **Mexico City** — metro, tram, rail, Cablebús, trolleybus and bus
-- **Bodensee** — bodo regional ferry, S-Bahn, rail and bus
 - **Baden-Württemberg Rail** — regional and inter-regional trains across the state
 - **Wuppertal** — the Wuppertaler Schwebebahn suspended railway
 
