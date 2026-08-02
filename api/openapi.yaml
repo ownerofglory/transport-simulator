@@ -215,6 +215,24 @@ definitions:
       timeMode:
         type: string
     type: object
+  Station:
+    properties:
+      id:
+        type: string
+      lat:
+        type: number
+      lon:
+        type: number
+      name:
+        type: string
+    type: object
+  StationSearchResponse:
+    properties:
+      stations:
+        items:
+          $ref: '#/definitions/Station'
+        type: array
+    type: object
   VehicleSnapshot:
     properties:
       degraded:
@@ -512,6 +530,27 @@ paths:
       summary: Find nearby locations
       tags:
       - locations
+  /api/v1/stations:
+    get:
+      parameters:
+      - description: Station name or partial name
+        in: query
+        minLength: 2
+        name: query
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/StationSearchResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/respond.ErrorEnvelope'
+      summary: Search stations
+      tags:
+      - stations
   /api/v1/stations/{stationId}/departures:
     get:
       parameters:

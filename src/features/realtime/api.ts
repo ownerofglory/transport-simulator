@@ -5,7 +5,9 @@ import type {
   JourneysResponse,
   LocationsResponse,
   RealtimeLocation,
-  SearchJourneyRequest
+  RealtimeStation,
+  SearchJourneyRequest,
+  StationSearchResponse
 } from './types';
 
 // Base URL of the transit-simulator-backend service. In dev we always call the
@@ -54,6 +56,18 @@ export async function searchLocations(query: string, signal?: AbortSignal): Prom
 export async function nearbyLocations(lat: number, lon: number, radiusM = 700, signal?: AbortSignal): Promise<RealtimeLocation[]> {
   const params = new URLSearchParams({ lat: String(lat), lon: String(lon), radiusM: String(radiusM) });
   return usableLocations(await request<LocationsResponse>(`/locations/nearby?${params}`, { signal }));
+}
+
+/**
+ * Autocomplete *stations* by name. Unlike {@link searchLocations} this never
+ * returns addresses or POIs, so callers always get something with a platform.
+ * The backend requires at least two characters.
+ */
+export async function searchStations(query: string, signal?: AbortSignal): Promise<RealtimeStation[]> {
+  const response = await request<StationSearchResponse>(`/stations?query=${encodeURIComponent(query)}`, { signal });
+  return (response.stations ?? []).filter(
+    (s): s is RealtimeStation => !!s.id && !!s.name && typeof s.lat === 'number' && typeof s.lon === 'number'
+  );
 }
 
 /** Searches journeys between two places (by id and/or coordinates). */
