@@ -1091,6 +1091,116 @@ body.photo-capture .photo-overlay {
   background: rgba(255, 255, 255, 0.16);
 }
 
+/* Station search inside the Live HUD */
+.lv-search {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.lv-search-input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #f2f5f8;
+  font: inherit;
+  font-size: 13px;
+}
+
+.lv-search-input::placeholder {
+  color: #8a97a4;
+}
+
+.lv-search-input:focus {
+  outline: none;
+  border-color: rgba(255, 211, 77, 0.7);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.lv-search-spin {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #ffd34d;
+  border-radius: 50%;
+  animation: lv-search-spin 0.7s linear infinite;
+}
+
+@keyframes lv-search-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lv-search-spin {
+    animation: none;
+  }
+}
+
+.lv-search-list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 1;
+  max-height: 232px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(10, 15, 22, 0.96);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+}
+
+.lv-search-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #dfe6ed;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lv-search-item.on {
+  background: rgba(255, 211, 77, 0.16);
+  color: #ffd34d;
+}
+
+.lv-search-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Stop names repeat across the country — the distance is the disambiguator. */
+.lv-search-dist {
+  margin-left: auto;
+  color: #8a97a4;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lv-search-empty {
+  padding: 7px 9px;
+  color: #93a0ac;
+  font-size: 12px;
+}
+
 .lv-chips {
   display: flex;
   flex-wrap: wrap;

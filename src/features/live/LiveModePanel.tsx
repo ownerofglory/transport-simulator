@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
+import { LiveStationSearch } from './LiveStationSearch';
 import { ALL_LIVE_MODES, modeColor, modeLabel, type LiveMode } from './liveTypes';
 import type { LiveSummary } from './useLiveVehicles';
+import type { LatLon } from './liveProjection';
+import type { RealtimeStation } from '../realtime/types';
 
 // Freshness thresholds (§2.5): amber past ~30 s, red when the snapshot is degraded.
 const STALE_SECONDS = 30;
@@ -13,19 +16,26 @@ function freshnessAgeSeconds(summary: LiveSummary, nowMs: number): number | null
 }
 
 /**
- * Slim Live HUD (concept §2.5): mode filter chips, data freshness, vehicle count,
- * a real-time clock, and the always-visible exit.
+ * Slim Live HUD (concept §2.5): station search, mode filter chips, data freshness,
+ * vehicle count, a real-time clock, and the always-visible exit. Shared by the map
+ * and 3D views so the controls stay in one place across the hand-off.
  */
 export function LiveModePanel({
   summary,
   userModes,
   onToggleMode,
-  onExit
+  onExit,
+  onPickStation,
+  getSearchOrigin
 }: {
   summary: LiveSummary;
   userModes: Set<LiveMode>;
   onToggleMode: (mode: LiveMode) => void;
   onExit: () => void;
+  /** Picking a station flies the 3D camera to it. */
+  onPickStation: (station: RealtimeStation) => void;
+  /** Current view centre, used to rank station hits by distance. */
+  getSearchOrigin?: () => LatLon | null;
 }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -54,6 +64,8 @@ export function LiveModePanel({
           Exit Live
         </button>
       </div>
+
+      <LiveStationSearch onPick={onPickStation} getNear={getSearchOrigin} />
 
       <div className="lv-chips">
         {ALL_LIVE_MODES.map((mode) => {

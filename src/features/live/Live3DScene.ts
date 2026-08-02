@@ -16,7 +16,10 @@ import { PassengerCameraRig } from '../../engine/cameras/PassengerCameraRig';
 import { CabCameraRig } from '../../engine/cameras/CabCameraRig';
 import type { CameraMode, CameraUpdateInput } from '../../world/CameraController';
 import { LiveFollowVehicle } from './LiveFollowVehicle';
+import { LiveStationMarker } from './LiveStationMarker';
+import { advanceFlight, flightDuration, type CameraFlight } from './cameraFlight';
 import { resolveLiveVehicleDefinition } from './liveVehicleDefinition';
+import { isTypingTarget } from '../../app/typingTarget';
 import type { CityDefinition } from '../../cities';
 
 // Body base height above terrain (matches the overview models); dropped into the
@@ -47,6 +50,10 @@ const MAX_PER_MODE = 1024;
 // close (and while riding a tunnel chase) they read as a big coloured blob, so
 // they only draw from a distance.
 const GLOW_MIN_ALTITUDE_M = 150;
+// Orbit distance a station flight settles at: close enough that nearby vehicles
+// upgrade to full models (LiveVehicleModels' altitude gate), wide enough to show
+// the platforms and their surroundings.
+const STATION_FOCUS_DISTANCE_M = 430;
 
 type Live3DOptions = {
   store: LiveVehicleStore;
@@ -86,6 +93,11 @@ export class Live3DScene {
   // Near-field full vehicle models + line labels (LOD upgrade over the blocks).
   private readonly models: LiveVehicleModels;
   private readonly tunnelIndex = new LiveTunnelIndex();
+  // Ground anchor + name plate for the station the user searched for.
+  private readonly stationMarker = new LiveStationMarker();
+  // Non-null while the camera is easing towards a searched station; any manual
+  // camera input cancels it so the user is never fighting the animation.
+  private flight: CameraFlight | null = null;
   private readonly tunnels: LiveTunnelLayer;
   private readonly tracks: LiveTrackLayer;
   // Snaps matched rail vehicles onto their route and moves them along it.
@@ -209,6 +221,7 @@ export class Live3DScene {
     this.tracks = new LiveTrackLayer(this.projection, this.tunnelIndex, (x, z) => this.terrain.heightAt(x, z));
     this.scene.add(this.tracks.group);
     this.trackMotion = new LiveTrackMotion(this.projection, this.tunnelIndex);
+    this.scene.add(this.stationMarker.group);
 
     this.attachControls();
     window.addEventListener('resize', this.onResize);
@@ -222,6 +235,7 @@ export class Live3DScene {
     this.detachControls();
     this.disposeFollowVehicle();
     this.models.dispose();
+    this.stationMarker.dispose();
     this.tunnels.dispose();
     this.tracks.dispose();
     this.streamer.dispose();
@@ -346,6 +360,8 @@ export class Live3DScene {
     );
     // Follow after models are placed so interior cameras read fresh car matrices.
     this.updateFollow(dt);
+    this.advanceStationFlight(dt);
+    this.stationMarker.update((x, z) => this.terrain.heightAt(x, z));
     this.syncVehicles(modeled);
 
     // Keep terrain relief + scenery centered on the camera focus (both no-op
@@ -480,8 +496,10 @@ export class Live3DScene {
 
   private readonly onContextMenu = (e: Event) => e.preventDefault();
 
-  // 'c' cycles the follow view (chase / passenger / driver) while following.
+  // 'c' cycles the follow view (chase / passenger / driver) while following, but
+  // not while the user is typing in the station search.
   private readonly onKeyDown = (e: KeyboardEvent) => {
+    if (isTypingTarget(e.target)) return;
     if (e.key === 'c' || e.key === 'C') {
       if (this.followRunId) this.cycleCameraMode();
     }
@@ -507,7 +525,10 @@ export class Live3DScene {
     this.lastPointer = { x: e.clientX, y: e.clientY };
 
     const orbit = this.dragButton === 2 || e.ctrlKey || e.metaKey;
-    if (Math.hypot(dx, dy) > 0 && this.followRunId) this.opts.onStopFollow();
+    if (Math.hypot(dx, dy) > 0) {
+      this.cancelStationFlight();
+      if (this.followRunId) this.opts.onStopFollow();
+    }
     if (orbit) {
       // Grab-and-spin: dragging right/down swings the view that way.
       this.azimuth -= dx * 0.005;
@@ -526,12 +547,57 @@ export class Live3DScene {
 
   private readonly onWheel = (e: WheelEvent) => {
     e.preventDefault();
+    this.cancelStationFlight();
     if (this.followRunId) this.opts.onStopFollow();
     const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
     this.distance = THREE.MathUtils.clamp(this.distance * factor, MIN_DISTANCE_M, MAX_DISTANCE_M);
     this.cameraDirty = true;
     this.updateCamera();
   };
+
+  /**
+   * Flies the free-orbit camera to a searched station and marks it on the ground.
+   * Any active follow is released first — the camera cannot be locked to a run and
+   * travelling to a station at the same time.
+   */
+  focusStation(station: { name: string; lat: number; lon: number }): void {
+    this.setFollowRunId(null);
+    const p = this.projection.project(station.lat, station.lon);
+    this.stationMarker.show(station.name, p.x, p.z);
+    const travelM = Math.hypot(p.x - this.target.x, p.z - this.target.z);
+    this.flight = {
+      fromX: this.target.x,
+      fromZ: this.target.z,
+      fromY: this.target.y,
+      fromDistance: this.distance,
+      toX: p.x,
+      toZ: p.z,
+      toDistance: STATION_FOCUS_DISTANCE_M,
+      elapsed: 0,
+      duration: flightDuration(travelM)
+    };
+  }
+
+  /** Drops an in-progress station flight the moment the user takes the camera. */
+  private cancelStationFlight(): void {
+    this.flight = null;
+  }
+
+  private advanceStationFlight(dt: number): void {
+    if (!this.flight) return;
+    // Terrain streams in while flying, so the destination ground height is only
+    // known once we get there — sample it every frame rather than at take-off.
+    const groundY = this.terrain.heightAt(this.flight.toX, this.flight.toZ);
+    const sample = advanceFlight(this.flight, dt, groundY);
+    this.target.set(sample.x, sample.y, sample.z);
+    this.distance = THREE.MathUtils.clamp(sample.distance, MIN_DISTANCE_M, MAX_DISTANCE_M);
+    // Looking almost straight down or edge-on hides the station; ease into a
+    // readable pitch as part of the same flight.
+    this.polar = THREE.MathUtils.clamp(this.polar, 0.5, 1.15);
+    this.cameraDirty = true;
+    this.updateCamera();
+    if (sample.done) this.flight = null;
+  }
 
   setFollowRunId(runId: string | null): void {
     if (this.followRunId === runId) return;
@@ -540,6 +606,7 @@ export class Live3DScene {
     this.followFreezeFrames = 0;
     this.followJustStarted = !!runId;
     this.disposeFollowVehicle(); // rebuilt for the new run on the next follow frame
+    if (runId) this.cancelStationFlight(); // a follow owns the camera outright
     if (!runId) {
       this.setUnderground(false);
       this.camera.up.set(0, 1, 0); // clear any interior-camera up-vector for free orbit

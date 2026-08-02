@@ -9,7 +9,8 @@
 import type {
   Departure as WireDeparture,
   Journey as WireJourney,
-  Location as WireLocation
+  Location as WireLocation,
+  Station as WireStation
 } from './generated/api-types';
 
 export type {
@@ -22,7 +23,8 @@ export type {
   SearchJourneyRequest,
   LocationsResponse,
   JourneysResponse,
-  DeparturesResponse
+  DeparturesResponse,
+  StationSearchResponse
 } from './generated/api-types';
 
 // A resolved place always has coordinates and a name once the client keeps it.
@@ -33,3 +35,6 @@ export type Journey = WireJourney & Required<Pick<WireJourney, 'id' | 'legs' | '
 
 // A departure row the UI can key on and label.
 export type Departure = WireDeparture & Required<Pick<WireDeparture, 'id' | 'line' | 'destination'>>;
+
+// A station search hit the UI can key on, label and place on the map.
+export type RealtimeStation = WireStation & Required<Pick<WireStation, 'id' | 'name' | 'lat' | 'lon'>>;

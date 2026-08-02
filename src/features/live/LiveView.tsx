@@ -7,9 +7,11 @@ import { LiveModePanel } from './LiveModePanel';
 import { LiveVehicleCard } from './LiveVehicleCard';
 import { ALL_LIVE_MODES, delayObservedFor, type LiveMode, type LiveVehicle } from './liveTypes';
 import type { LatLon } from './liveProjection';
+import { needsNewOrigin, type StationFocus } from './stationFocus';
 import type { BBox } from './viewport';
 import { useLiveVehicles } from './useLiveVehicles';
 import type { CityDefinition } from '../../cities';
+import type { RealtimeStation } from '../realtime/types';
 
 // The 3D scene pulls in Three.js + the OSM streamer, so it is code-split and
 // loaded only when the user actually zooms into the 3D view.
@@ -60,6 +62,8 @@ export function LiveView({ onExit, city }: { onExit: () => void; city?: CityDefi
   const [origin, setOrigin] = useState<LatLon | null>(null);
   const [returnView, setReturnView] = useState<{ lat: number; lon: number; zoom: number } | undefined>(undefined);
   const focus3DRef = useRef<LatLon | null>(null);
+  const viewCenterRef = useRef<LatLon | null>(null);
+  const [stationFocus, setStationFocus] = useState<StationFocus | null>(null);
 
   const onFollowEnded = useCallback(() => setFollowRunId(null), []);
   const { store, summary, onViewportChange } = useLiveVehicles({
@@ -73,8 +77,10 @@ export function LiveView({ onExit, city }: { onExit: () => void; city?: CityDefi
   const handleMapViewport = useCallback(
     (bbox: BBox, zoom: number) => {
       onViewportChange(bbox, zoom);
+      const center = { lat: (bbox.latMin + bbox.latMax) / 2, lon: (bbox.lonMin + bbox.lonMax) / 2 };
+      viewCenterRef.current = center;
       if (zoom >= ENTER_3D_ZOOM) {
-        setOrigin({ lat: (bbox.latMin + bbox.latMax) / 2, lon: (bbox.lonMin + bbox.lonMax) / 2 });
+        setOrigin(center);
         setSelectedRunId(null);
         setMode('3d');
       }
@@ -86,16 +92,44 @@ export function LiveView({ onExit, city }: { onExit: () => void; city?: CityDefi
   const handle3DViewport = useCallback(
     (bbox: BBox, zoom: number) => {
       onViewportChange(bbox, zoom);
-      focus3DRef.current = { lat: (bbox.latMin + bbox.latMax) / 2, lon: (bbox.lonMin + bbox.lonMax) / 2 };
+      const center = { lat: (bbox.latMin + bbox.latMax) / 2, lon: (bbox.lonMin + bbox.lonMax) / 2 };
+      focus3DRef.current = center;
+      viewCenterRef.current = center;
     },
     [onViewportChange]
   );
 
+  // Read (not watched) by the station search when ranking hits, so the camera
+  // moving several times a second never re-renders the HUD.
+  const getSearchOrigin = useCallback(() => viewCenterRef.current, []);
+
   const backToMap = useCallback(() => {
     const f = focus3DRef.current;
     if (f) setReturnView({ lat: f.lat, lon: f.lon, zoom: RETURN_MAP_ZOOM });
+    // Drop the searched station so re-entering 3D by zooming the map stays where
+    // the user zoomed instead of flying back to an earlier search.
+    setStationFocus(null);
     setMode('map');
   }, []);
+
+  /**
+   * Sends the 3D camera to a searched station. From the map (or from a station
+   * outside the current scene's origin) this rebuilds the 3D world centred on the
+   * station; otherwise the existing camera flies there.
+   */
+  const focusStation = useCallback(
+    (station: RealtimeStation) => {
+      const target = { lat: station.lat, lon: station.lon };
+      // The search owns the camera: release any follow and close the info card.
+      setSelectedRunId(null);
+      setFollowRunId(null);
+      if (mode !== '3d' || needsNewOrigin(origin, target)) setOrigin(target);
+      // A fresh key re-triggers the flight even when the same station is picked twice.
+      setStationFocus({ key: `${station.id}:${Date.now()}`, name: station.name, ...target });
+      setMode('3d');
+    },
+    [mode, origin]
+  );
 
   // Keep the selection card in step with incoming snapshots / follow patches.
   useEffect(() => {
@@ -175,6 +209,9 @@ export function LiveView({ onExit, city }: { onExit: () => void; city?: CityDefi
           onStopFollow={() => setFollowRunId(null)}
           onDepartures={openDepartures}
           onCloseSelection={() => setSelectedRunId(null)}
+          onPickStation={focusStation}
+          getSearchOrigin={getSearchOrigin}
+          stationFocus={stationFocus}
           city={city}
         />
       </Suspense>
@@ -192,7 +229,14 @@ export function LiveView({ onExit, city }: { onExit: () => void; city?: CityDefi
         delayObserved={delayObserved}
         initialView={returnView}
       />
-      <LiveModePanel summary={summary} userModes={userModes} onToggleMode={toggleMode} onExit={onExit} />
+      <LiveModePanel
+        summary={summary}
+        userModes={userModes}
+        onToggleMode={toggleMode}
+        onExit={onExit}
+        onPickStation={focusStation}
+        getSearchOrigin={getSearchOrigin}
+      />
       {emptyHint && <div className="lv-empty">No vehicles in view — zoom out or check the mode filters.</div>}
       {selectedVehicle && (
         <LiveVehicleCard

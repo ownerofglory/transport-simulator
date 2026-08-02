@@ -162,6 +162,17 @@ export interface SearchJourneyRequest {
   timeMode?: string;
 }
 
+export interface Station {
+  id?: string;
+  lat?: number;
+  lon?: number;
+  name?: string;
+}
+
+export interface StationSearchResponse {
+  stations?: Station[];
+}
+
 export interface VehicleSnapshot {
   degraded?: boolean;
   generatedAt?: string;

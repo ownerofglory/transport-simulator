@@ -6,9 +6,11 @@ import type { LiveVehicleStore } from './LiveVehicleStore';
 import type { LatLon } from './liveProjection';
 import type { LiveMode, LiveVehicle } from './liveTypes';
 import type { LiveSummary } from './useLiveVehicles';
+import type { StationFocus } from './stationFocus';
 import type { BBox } from './viewport';
 import type { CameraMode } from '../../world/CameraController';
 import type { CityDefinition } from '../../cities';
+import type { RealtimeStation } from '../realtime/types';
 
 const CAMERA_MODE_LABEL: Record<CameraMode, string> = {
   chase: 'Chase',
@@ -38,6 +40,9 @@ export function Live3DView({
   onStopFollow,
   onDepartures,
   onCloseSelection,
+  onPickStation,
+  getSearchOrigin,
+  stationFocus,
   city
 }: {
   store: LiveVehicleStore;
@@ -57,6 +62,10 @@ export function Live3DView({
   onStopFollow: () => void;
   onDepartures: () => void;
   onCloseSelection: () => void;
+  onPickStation: (station: RealtimeStation) => void;
+  getSearchOrigin?: () => LatLon | null;
+  /** Station the camera should fly to; `key` changes even when re-picking one. */
+  stationFocus: StationFocus | null;
   city?: CityDefinition;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -102,10 +111,24 @@ export function Live3DView({
     sceneRef.current?.setFollowRunId(following && selectedVehicle?.runId ? selectedVehicle.runId : null);
   }, [following, selectedVehicle?.runId]);
 
+  // Fly to the searched station. Declared after the mount effect so a focus that
+  // also changed the origin reaches the freshly built scene, not the disposed one.
+  useEffect(() => {
+    if (!stationFocus) return;
+    sceneRef.current?.focusStation(stationFocus);
+  }, [stationFocus]);
+
   return (
     <div className="lv-3d-root">
       <div ref={containerRef} className="lv-3d-canvas" />
-      <LiveModePanel summary={summary} userModes={userModes} onToggleMode={onToggleMode} onExit={onExitLive} />
+      <LiveModePanel
+        summary={summary}
+        userModes={userModes}
+        onToggleMode={onToggleMode}
+        onExit={onExitLive}
+        onPickStation={onPickStation}
+        getSearchOrigin={getSearchOrigin}
+      />
       <div className="lv-3d-bar">
         <button className="lv-3d-back" onClick={onBackToMap}>
           ↩ Map view
