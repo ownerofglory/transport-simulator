@@ -56,6 +56,14 @@
       "description": "Free, non-commercial simulator for Mexico City public transport.",
       "manifestFile": "/data/mexico-city/route-manifest.json",
       "defaultTransportMode": "metro"
+    },
+    {
+      "id": "vancouver",
+      "name": "Vancouver",
+      "title": "Vancouver SkyTrain Simulator",
+      "description": "Free, non-commercial simulator for the TransLink SkyTrain network.",
+      "manifestFile": "/data/vancouver/route-manifest.json",
+      "defaultTransportMode": "skytrain"
     }
   ]
 }

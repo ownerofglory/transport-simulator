@@ -68,6 +68,31 @@ const presets = {
       }
     ]
   },
+  vancouver: {
+    generatedAt: new Date().toISOString(),
+    sourceUrl: 'https://gtfs-static.translink.ca/gtfs/google_transit.zip',
+    license: 'TransLink Open API terms; static GTFS reused for simulator use.',
+    attribution: 'Contains TransLink SkyTrain route data derived from the official TransLink GTFS feed.',
+    modes: [
+      {
+        mode: 'skytrain',
+        file: 'routes-skytrain.json',
+        speedLimitMps: 22.0, // 80 km/h line speed for the automated guideway.
+        maxPoints: 240,
+        defaultAgency: 'TransLink',
+        defaultColor: '#0033a0',
+        // TransLink leaves route_short_name empty on the rapid transit lines, so
+        // the badge comes from route_long_name with the "Line" suffix dropped.
+        lineLabel: (route) => (route.route_long_name || '').replace(/\s*Line$/i, '').trim(),
+        // Headsigns read "Expo Line To Waterfront"; keep only the terminus.
+        destinationLabel: (headsign) => headsign.replace(/^.*?\bTo\s+/i, '').trim(),
+        // TransLink stop names carry a platform suffix ("Edmonds Station @
+        // Platform 1") that is noise in the HUD and the route schematic.
+        stationLabel: (name) => name.replace(/\s*@\s*Platform\s*\d+\s*$/i, '').replace(/\s+Station$/i, '').trim(),
+        matchRoute: (route) => route.route_type === '1'
+      }
+    ]
+  },
   'baden-wuerttemberg-rail': {
     generatedAt: new Date().toISOString(),
     sourceUrl: 'https://www.nvbw.de/fileadmin/user_upload/service/open_data/fahrplandaten_mit_liniennetz/bwgesamt.zip',
@@ -224,9 +249,10 @@ const routesByMode = new Map(preset.modes.map((mode) => [mode.mode, new Map()]))
 await readZipCsv('routes.txt', (route) => {
   for (const modeConfig of preset.modes) {
     if (!modeConfig.matchRoute(route)) continue;
+    const shortName = modeConfig.lineLabel?.(route) || route.route_short_name || route.route_long_name || route.route_id;
     routesByMode.get(modeConfig.mode).set(route.route_id, {
       routeId: route.route_id,
-      routeShortName: route.route_short_name || route.route_long_name || route.route_id,
+      routeShortName: shortName,
       routeLongName: route.route_long_name || route.route_short_name || route.route_id,
       routeColor: safeHex(route.route_color, modeConfig.defaultColor),
       routeTextColor: safeHex(route.route_text_color, defaultTextColor),
@@ -243,13 +269,15 @@ await readZipCsv('trips.txt', (trip) => {
   for (const [mode, routes] of routesByMode.entries()) {
     const route = routes.get(trip.route_id);
     if (!route) continue;
+    const modeConfig = preset.modes.find((entry) => entry.mode === mode);
+    const headsign = trip.trip_headsign || route.routeLongName;
     tripCandidates.push({
       ...route,
       mode,
       tripId: trip.trip_id,
       shapeId: trip.shape_id,
       directionId: trip.direction_id || '0',
-      destination: trip.trip_headsign || route.routeLongName,
+      destination: modeConfig?.destinationLabel?.(headsign, route) || headsign,
       stopCount: 0
     });
   }
@@ -324,8 +352,9 @@ for (const trip of selectedTrips) {
     .map((stopTime) => {
       const stop = stops.get(stopTime.stopId);
       if (!stop) return null;
+      const modeConfig = preset.modes.find((entry) => entry.mode === trip.mode);
       return {
-        name: stop.name,
+        name: modeConfig?.stationLabel?.(stop.name) || stop.name,
         distanceM: nearestShapeDistance(stop, shape, cumulative),
         scheduledS: secondsSinceMidnight(stopTime.arrival || stopTime.departure) - firstTime,
         lat: stop.lat,

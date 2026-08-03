@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { VectorTile } from '@mapbox/vector-tile';
 import { PNG } from 'pngjs';
 import { PbfReader } from 'pbf';
@@ -13,7 +13,9 @@ const fetchRetries = 4;
 const earthMPerDegLat = 111_320;
 const terrainTiles = new Map();
 const transitTiles = new Map();
-const generatedMirrorPath = join('data/generated', basename(inputPath));
+// Mirror keeps the feed's path under public/, so city-scoped feeds land in
+// data/generated/<city>/ instead of colliding with the root-level Stuttgart ones.
+const generatedMirrorPath = join('data/generated', relative('public/data', inputPath));
 
 const feed = JSON.parse(readFileSync(inputPath, 'utf8'));
 if (!Array.isArray(feed.routes)) {
@@ -51,7 +53,11 @@ for (const route of feed.routes) {
 
   // Include all guided rail and metro modes so tunnel/bridge detection and
   // depth profiling run for metro, tram, and regional rail routes too.
-  const followsRails = ['stadtbahn', 's-bahn', 'metro', 'rail', 'tram'].includes(route.transportMode ?? '');
+  const followsRails = ['stadtbahn', 's-bahn', 'metro', 'rail', 'tram', 'skytrain'].includes(route.transportMode ?? '');
+  // SkyTrain runs on a viaduct wherever it is not in a bored tunnel, so its
+  // elevated sections sit a full guideway height above the street rather than
+  // the ~1.5 m of a conventional rail bridge deck.
+  const bridgeClearanceM = route.transportMode === 'skytrain' ? 7.5 : 1.5;
   const tunnelMask = geoPoints.map((point) => followsRails && nearestTransitKind(point, transitFeaturesByTile) === 'tunnel');
   const bridgeMask = geoPoints.map((point) => followsRails && nearestTransitKind(point, transitFeaturesByTile) === 'bridge');
   closeMaskGaps(tunnelMask, 3);
@@ -64,7 +70,7 @@ for (const route of feed.routes) {
   const trackAbsolute = suspendedGuideway
     ? surfaceSmoothed.map((height) => height + 6.2) // Schwebebahn cars travel several meters above the river/street corridor.
     : surfaceSmoothed.map((height, index) => height - tunnelDepths[index]);
-  if (!suspendedGuideway) flattenBridgeRanges(trackAbsolute, surfaceSmoothed, bridgeMask);
+  if (!suspendedGuideway) flattenBridgeRanges(trackAbsolute, surfaceSmoothed, bridgeMask, bridgeClearanceM);
   const datum = trackAbsolute[0];
 
   route.elevationDatumM = round(datum);
@@ -87,6 +93,7 @@ feed.terrain = {
   generatedAt: new Date().toISOString()
 };
 writeFileSync(inputPath, `${JSON.stringify(feed)}\n`);
+mkdirSync(dirname(generatedMirrorPath), { recursive: true });
 writeFileSync(generatedMirrorPath, `${JSON.stringify(feed, null, 2)}\n`);
 
 async function sampleTerrain(point) {
@@ -209,13 +216,13 @@ function depthProfile(mask, distances, maximumDepth, rampM) {
   return result;
 }
 
-function flattenBridgeRanges(track, surface, mask) {
+function flattenBridgeRanges(track, surface, mask, clearanceM) {
   for (const [start, end] of indexRanges(mask)) {
     const before = Math.max(0, start - 1);
     const after = Math.min(track.length - 1, end + 1);
     for (let i = start; i <= end; i++) {
       const t = (i - before) / Math.max(1, after - before);
-      track[i] = surface[before] + (surface[after] - surface[before]) * t + 1.5;
+      track[i] = surface[before] + (surface[after] - surface[before]) * t + clearanceM;
     }
   }
 }
