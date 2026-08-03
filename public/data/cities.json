@@ -72,6 +72,14 @@
       "description": "Free, non-commercial simulator for the Wuppertaler Schwebebahn suspended railway.",
       "manifestFile": "/data/wuppertal/route-manifest.json",
       "defaultTransportMode": "schwebebahn"
+    },
+    {
+      "id": "vancouver",
+      "name": "Vancouver",
+      "title": "Vancouver SkyTrain Simulator",
+      "description": "Free, non-commercial simulator for the TransLink SkyTrain network.",
+      "manifestFile": "/data/vancouver/route-manifest.json",
+      "defaultTransportMode": "skytrain"
     }
   ]
 }

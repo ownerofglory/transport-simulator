@@ -13,7 +13,8 @@ export const KNOWN_TRANSPORT_MODES = [
   'ferry',
   'rail',
   'trolleybus',
-  'schwebebahn'
+  'schwebebahn',
+  'skytrain'
 ] as const;
 
 const KNOWN_TRANSPORT_MODE_SET = new Set<string>(KNOWN_TRANSPORT_MODES);
@@ -24,7 +25,7 @@ export function isKnownTransportMode(value: string): value is TransportMode {
 }
 
 // Vehicle renderer family used by TransitWorld.
-export type VehicleKind = 'stadtbahn' | 'bus' | 's-bahn' | 'zacke' | 'seilbahn' | 'ferry' | 'schwebebahn';
+export type VehicleKind = 'stadtbahn' | 'bus' | 's-bahn' | 'zacke' | 'seilbahn' | 'ferry' | 'schwebebahn' | 'skytrain';
 
 // Guideway/track behavior used for route rendering and lane offsets.
 export type GuidewayKind = 'stadtbahn' | 'bus' | 's-bahn' | 'zacke' | 'seilbahn' | 'ferry' | 'schwebebahn';

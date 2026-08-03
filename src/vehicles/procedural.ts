@@ -18,6 +18,11 @@ import type { ResolvedVehicleBuildContext, VehicleInstance } from './types';
 
 const DOUBLE_FORMATION_LINES = new Set(['U1', 'U6', 'U7', 'U11', 'U12', 'U19']);
 
+// Rake of the planar SkyTrain cab face, in radians. Must stay in sync with the
+// front ring of makeSkyTrainNose (0.2 m of setback over 2.16 m of height); the
+// window mask and every front-end trim piece parent to a group carrying it.
+const SKYTRAIN_CAB_FRONT_RAKE = Math.atan(0.2 / 2.16);
+
 /**
  * Whether a Stadtbahn line runs a coupled double formation (4 Tango sections
  * instead of 2). Exported so other renderers (e.g. the Live 3D view) build the
@@ -59,6 +64,7 @@ class ProceduralTransitVehicleFactory {
     else if (cityId === 'baden-wuerttemberg-rail' && modeId === 'rail') this.createBwegtRegionalRailVehicle();
     else if (vehicleKind === 'bus') return this.createBusVehicle();
     else if (vehicleKind === 's-bahn') return this.createSBahnVehicle();
+    else if (vehicleKind === 'skytrain') return this.createSkyTrainVehicle();
     else if (vehicleKind === 'zacke') this.createZackeVehicle();
     else if (vehicleKind === 'schwebebahn') this.createSchwebebahnVehicle();
     else if (vehicleKind === 'seilbahn') this.createSeilbahnVehicle();
@@ -1960,6 +1966,310 @@ class ProceduralTransitVehicleFactory {
     return this.createVehicleInstance();
   }
 
+  // TransLink SkyTrain (Bombardier Innovia Metro Mark III): a four-car
+  // walk-through automated train. It is driverless, so the front is a
+  // full-height panoramic window over a standing area rather than a cab, and it
+  // takes power from a track-level rail — there is no pantograph.
+  createSkyTrainVehicle(): VehicleInstance {
+    const white = new THREE.MeshStandardMaterial({ color: 0xf3f5f7, roughness: 0.38, metalness: 0.16 });
+    const blue = new THREE.MeshStandardMaterial({ color: 0x0033a0, roughness: 0.34, metalness: 0.12 });
+    const cyan = new THREE.MeshStandardMaterial({ color: 0x35b3e0, roughness: 0.34, metalness: 0.1 });
+    const black = new THREE.MeshStandardMaterial({ color: 0x13171b, roughness: 0.2, metalness: 0.34 });
+    const silver = new THREE.MeshStandardMaterial({ color: 0xb6bcc1, roughness: 0.44, metalness: 0.34 });
+    const underframe = new THREE.MeshStandardMaterial({ color: 0x24282c, roughness: 0.74, metalness: 0.2 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x8fbcd4, transparent: true, opacity: 0.4, roughness: 0.05, side: THREE.DoubleSide });
+    const floor = new THREE.MeshStandardMaterial({ color: 0x6d7276, roughness: 0.92 });
+    const interior = new THREE.MeshStandardMaterial({ color: 0xe8eaec, roughness: 0.84 });
+    const seat = new THREE.MeshStandardMaterial({ color: 0x1f4fa0, roughness: 0.9 });
+    const metal = new THREE.MeshStandardMaterial({ color: 0xa8adb0, roughness: 0.32, metalness: 0.76 });
+    const displayMat = new THREE.MeshBasicMaterial({
+      map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 700, height: 128, bg: '#0b0e12', fg: '#ffd23a' })
+    });
+    const headlightMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f8, emissive: 0xfff4d6, emissiveIntensity: 0.55, roughness: 0.16 });
+    const tailLampMat = new THREE.MeshStandardMaterial({ color: 0x8e1518, emissive: 0xd42020, emissiveIntensity: 0.35, roughness: 0.24 });
+    this.headLampMaterials.push(headlightMat);
+    this.tailLampMaterials.push(tailLampMat);
+    this.glassMaterial = glass;
+    const interiorDisplayMat = this.context.makeInteriorDisplayMaterial();
+
+    const cabDepth = 1.6;
+    const carLength = 16.6;
+    const halfCar = carLength / 2;
+    // Chords of the rounded roof edge in makeModernTramBody; a single flat strip
+    // would either sink into or float off the curve.
+    const shoulderSegments = [
+      { x: 1.309, y: 3.08, height: 0.26, tilt: 0.316 },
+      { x: 1.224, y: 3.265, height: 0.2, tilt: 0.579 }
+    ];
+
+    const sections = [
+      { center: -25.5, cab: -1 as -1 | 0 | 1 },
+      { center: -8.5, cab: 0 as -1 | 0 | 1 },
+      { center: 8.5, cab: 0 as -1 | 0 | 1 },
+      { center: 25.5, cab: 1 as -1 | 0 | 1 }
+    ];
+
+    for (const section of sections) {
+      const car = new THREE.Group();
+      car.name = `Articulated car SkyTrain Mark III section ${section.center}`;
+      car.userData.centerOffsetM = section.center;
+
+      const bodyLength = section.cab === 0 ? carLength : carLength - cabDepth;
+      const bodyCenterZ = (-section.cab * cabDepth) / 2;
+      const doorCenters = [bodyCenterZ - 5.2, bodyCenterZ, bodyCenterZ + 5.2];
+
+      const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.62, 0.3, bodyLength - 0.1), underframe);
+      skirt.position.set(0, 0.42, bodyCenterZ);
+      car.add(skirt);
+      this.passengerShells.push(skirt);
+
+      const body = new THREE.Mesh(this.makeModernTramBody(2.6, 3.35, bodyLength), white);
+      body.position.z = bodyCenterZ;
+      body.castShadow = true;
+      car.add(body);
+      this.passengerShells.push(body);
+
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(2.28, 0.11, bodyLength - 0.2), silver);
+      roof.position.set(0, 3.36, bodyCenterZ);
+      car.add(roof);
+      this.passengerShells.push(roof);
+
+      for (const side of [-1, 1] as const) {
+        const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.16, bodyLength), black);
+        band.position.set(side * 1.33, 2.42, bodyCenterZ);
+        car.add(band);
+        this.windowBands.push(band);
+
+        for (const segment of shoulderSegments) {
+          const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.06, segment.height, bodyLength), white);
+          shoulder.position.set(side * segment.x, segment.y, bodyCenterZ);
+          shoulder.rotation.z = side * segment.tilt;
+          car.add(shoulder);
+          this.passengerShells.push(shoulder);
+        }
+
+        // TransLink blue skirt band with the light-blue separator above it.
+        const blueBand = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.78, bodyLength), blue);
+        blueBand.position.set(side * 1.315, 0.95, bodyCenterZ);
+        car.add(blueBand);
+        this.passengerShells.push(blueBand);
+
+        const accent = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.07, bodyLength), cyan);
+        accent.position.set(side * 1.318, 1.4, bodyCenterZ);
+        car.add(accent);
+        this.passengerShells.push(accent);
+
+        for (let index = 0; index < doorCenters.length; index++) {
+          const doorZ = doorCenters[index];
+          this.addSlidingVehicleDoor(car, side * 1.348, doorZ, white, glass, black, 1.5, 2.02);
+          for (const edge of [-0.8, 0.8]) {
+            const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.18, 0.09), black);
+            jamb.position.set(side * 1.316, 1.78, doorZ + edge);
+            car.add(jamb);
+            this.passengerShells.push(jamb);
+          }
+          // Long side windows fill the bays between the three door pairs.
+          const nextZ = doorCenters[index + 1];
+          if (nextZ !== undefined) {
+            const pane = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.98, nextZ - doorZ - 1.9), glass);
+            pane.position.set(side * 1.348, 2.42, (doorZ + nextZ) / 2);
+            car.add(pane);
+          }
+        }
+        // End bays outside the first and last doors.
+        for (const end of [-1, 1] as const) {
+          const outer = bodyCenterZ + end * (bodyLength / 2 - 0.2);
+          const inner = doorCenters[end < 0 ? 0 : doorCenters.length - 1] + end * 0.95;
+          if (Math.abs(outer - inner) < 0.7) continue;
+          const pane = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.98, Math.abs(outer - inner)), glass);
+          pane.position.set(side * 1.348, 2.42, (outer + inner) / 2);
+          car.add(pane);
+        }
+      }
+
+      const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(2.32, 0.08, carLength - 0.26), floor);
+      floorMesh.position.y = 0.98;
+      car.add(floorMesh);
+      const ceilingMesh = new THREE.Mesh(new THREE.BoxGeometry(2.28, 0.08, carLength - 0.34), interior);
+      ceilingMesh.position.y = 3.12;
+      car.add(ceilingMesh);
+      this.addOpaqueTransitInterior(car, carLength - 0.34, 1.18, interior, () => doorCenters);
+      this.addSkyTrainInterior(car, bodyCenterZ, bodyLength, doorCenters, seat, metal, interior);
+      this.addCabinLight(car, 3.0, -3.6);
+      this.addCabinLight(car, 3.0, 3.6);
+
+      if (section.cab === 0) {
+        const interiorDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.4), interiorDisplayMat);
+        interiorDisplay.position.set(0, 2.94, 0);
+        interiorDisplay.rotation.y = Math.PI;
+        interiorDisplay.renderOrder = 18;
+        car.add(interiorDisplay);
+      } else {
+        const cab = new THREE.Group();
+        cab.position.z = section.cab * (halfCar - cabDepth);
+        if (section.cab < 0) cab.rotation.y = Math.PI;
+        car.add(cab);
+
+        // Opaque nose bodywork is a passenger shell so it clears in both interior
+        // views; only the glazing stays a cab shell.
+        const nose = new THREE.Mesh(this.makeSkyTrainNose(), white);
+        nose.castShadow = true;
+        cab.add(nose);
+        this.passengerShells.push(nose);
+
+        const cabRoof = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.11, 1.1), silver);
+        cabRoof.position.set(0, 3.35, 0.42);
+        cabRoof.rotation.x = 0.12;
+        cab.add(cabRoof);
+        this.passengerShells.push(cabRoof);
+
+        // Front-end trim mounts to the planar cab face (see SKYTRAIN_CAB_FRONT_RAKE).
+        const front = new THREE.Group();
+        front.position.set(0, 1.904, 1.51);
+        front.rotation.x = -SKYTRAIN_CAB_FRONT_RAKE;
+        cab.add(front);
+
+        const addFrontTrim = (mesh: THREE.Mesh, x: number, y: number, z: number): THREE.Mesh => {
+          mesh.position.set(x, y, z);
+          front.add(mesh);
+          this.passengerShells.push(mesh);
+          return mesh;
+        };
+
+        addFrontTrim(new THREE.Mesh(this.makeSkyTrainWindowMask(), black), 0, 0.22, 0);
+
+        // The panoramic window reaches down to standing height — SkyTrain's
+        // front-row view is the point of a driverless train.
+        const windscreenMaterial = glass.clone();
+        windscreenMaterial.depthWrite = false;
+        const windscreen = new THREE.Mesh(this.makeSkyTrainWindscreen(), windscreenMaterial);
+        windscreen.position.set(0, 0.14, 0.04);
+        windscreen.renderOrder = 10;
+        front.add(windscreen);
+        this.cabShells.push(windscreen);
+
+        const routeDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.24), displayMat);
+        routeDisplay.position.set(0, 0.92, 0.09);
+        routeDisplay.renderOrder = 30;
+        front.add(routeDisplay);
+        this.cabDisplays.push(routeDisplay);
+
+        addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.62, 0.05), blue), 0, -1.08, 0.03);
+        addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(2.32, 0.07, 0.05), cyan), 0, -0.74, 0.03);
+        addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.16, 0.14), underframe), 0, -1.44, 0.05);
+
+        for (const x of [-0.88, 0.88]) {
+          addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.18, 0.06), black), x, -0.86, 0.03);
+          addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.09, 0.05), headlightMat), x, -0.83, 0.07);
+          addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.06, 0.05), tailLampMat), x, -0.93, 0.07);
+        }
+
+        const roundel = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.86, 0.2),
+          new THREE.MeshBasicMaterial({
+            map: makeLabelTexture('SkyTrain', { width: 384, height: 96, bg: '#0033a0', fg: '#ffffff' }),
+            side: THREE.DoubleSide
+          })
+        );
+        addFrontTrim(roundel, 0, -1.12, 0.08);
+      }
+
+      this.cars.push(car);
+      this.root.add(car);
+    }
+
+    // Open walk-through gangways: full-height bellows over the 0.4 m car gaps.
+    for (const z of [-17, 0, 17]) {
+      const bellows = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2.66, 0.52), black);
+      bellows.position.set(0, 1.96, z);
+      this.root.add(bellows);
+      this.passengerShells.push(bellows);
+    }
+    for (const center of [-25.5, -8.5, 8.5, 25.5]) {
+      for (const offset of [-5.2, 5.2]) {
+        const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.24, 0.36, 1.9), underframe);
+        bogie.position.set(0, 0.42, center + offset);
+        this.root.add(bogie);
+        // Linear induction motor plate between the running rails: SkyTrain has no
+        // traction motors in the axles and no pantograph on the roof.
+        const linearMotor = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 2.5), silver);
+        linearMotor.position.set(0, 0.3, center + offset);
+        this.root.add(linearMotor);
+      }
+      const collectorShoe = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 1.4), metal);
+      collectorShoe.position.set(1.2, 0.52, center);
+      this.root.add(collectorShoe);
+      for (const z of [center - 4.2, center + 4.2]) {
+        const roofHvac = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.24, 3.2), silver);
+        roofHvac.position.set(0, 3.5, z);
+        this.root.add(roofHvac);
+      }
+    }
+    this.addExteriorLightThrow(33.8, 1.5);
+    this.trainHalfLengthM = 33.8;
+    return this.createVehicleInstance();
+  }
+
+  // Perimeter bench seating, stanchions and overhead rails: SkyTrain seats along
+  // the walls to leave the aisle clear, so the interior is mostly standing room.
+  private addSkyTrainInterior(
+    car: THREE.Group,
+    bodyCenterZ: number,
+    bodyLength: number,
+    doorCenters: number[],
+    seatMaterial: THREE.Material,
+    metalMaterial: THREE.Material,
+    trimMaterial: THREE.Material
+  ): void {
+    const bayEdges = [bodyCenterZ - bodyLength / 2 + 0.4, ...doorCenters, bodyCenterZ + bodyLength / 2 - 0.4];
+    for (let index = 0; index < bayEdges.length - 1; index++) {
+      const start = bayEdges[index] + (index === 0 ? 0.1 : 0.95);
+      const end = bayEdges[index + 1] - (index === bayEdges.length - 2 ? 0.1 : 0.95);
+      const length = end - start;
+      if (length < 0.6) continue;
+      for (const side of [-1, 1] as const) {
+        const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.11, length), seatMaterial);
+        cushion.position.set(side * 0.92, 1.29, (start + end) / 2);
+        car.add(cushion);
+        const back = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.56, length), seatMaterial);
+        back.position.set(side * 1.13, 1.6, (start + end) / 2);
+        car.add(back);
+        const armrest = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, length, 8), metalMaterial);
+        armrest.rotation.x = Math.PI / 2;
+        armrest.position.set(side * 0.7, 1.32, (start + end) / 2);
+        car.add(armrest);
+      }
+    }
+
+    for (const doorZ of doorCenters) {
+      for (const x of [-0.62, 0.62]) {
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 1.86, 10), metalMaterial);
+        pole.position.set(x, 1.97, doorZ);
+        car.add(pole);
+      }
+    }
+    for (const x of [-0.66, 0.66]) {
+      const grabRail = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, bodyLength - 0.6, 8), metalMaterial);
+      grabRail.rotation.x = Math.PI / 2;
+      grabRail.position.set(x, 2.88, bodyCenterZ);
+      car.add(grabRail);
+    }
+    const lightMaterial = new THREE.MeshStandardMaterial({
+      color: 0xf8fbfd,
+      emissive: 0xe6f1f8,
+      emissiveIntensity: 1.6,
+      roughness: 0.32
+    });
+    for (const x of [-0.78, 0.78]) {
+      const lightStrip = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.025, bodyLength - 0.5), lightMaterial);
+      lightStrip.position.set(x, 3.07, bodyCenterZ);
+      car.add(lightStrip);
+    }
+    const threshold = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.02, 0.14), trimMaterial);
+    threshold.position.set(0, 1.03, bodyCenterZ);
+    car.add(threshold);
+  }
+
   createStadtbahnVehicle(): VehicleInstance {
     const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffdf00, roughness: 0.52, metalness: 0.05 });
     const blackMat = new THREE.MeshStandardMaterial({ color: 0x17232b, roughness: 0.38 });
@@ -2665,6 +2975,45 @@ class ProceduralTransitVehicleFactory {
     shape.quadraticCurveTo(0.8, 0.18, 0.56, 0.3);
     shape.quadraticCurveTo(0, 0.4, -0.56, 0.3);
     shape.quadraticCurveTo(-0.8, 0.18, -0.78, -0.5);
+    shape.closePath();
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelSize: 0.018, bevelThickness: 0.014, bevelSegments: 2, curveSegments: 10 });
+    geometry.translate(0, 0, -0.025);
+    return geometry;
+  }
+
+  // SkyTrain Mark III nose: near-full-width and only lightly tapered, with the
+  // front ring's bottom/shoulder/roof collinear so the face is one plane
+  // (SKYTRAIN_CAB_FRONT_RAKE) that the window mask and trim mount flush onto.
+  private makeSkyTrainNose(): THREE.BufferGeometry {
+    return this.makeTaperedTramCab([
+      { zBottom: -0.12, zShoulder: -0.12, zTop: -0.12, bottom: 0.5, shoulder: 2.9, top: 3.36, bottomHalf: 1.31, half: 1.31, roofHalf: 1.12 },
+      { zBottom: 0.7, zShoulder: 0.66, zTop: 0.6, bottom: 0.48, shoulder: 2.85, top: 3.3, bottomHalf: 1.3, half: 1.29, roofHalf: 1.09 },
+      { zBottom: 1.3, zShoulder: 1.16, zTop: 1.08, bottom: 0.46, shoulder: 2.76, top: 3.18, bottomHalf: 1.27, half: 1.25, roofHalf: 1.03 },
+      { zBottom: 1.6, zShoulder: 1.4, zTop: 1.36, bottom: 0.5, shoulder: 2.66, top: 3.06, bottomHalf: 1.23, half: 1.21, roofHalf: 0.97 }
+    ]);
+  }
+
+  private makeSkyTrainWindowMask(): THREE.ExtrudeGeometry {
+    const shape = new THREE.Shape();
+    shape.moveTo(-1.14, -0.84);
+    shape.lineTo(-1.16, 0.62);
+    shape.quadraticCurveTo(-1.14, 0.98, -0.88, 1.06);
+    shape.lineTo(0.88, 1.06);
+    shape.quadraticCurveTo(1.14, 0.98, 1.16, 0.62);
+    shape.lineTo(1.14, -0.84);
+    shape.quadraticCurveTo(0, -1.0, -1.14, -0.84);
+    shape.closePath();
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.07, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.026, bevelSegments: 3, curveSegments: 10 });
+    geometry.translate(0, 0, -0.035);
+    return geometry;
+  }
+
+  private makeSkyTrainWindscreen(): THREE.ExtrudeGeometry {
+    const shape = new THREE.Shape();
+    shape.moveTo(-1.0, -0.68);
+    shape.quadraticCurveTo(0, -0.8, 1.0, -0.68);
+    shape.lineTo(1.02, 0.62);
+    shape.quadraticCurveTo(0, 0.74, -1.02, 0.62);
     shape.closePath();
     const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelSize: 0.018, bevelThickness: 0.014, bevelSegments: 2, curveSegments: 10 });
     geometry.translate(0, 0, -0.025);

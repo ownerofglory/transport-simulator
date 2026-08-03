@@ -18,10 +18,14 @@ import stuttgartDt8Tango from './configs/stuttgart-dt8-tango.json';
 // touching the procedural code path.
 export const vehicleRegistry = new VehicleRegistry();
 
-for (const kind of ['stadtbahn', 'bus', 's-bahn', 'zacke', 'seilbahn', 'ferry', 'schwebebahn'] as const) {
+for (const kind of ['stadtbahn', 'bus', 's-bahn', 'zacke', 'seilbahn', 'ferry', 'schwebebahn', 'skytrain'] as const) {
   vehicleRegistry.registerKindBuilder(kind, buildProceduralTransitVehicle);
 }
 vehicleRegistry.setFinalFallback(createStadtbahnVehicle);
+
+// SkyTrain degrades to the S-Bahn design if its own builder is ever unregistered:
+// both are wide, multi-car, standard-gauge metro stock on the same guideway.
+vehicleRegistry.registerGenericKindBuilder('skytrain', (context) => buildSBahnVehicle(defaultSBahnBlueprint, context));
 
 // The bus kind renders from a declarative bus blueprint (see blueprint/bus/).
 // Registering the default config by id also lets routes/cities opt into it
