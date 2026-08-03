@@ -18,6 +18,11 @@ import type { ResolvedVehicleBuildContext, VehicleInstance } from './types';
 
 const DOUBLE_FORMATION_LINES = new Set(['U1', 'U6', 'U7', 'U11', 'U12', 'U19']);
 
+// Rake of the planar Odessa cab face, in radians. Must stay in sync with the
+// front ring of makeOdessaCabNose (0.25 m of setback over 2.0 m of height);
+// every front-end trim piece is parented to a group carrying this rotation.
+const ODESSA_CAB_FRONT_RAKE = Math.atan(0.125);
+
 /**
  * Whether a Stadtbahn line runs a coupled double formation (4 Tango sections
  * instead of 2). Exported so other renderers (e.g. the Live 3D view) build the
@@ -1406,23 +1411,42 @@ class ProceduralTransitVehicleFactory {
     return this.createVehicleInstance();
   }
 
+  // Tatra-Yug K-1M6 "Odissey MAX": three low-floor modules in the Odesa city
+  // livery — yellow shoulder band, white waist, red lower body — with a black
+  // wraparound cab mask and a yellow front end.
   createOdessaTramVehicle(): VehicleInstance {
-    const white = new THREE.MeshStandardMaterial({ color: 0xf4f4f2, roughness: 0.46, metalness: 0.14 });
-    const black = new THREE.MeshStandardMaterial({ color: 0x15191d, roughness: 0.18, metalness: 0.34 });
-    const yellow = new THREE.MeshStandardMaterial({ color: 0xf0c31b, roughness: 0.42, metalness: 0.08 });
-    const red = new THREE.MeshStandardMaterial({ color: 0xc92f2f, roughness: 0.42, metalness: 0.06 });
-    const roofGrey = new THREE.MeshStandardMaterial({ color: 0xa8adb0, roughness: 0.58, metalness: 0.1 });
-    const glass = new THREE.MeshStandardMaterial({ color: 0x98c4d7, transparent: true, opacity: 0.42, roughness: 0.05, side: THREE.DoubleSide });
+    const white = new THREE.MeshStandardMaterial({ color: 0xf6f5f1, roughness: 0.4, metalness: 0.12 });
+    const yellow = new THREE.MeshStandardMaterial({ color: 0xf5c518, roughness: 0.34, metalness: 0.1 });
+    const red = new THREE.MeshStandardMaterial({ color: 0xd9262c, roughness: 0.36, metalness: 0.06 });
+    const black = new THREE.MeshStandardMaterial({ color: 0x14181c, roughness: 0.2, metalness: 0.34 });
+    const underframe = new THREE.MeshStandardMaterial({ color: 0x262a2e, roughness: 0.74, metalness: 0.18 });
+    const roofGrey = new THREE.MeshStandardMaterial({ color: 0xacb1b4, roughness: 0.58, metalness: 0.12 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x7fa8bd, transparent: true, opacity: 0.4, roughness: 0.05, side: THREE.DoubleSide });
     const floor = new THREE.MeshStandardMaterial({ color: 0x767a7e, roughness: 0.92 });
     const interior = new THREE.MeshStandardMaterial({ color: 0xe0e1dc, roughness: 0.84 });
     const seat = new THREE.MeshStandardMaterial({ color: 0x355d74, roughness: 0.88 });
     const metal = new THREE.MeshStandardMaterial({ color: 0x93989a, roughness: 0.36, metalness: 0.74 });
+    // Front-facing only: with the cab bodywork hidden in passenger view the
+    // destination film would otherwise read back-to-front from inside.
     const displayMat = new THREE.MeshBasicMaterial({
-      map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 700, height: 128, bg: '#101216', fg: '#ffb300' }),
-      side: THREE.DoubleSide
+      map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 700, height: 128, bg: '#101216', fg: '#ffb300' })
     });
+    const headlightMat = new THREE.MeshStandardMaterial({ color: 0xf2f4f6, emissive: 0xfff2ca, emissiveIntensity: 0.55, roughness: 0.16 });
+    const tailLampMat = new THREE.MeshStandardMaterial({ color: 0x8e1518, emissive: 0xd42020, emissiveIntensity: 0.35, roughness: 0.24 });
+    this.headLampMaterials.push(headlightMat);
+    this.tailLampMaterials.push(tailLampMat);
     this.glassMaterial = glass;
     const interiorDisplayMat = this.context.makeInteriorDisplayMaterial();
+
+    // The yellow shoulder band is two chords rather than one, because a single
+    // flat strip either sinks into or floats off the rounded roof edge of
+    // makeModernTramBody. Each entry is a chord of that curve: offset, height
+    // and tilt matching the tangent there.
+    const shoulderSegments = [
+      { x: 1.184, y: 2.93, height: 0.24, tilt: 0.316 },
+      { x: 1.099, y: 3.115, height: 0.19, tilt: 0.579 }
+    ];
+    const cabDepth = 1.9;
 
     const sections = [
       { center: -8.7, length: 8.4, cab: -1 as -1 | 0 | 1 },
@@ -1432,53 +1456,102 @@ class ProceduralTransitVehicleFactory {
 
     for (const section of sections) {
       const car = new THREE.Group();
-      car.name = `Articulated car Odessa K1T306 section ${section.center}`;
+      car.name = `Articulated car Odessa K-1M6 section ${section.center}`;
       car.userData.centerOffsetM = section.center;
-      const lowerSkirt = new THREE.Mesh(new THREE.BoxGeometry(2.48, 0.34, section.length - 0.08), red);
-      lowerSkirt.position.y = 0.56;
-      car.add(lowerSkirt);
-      this.passengerShells.push(lowerSkirt);
-      const sideBody = new THREE.Mesh(new THREE.BoxGeometry(2.38, 2.52, section.length), white);
-      sideBody.position.y = 1.74;
-      sideBody.castShadow = true;
-      car.add(sideBody);
-      this.passengerShells.push(sideBody);
-      const roof = new THREE.Mesh(new THREE.BoxGeometry(2.08, 0.2, section.length - 0.12), roofGrey);
-      roof.position.y = 3.08;
+
+      const bodyLength = section.cab === 0 ? section.length : section.length - cabDepth;
+      const bodyCenterZ = (-section.cab * cabDepth) / 2;
+      // Doors sit toward the articulation on the cab modules and either side of
+      // the centre on the middle module.
+      const doorCenters = section.cab === 0 ? [-1.6, 1.6] : [section.cab < 0 ? 1.7 : -1.7];
+
+      const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.42, 0.3, bodyLength - 0.1), underframe);
+      skirt.position.set(0, 0.42, bodyCenterZ);
+      car.add(skirt);
+      this.passengerShells.push(skirt);
+
+      const body = new THREE.Mesh(this.makeModernTramBody(2.4, 3.2, bodyLength), white);
+      body.position.z = bodyCenterZ;
+      body.castShadow = true;
+      car.add(body);
+      this.passengerShells.push(body);
+
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.11, bodyLength - 0.2), roofGrey);
+      roof.position.set(0, 3.21, bodyCenterZ);
       car.add(roof);
       this.passengerShells.push(roof);
 
       for (const side of [-1, 1] as const) {
-        const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.12, section.length - 0.2), black);
-        band.position.set(side * 1.23, 2.26, 0);
+        const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.1, bodyLength), black);
+        band.position.set(side * 1.23, 2.32, bodyCenterZ);
         car.add(band);
         this.windowBands.push(band);
 
-        for (const z of section.cab === 0 ? [-1.65, 0, 1.65] : [-2.15, 1.7]) {
-          const window = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.92, 1.18), glass);
-          window.position.set(side * 1.245, 2.26, z);
-          car.add(window);
+        // Yellow shoulder band above the glazing, following the roof radius.
+        for (const segment of shoulderSegments) {
+          const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.06, segment.height, bodyLength), yellow);
+          shoulder.position.set(side * segment.x, segment.y, bodyCenterZ);
+          shoulder.rotation.z = side * segment.tilt;
+          car.add(shoulder);
+          this.passengerShells.push(shoulder);
         }
 
-        const doorCenters = section.cab === 0 ? [-1.6, 1.6] : [section.cab < 0 ? 1.7 : -1.7];
+        const redBand = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.72, bodyLength), red);
+        redBand.position.set(side * 1.215, 0.92, bodyCenterZ);
+        car.add(redBand);
+        this.passengerShells.push(redBand);
+
+        const pinstripe = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.05, bodyLength), yellow);
+        pinstripe.position.set(side * 1.218, 1.33, bodyCenterZ);
+        car.add(pinstripe);
+        this.passengerShells.push(pinstripe);
+
+        const windows =
+          section.cab === 0
+            ? [
+                { z: 0, length: 1.5 },
+                { z: -3.0, length: 0.86 },
+                { z: 3.0, length: 0.86 }
+              ]
+            : [
+                { z: bodyCenterZ - section.cab * 1.62, length: 1.44 },
+                { z: bodyCenterZ - section.cab * 2.86, length: 0.9 },
+                { z: bodyCenterZ + section.cab * 1.14, length: 1.28 }
+              ];
+        for (const window of windows) {
+          const pane = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.94, window.length), glass);
+          pane.position.set(side * 1.248, 2.32, window.z);
+          car.add(pane);
+        }
+
         for (const doorZ of doorCenters) {
-          this.addSlidingVehicleDoor(car, side * 1.245, doorZ, yellow, glass, black, 1.62, 1.95);
-          const yellowFrame = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.1, 1.78), yellow);
-          yellowFrame.position.set(side * 1.215, 1.74, doorZ);
-          car.add(yellowFrame);
+          this.addSlidingVehicleDoor(car, side * 1.248, doorZ, yellow, glass, black, 1.62, 1.98);
+          // Recessed black surround so the yellow leaves read as doors from a
+          // distance instead of merging into the shoulder band.
+          for (const edge of [-0.86, 0.86]) {
+            const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.14, 0.09), black);
+            jamb.position.set(side * 1.216, 1.76, doorZ + edge);
+            car.add(jamb);
+            this.passengerShells.push(jamb);
+          }
+          const lintel = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.12, 1.81), black);
+          lintel.position.set(side * 1.216, 2.85, doorZ);
+          car.add(lintel);
+          this.passengerShells.push(lintel);
 
           if (side < 0) {
             const accessibility = new THREE.Mesh(
-              new THREE.PlaneGeometry(0.48, 0.2),
+              new THREE.PlaneGeometry(0.36, 0.2),
               new THREE.MeshBasicMaterial({
-                map: makeLabelTexture('♿  P', { width: 256, height: 96, bg: '#1d4e89', fg: '#ffffff' }),
+                map: makeLabelTexture('♿', { width: 192, height: 96, bg: '#1d4e89', fg: '#ffffff' }),
                 side: THREE.DoubleSide,
                 transparent: true
               })
             );
-            accessibility.position.set(side * 1.14, 1.02, doorZ);
+            accessibility.position.set(side * 1.26, 1.06, doorZ + 0.98);
             accessibility.rotation.y = Math.PI / 2;
             car.add(accessibility);
+            this.passengerShells.push(accessibility);
           }
         }
       }
@@ -1489,10 +1562,7 @@ class ProceduralTransitVehicleFactory {
       const ceilingMesh = new THREE.Mesh(new THREE.BoxGeometry(2.08, 0.08, section.length - 0.34), interior);
       ceilingMesh.position.y = 2.96;
       car.add(ceilingMesh);
-      this.addOpaqueTransitInterior(car, section.length - 0.34, 1.08, interior, () => {
-        if (section.cab === 0) return [-1.6, 1.6];
-        return [section.cab < 0 ? 1.7 : -1.7];
-      });
+      this.addOpaqueTransitInterior(car, section.length - 0.34, 1.08, interior, () => doorCenters);
 
       for (const z of section.cab === 0 ? [-2.2, 0, 2.2] : [-2.0, 2.0]) {
         for (const x of [-0.78, 0.78]) {
@@ -1509,55 +1579,92 @@ class ProceduralTransitVehicleFactory {
         pole.position.set(0, 1.94, z);
         car.add(pole);
       }
+      this.addCabinLight(car, 2.86);
 
       if (section.cab !== 0) {
-        const cabDir = section.cab;
-        const nose = this.makeCabNose(yellow);
-        nose.scale.set(1.04, 1.02, 0.82);
-        nose.position.set(0, 1.82, cabDir * (section.length / 2 - 0.1));
-        if (cabDir > 0) nose.rotation.y = Math.PI;
-        car.add(nose);
-        this.cabShells.push(nose);
-        const face = new THREE.Mesh(new THREE.BoxGeometry(2.08, 1.96, 0.12), black);
-        face.position.set(0, 2.1, cabDir * (section.length / 2 + 0.12));
-        car.add(face);
-        this.cabShells.push(face);
-        const windscreen = new THREE.Mesh(new THREE.BoxGeometry(1.72, 1.08, 0.08), glass);
-        windscreen.position.set(0, 2.46, cabDir * (section.length / 2 + 0.18));
-        windscreen.rotation.x = cabDir * -0.2;
-        car.add(windscreen);
-        const routeDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.44, 0.32), displayMat);
-        routeDisplay.position.set(0, 3.02, cabDir * (section.length / 2 + 0.21));
-        if (cabDir < 0) routeDisplay.rotation.y = Math.PI;
-        routeDisplay.renderOrder = 20;
-        car.add(routeDisplay);
+        const cab = new THREE.Group();
+        cab.position.z = section.cab * (section.length / 2 - cabDepth);
+        if (section.cab < 0) cab.rotation.y = Math.PI;
+        car.add(cab);
+
+        // The opaque cab bodywork is a passenger shell, not a cab shell: it has
+        // to disappear in passenger view too, or the forward view from the front
+        // module is a solid wall. Only the windscreen stays behind as a cab
+        // shell, so it is there for passengers and gone for the driver.
+        const nose = new THREE.Mesh(this.makeOdessaCabNose(), yellow);
+        nose.castShadow = true;
+        cab.add(nose);
+        this.passengerShells.push(nose);
+
+        // Carries the grey roof cap over the sloping cab top; without it the
+        // cap's cut end is visible above the nose from ahead.
+        const cabRoof = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.11, 1.2), roofGrey);
+        cabRoof.position.set(0, 3.2, 0.45);
+        cabRoof.rotation.x = 0.109;
+        cab.add(cabRoof);
+        this.passengerShells.push(cabRoof);
+
+        // Everything on the front end mounts to this group, which lies on the
+        // planar cab face, so trim stays flush no matter how the rake changes.
+        const front = new THREE.Group();
+        front.position.set(0, 1.725, 1.837);
+        front.rotation.x = -ODESSA_CAB_FRONT_RAKE;
+        cab.add(front);
+
+        const addFrontTrim = (mesh: THREE.Mesh, x: number, y: number, z: number): THREE.Mesh => {
+          mesh.position.set(x, y, z);
+          front.add(mesh);
+          this.passengerShells.push(mesh);
+          return mesh;
+        };
+
+        // Black wraparound mask carrying the windscreen and destination film.
+        addFrontTrim(new THREE.Mesh(this.makeOdessaCabMask(), black), 0, 0.44, 0);
+
+        const windscreenMaterial = glass.clone();
+        windscreenMaterial.depthWrite = false;
+        const windscreen = new THREE.Mesh(this.makeOdessaWindscreen(), windscreenMaterial);
+        windscreen.position.set(0, 0.36, 0.04);
+        windscreen.renderOrder = 10;
+        front.add(windscreen);
+        this.cabShells.push(windscreen);
+
+        const routeDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.42, 0.26), displayMat);
+        routeDisplay.position.set(0, 0.97, 0.09);
+        routeDisplay.renderOrder = 30;
+        front.add(routeDisplay);
         this.cabDisplays.push(routeDisplay);
+
+        // Lamp clusters, city crest and fleet plate sit on the yellow apron
+        // below the mask; the red valance and its white separator close it off.
+        for (const x of [-0.8, 0.8]) {
+          addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.2, 0.06), black), x, -0.58, 0.03);
+          addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.09, 0.05), headlightMat), x, -0.54, 0.07);
+          addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.06, 0.05), tailLampMat), x, -0.64, 0.07);
+        }
+
+        addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.06, 0.05), white), 0, -0.86, 0.03);
+        addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(1.88, 0.3, 0.05), red), 0, -1.04, 0.03);
+        addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.16, 0.12), yellow), 0, -1.26, 0.04);
+        addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.2, 0.34), underframe), 0, -1.44, -0.06);
+
         const crest = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.32, 0.32),
+          new THREE.PlaneGeometry(0.26, 0.26),
           new THREE.MeshBasicMaterial({
             map: makeLabelTexture('⚓', { width: 128, height: 128, bg: '#0d2f6d', fg: '#f3d04a' }),
             side: THREE.DoubleSide,
             transparent: true
           })
         );
-        crest.position.set(-0.48, 1.36, cabDir * (section.length / 2 + 0.2));
-        if (cabDir < 0) crest.rotation.y = Math.PI;
-        car.add(crest);
+        addFrontTrim(crest, -0.26, -0.58, 0.05);
         const fleet = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.58, 0.16),
+          new THREE.PlaneGeometry(0.42, 0.13),
           new THREE.MeshBasicMaterial({
-            map: makeLabelTexture('7013', { width: 256, height: 96, bg: '#111', fg: '#ffffff' }),
+            map: makeLabelTexture('7013', { width: 256, height: 96, bg: '#14181c', fg: '#ffffff' }),
             side: THREE.DoubleSide
           })
         );
-        fleet.position.set(0.58, 1.36, cabDir * (section.length / 2 + 0.2));
-        if (cabDir < 0) fleet.rotation.y = Math.PI;
-        car.add(fleet);
-        for (const x of [-0.68, 0.68]) {
-          const headlight = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.05, 0.08), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf8f3cf, emissiveIntensity: 2 }));
-          headlight.position.set(x, 1.08, cabDir * (section.length / 2 + 0.22));
-          car.add(headlight);
-        }
+        addFrontTrim(fleet, 0.26, -0.58, 0.05);
       } else {
         const interiorDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.68, 0.42), interiorDisplayMat);
         interiorDisplay.position.set(0, 2.74, 0);
@@ -1570,21 +1677,26 @@ class ProceduralTransitVehicleFactory {
       this.root.add(car);
     }
 
-    for (const z of [-4.35, 4.35]) {
-      const bellows = new THREE.Mesh(new THREE.BoxGeometry(2.18, 2.18, 0.72), black);
-      bellows.position.set(0, 1.8, z);
+    // Centred on, and slightly wider than, the 0.9 m gap between modules so no
+    // extruded end cap shows through the articulation.
+    for (const z of [-4.05, 4.05]) {
+      const bellows = new THREE.Mesh(new THREE.BoxGeometry(2.42, 2.5, 0.96), black);
+      bellows.position.set(0, 1.9, z);
       this.root.add(bellows);
       this.passengerShells.push(bellows);
     }
     for (const z of [-8.25, 0, 8.25]) {
-      const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.06, 0.36, 1.42), black);
+      const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.06, 0.36, 1.42), underframe);
       bogie.position.set(0, 0.42, z);
       this.root.add(bogie);
     }
-    const roofEquipment = new THREE.Mesh(new THREE.BoxGeometry(1.54, 0.2, 6.8), roofGrey);
-    roofEquipment.position.set(0, 3.3, -0.4);
-    this.root.add(roofEquipment);
-    this.addPantograph(new THREE.Vector3(0, 3.52, 1.3), metal);
+    for (const z of [-8.4, 0.6]) {
+      const roofEquipment = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.2, 4.4), roofGrey);
+      roofEquipment.position.set(0, 3.34, z);
+      this.root.add(roofEquipment);
+    }
+    this.addPantograph(new THREE.Vector3(0, 3.52, 4.6), metal);
+    this.addExteriorLightThrow(13.2, 1.38);
     this.trainHalfLengthM = 13.2;
     return this.createVehicleInstance();
   }
@@ -2665,6 +2777,47 @@ class ProceduralTransitVehicleFactory {
     shape.quadraticCurveTo(0.8, 0.18, 0.56, 0.3);
     shape.quadraticCurveTo(0, 0.4, -0.56, 0.3);
     shape.quadraticCurveTo(-0.8, 0.18, -0.78, -0.5);
+    shape.closePath();
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelSize: 0.018, bevelThickness: 0.014, bevelSegments: 2, curveSegments: 10 });
+    geometry.translate(0, 0, -0.025);
+    return geometry;
+  }
+
+  // Odissey MAX cab: a blunt, near-full-width front. The front ring keeps
+  // bottom/shoulder/roof collinear so the whole face is one plane
+  // (ODESSA_CAB_FRONT_RAKE) that the mask, windscreen and trim mount flush onto.
+  private makeOdessaCabNose(): THREE.BufferGeometry {
+    return this.makeTaperedTramCab([
+      // Ring 0 sits slightly inside the body and marginally wider than it, so the
+      // extruded body's white end cap never shows at the cab joint.
+      { zBottom: -0.12, zShoulder: -0.12, zTop: -0.12, bottom: 0.5, shoulder: 2.78, top: 3.21, bottomHalf: 1.21, half: 1.21, roofHalf: 1.03 },
+      { zBottom: 0.9, zShoulder: 0.86, zTop: 0.78, bottom: 0.48, shoulder: 2.72, top: 3.14, bottomHalf: 1.2, half: 1.19, roofHalf: 1.0 },
+      { zBottom: 1.58, zShoulder: 1.42, zTop: 1.32, bottom: 0.46, shoulder: 2.6, top: 3.02, bottomHalf: 1.18, half: 1.17, roofHalf: 0.99 },
+      { zBottom: 1.95, zShoulder: 1.7, zTop: 1.65, bottom: 0.5, shoulder: 2.5, top: 2.92, bottomHalf: 1.16, half: 1.14, roofHalf: 0.95 }
+    ]);
+  }
+
+  private makeOdessaCabMask(): THREE.ExtrudeGeometry {
+    const shape = new THREE.Shape();
+    shape.moveTo(-0.99, -0.7);
+    shape.lineTo(-1.01, 0.3);
+    shape.quadraticCurveTo(-0.99, 0.66, -0.74, 0.74);
+    shape.lineTo(0.74, 0.74);
+    shape.quadraticCurveTo(0.99, 0.66, 1.01, 0.3);
+    shape.lineTo(0.99, -0.7);
+    shape.quadraticCurveTo(0, -0.88, -0.99, -0.7);
+    shape.closePath();
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.07, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.026, bevelSegments: 3, curveSegments: 10 });
+    geometry.translate(0, 0, -0.035);
+    return geometry;
+  }
+
+  private makeOdessaWindscreen(): THREE.ExtrudeGeometry {
+    const shape = new THREE.Shape();
+    shape.moveTo(-0.85, -0.46);
+    shape.quadraticCurveTo(0, -0.6, 0.85, -0.46);
+    shape.lineTo(0.87, 0.3);
+    shape.quadraticCurveTo(0, 0.4, -0.87, 0.3);
     shape.closePath();
     const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelSize: 0.018, bevelThickness: 0.014, bevelSegments: 2, curveSegments: 10 });
     geometry.translate(0, 0, -0.025);
