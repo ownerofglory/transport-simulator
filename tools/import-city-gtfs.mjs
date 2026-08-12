@@ -15,6 +15,13 @@ if (!cityId || !zipPath || !outDir) {
 const earthMPerDegLat = 111_320;
 const defaultTextColor = '#ffffff';
 
+// KVV stop names carry a platform/bay suffix ("... Gleis 2", "... Gleis 4(U)",
+// "... Bstg A") that is noise in the HUD and route schematic once per-platform
+// entries are deduplicated by name in the importer's station list.
+function stripKvvPlatformSuffix(name) {
+  return name.replace(/\s+(Gleis\s*\d+[a-z]?(\(U\))?|Bstg\.?\s*[A-Za-z0-9]+\.?)$/i, '').trim();
+}
+
 const presets = {
   ulm: {
     generatedAt: new Date().toISOString(),
@@ -108,6 +115,55 @@ const presets = {
         defaultColor: '#f2d21b',
         groupKey: (trip) => `${trip.mode}:${trip.routeShortName}:${trip.directionId}`,
         matchRoute: (route) => route.route_type === '2'
+      }
+    ]
+  },
+  karlsruhe: {
+    generatedAt: new Date().toISOString(),
+    sourceUrl: 'https://www.nvbw.de/fileadmin/user_upload/service/open_data/fahrplandaten_mit_liniennetz/bwgesamt.zip',
+    license: 'Derived from the official NVBW Baden-Württemberg GTFS feed for simulator use.',
+    attribution: 'Contains Karlsruhe VBK/AVG (KVV) route data derived from the official NVBW GTFS feed.',
+    modes: [
+      {
+        // VBK city tram network (agency kvv-02, GTFS route_type 0).
+        mode: 'tram',
+        file: 'routes-tram.json',
+        speedLimitMps: 14.0,
+        maxPoints: 200,
+        defaultAgency: 'VBK',
+        defaultColor: '#e2001a',
+        stationLabel: stripKvvPlatformSuffix,
+        // route_short_name "E" is "Ein-/ und Aussetzer" (empty depot runs), not a passenger line.
+        matchRoute: (route) => route.route_type === '0' && route.agency_id === 'kvv-02' && route.route_short_name !== 'E'
+      },
+      {
+        // AVG two-system Stadtbahn tram-train network reaching into the surrounding
+        // region on mainline tracks (agency kvv-01, GTFS route_type 0, "the Karlsruhe model").
+        mode: 'stadtbahn',
+        file: 'routes-stadtbahn.json',
+        speedLimitMps: 27.8,
+        maxPoints: 260,
+        defaultAgency: 'AVG',
+        defaultColor: '#0069b4',
+        stationLabel: stripKvvPlatformSuffix,
+        // route_short_name "E" is "E-Wagen" reserve/depot working, not a passenger line.
+        matchRoute: (route) => route.route_type === '0' && route.agency_id === 'kvv-01' && route.route_short_name !== 'E'
+      },
+      {
+        // VBK city bus network (agency kvv-02, GTFS route_type 3).
+        mode: 'bus',
+        file: 'routes-bus.json',
+        speedLimitMps: 12.5,
+        maxPoints: 160,
+        defaultAgency: 'VBK',
+        defaultColor: '#f39200',
+        stationLabel: stripKvvPlatformSuffix,
+        // Drop SEV (rail-replacement) runs and dated one-off event shuttles ("M"/"H").
+        matchRoute: (route) =>
+          route.route_type === '3' &&
+          route.agency_id === 'kvv-02' &&
+          !/^SEV/i.test(route.route_short_name || '') &&
+          !['M', 'H'].includes(route.route_short_name)
       }
     ]
   }

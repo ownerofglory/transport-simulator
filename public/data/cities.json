@@ -80,6 +80,14 @@
       "description": "Free, non-commercial simulator for the TransLink SkyTrain network.",
       "manifestFile": "/data/vancouver/route-manifest.json",
       "defaultTransportMode": "skytrain"
+    },
+    {
+      "id": "karlsruhe",
+      "name": "Karlsruhe",
+      "title": "Karlsruhe Transit Simulator",
+      "description": "Free, non-commercial simulator for KVV public transport (VBK trams, AVG Stadtbahn tram-trains, VBK buses) in Karlsruhe and its surroundings.",
+      "manifestFile": "/data/karlsruhe/route-manifest.json",
+      "defaultTransportMode": "stadtbahn"
     }
   ]
 }
