@@ -4,8 +4,8 @@ import type { CityDefinition } from './types';
 // Karlsruhe runs two integrated rail-bound networks under the KVV brand: VBK's
 // city tram network and AVG's two-system Stadtbahn tram-trains that continue
 // onto mainline tracks into the surrounding region (the "Karlsruhe model").
-// Both reuse the shared stadtbahn vehicle/guideway renderer; only the vehicle
-// family label and line color differ.
+// Both share the stadtbahn guideway and vehicle kind, so each mode names its own
+// registered vehicle design to keep the two cars visually distinct.
 const karlsruheTransportModes: TransportModeDefinition[] = [
   {
     id: 'tram',
@@ -13,6 +13,7 @@ const karlsruheTransportModes: TransportModeDefinition[] = [
     available: true,
     vehicleFamily: 'VBK city tram (GT6/GT8 style)',
     vehicleKind: 'stadtbahn',
+    vehicleDesignId: 'karlsruhe-vbk-tram',
     guidewayKind: 'stadtbahn',
     interiorCameraProfile: 'tram',
     passengerOffsetM: 2.8, // fallback passenger camera offset in meters for tram interiors
@@ -22,10 +23,13 @@ const karlsruheTransportModes: TransportModeDefinition[] = [
     id: 'stadtbahn',
     label: 'Stadtbahn',
     available: true,
-    vehicleFamily: 'AVG two-system Stadtbahn tram-train',
+    vehicleFamily: 'AVG Stadler CITYLINK tram-train',
     vehicleKind: 'stadtbahn',
+    vehicleDesignId: 'karlsruhe-avg-citylink',
     guidewayKind: 'stadtbahn',
-    interiorCameraProfile: 'rail',
+    // Tram profile so the interior camera anchors to a car mesh the way the other
+    // articulated trams do, rather than using the un-anchored rail fallback.
+    interiorCameraProfile: 'tram',
     passengerOffsetM: 3.6, // fallback passenger camera offset in meters for tram-train interiors
     lineAccentColor: '#0069b4' // AVG-like blue accent
   },

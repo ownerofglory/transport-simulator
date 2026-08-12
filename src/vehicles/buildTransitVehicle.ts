@@ -2,7 +2,12 @@ import { buildBusVehicle } from './blueprint/bus/buildBusFromBlueprint';
 import { defaultBusBlueprint } from './blueprint/bus/defaultBusBlueprint';
 import { buildSBahnVehicle } from './blueprint/sbahn/buildSBahnFromBlueprint';
 import { defaultSBahnBlueprint } from './blueprint/sbahn/defaultSBahnBlueprint';
-import { buildProceduralTransitVehicle, createStadtbahnVehicle } from './procedural';
+import {
+  buildProceduralTransitVehicle,
+  createKarlsruheCitylinkVehicle,
+  createKarlsruheTramVehicle,
+  createStadtbahnVehicle
+} from './procedural';
 import { VehicleRegistry } from './registry';
 import type { ResolvedVehicleBuildContext, VehicleBuildContext, VehicleInstance } from './types';
 import { resolveRouteVehicleDefinition, type VehicleDefinition } from './VehicleDefinition';
@@ -32,6 +37,12 @@ vehicleRegistry.registerGenericKindBuilder('skytrain', (context) => buildSBahnVe
 // explicitly via vehicleDesignId, and gives custom bus configs a template.
 vehicleRegistry.registerBuilder(defaultBusBlueprint.id, (context) => buildBusVehicle(defaultBusBlueprint, context));
 vehicleRegistry.registerBuilder(defaultSBahnBlueprint.id, (context) => buildSBahnVehicle(defaultSBahnBlueprint, context));
+
+// Karlsruhe runs two visually distinct cars on the same 'stadtbahn' vehicle kind,
+// so each is registered by design id and selected via the mode's vehicleDesignId
+// rather than by branching on (city, mode) inside the procedural dispatch.
+vehicleRegistry.registerBuilder('karlsruhe-vbk-tram', createKarlsruheTramVehicle);
+vehicleRegistry.registerBuilder('karlsruhe-avg-citylink', createKarlsruheCitylinkVehicle);
 
 for (const rawConfig of [genericModernTram, genericBus, stuttgartDt8Tango]) {
   const result = vehicleRegistry.registerBlueprintFromJson(rawConfig);
