@@ -38,11 +38,17 @@ const KARLSRUHE_TRAM_CAB_FRONT_RAKE = Math.atan(0.26 / 2.52);
 // markedly steeper than the older tram, matching the Stadler front end.
 const CITYLINK_CAB_FRONT_RAKE = Math.atan(0.52 / 2.42);
 
-// Materials and band placement shared by the two Karlsruhe cars. Both wear the
-// same KVV yellow/red house livery on the same 2.65 m wide body; only the band
-// height (shoulder on the classic tram, skirt on the Citylink) and the cab ends
-// differ, so they share one module builder.
-type KvvTramLivery = {
+// Rake of the planar Cobra cab face, in radians. Must stay in sync with the
+// front ring of makeCobraCabNose (0.3 m of setback over 2.32 m of height). The
+// Be 5/6's screen is only lightly laid back; the strong forward impression
+// comes from the blue roof cap overhanging it, which is separate geometry.
+const COBRA_CAB_FRONT_RAKE = Math.atan(0.3 / 2.32);
+
+// Materials and band placement for a low-floor articulated tram module. The
+// module builder is shared by the two Karlsruhe cars and the Zürich Cobra; a
+// livery only decides the palette, the band heights and the body width, so the
+// cab ends stay the only per-vehicle geometry.
+type ModernTramLivery = {
   body: THREE.Material;
   stripe: THREE.Material;
   roof: THREE.Material;
@@ -52,12 +58,16 @@ type KvvTramLivery = {
   metal: THREE.Material;
   stripeY: number;
   stripeHeightM: number;
-  interior: KvvTramInterior;
+  // Optional second side band, e.g. the Cobra's cantrail stripe above the windows.
+  accentStripe?: { material: THREE.Material; y: number; heightM: number };
+  door?: THREE.Material; // door leaves, when they are not body-coloured
+
+  interior: ModernTramInterior;
 };
 
 // Saloon materials. The classic VBK car keeps a warmer, older cabin; the
 // Citylink an anthracite/LED one, so both share the builder but not the palette.
-type KvvTramInterior = {
+type ModernTramInterior = {
   floor: THREE.Material;
   ceiling: THREE.Material;
   wall: THREE.Material;
@@ -67,6 +77,7 @@ type KvvTramInterior = {
   accent: THREE.Material; // priority grab poles and door-button surrounds
   lightStrip: THREE.Material;
   threshold: THREE.Material; // contrasting door step edge
+  seatXs?: number[]; // seat columns; defaults to 2+2 on a 2.65 m body
 };
 
 /**
@@ -1748,162 +1759,243 @@ class ProceduralTransitVehicleFactory {
     return this.createVehicleInstance();
   }
 
+  // VBZ's Be 5/6 "Cobra": five bodies over three bogies, ~36 m, in the Zürich
+  // house livery — white sides with a blue band below the windows and a blue
+  // cantrail line, blue door leaves, and a blue roof cap that overhangs the
+  // black wraparound cab mask.
   createZurichTramVehicle(): VehicleInstance {
-    const shell = new THREE.MeshStandardMaterial({ color: 0xf7f8fa, roughness: 0.4, metalness: 0.14 });
-    const blue = new THREE.MeshStandardMaterial({ color: 0x0066b3, roughness: 0.34, metalness: 0.08 });
-    const lightBlue = new THREE.MeshStandardMaterial({ color: 0x2e92d4, roughness: 0.34, metalness: 0.06 });
-    const black = new THREE.MeshStandardMaterial({ color: 0x14191f, roughness: 0.2, metalness: 0.3 });
-    const silver = new THREE.MeshStandardMaterial({ color: 0xc7cdd2, roughness: 0.46, metalness: 0.2 });
+    const white = new THREE.MeshStandardMaterial({ color: 0xf2f4f6, roughness: 0.4, metalness: 0.12 });
+    const blue = new THREE.MeshStandardMaterial({ color: 0x0f6ab8, roughness: 0.32, metalness: 0.08 });
+    const roofGrey = new THREE.MeshStandardMaterial({ color: 0xc6ccd1, roughness: 0.58, metalness: 0.18 });
+    const black = new THREE.MeshStandardMaterial({ color: 0x1c2126, roughness: 0.22, metalness: 0.3 });
+    const skirtGrey = new THREE.MeshStandardMaterial({ color: 0x4b5157, roughness: 0.56, metalness: 0.22 });
     const glass = new THREE.MeshStandardMaterial({ color: 0x9dc7d9, transparent: true, opacity: 0.42, roughness: 0.05, side: THREE.DoubleSide });
-    const floor = new THREE.MeshStandardMaterial({ color: 0x6f767b, roughness: 0.92 });
-    const ceiling = new THREE.MeshStandardMaterial({ color: 0xe1e5e8, roughness: 0.86 });
-    const seat = new THREE.MeshStandardMaterial({ color: 0x1f5f87, roughness: 0.88 });
     const metal = new THREE.MeshStandardMaterial({ color: 0x9aa1a5, roughness: 0.34, metalness: 0.72 });
-    const ledPanel = new THREE.MeshBasicMaterial({
-      map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 700, height: 128, bg: '#0e1317', fg: '#ffb300' }),
+    const amber = new THREE.MeshStandardMaterial({ color: 0xd98214, roughness: 0.4 });
+    const headlightMat = new THREE.MeshStandardMaterial({ color: 0xfffaf0, emissive: 0xfff0c8, emissiveIntensity: 0.55 });
+    const tailLampMat = new THREE.MeshStandardMaterial({ color: 0x8f1418, emissive: 0xd42020, emissiveIntensity: 0.35 });
+    const displayMat = new THREE.MeshBasicMaterial({
+      map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 700, height: 128, bg: '#0c0e10', fg: '#ffb300' }),
       side: THREE.DoubleSide
     });
     const interiorDisplayMat = this.context.makeInteriorDisplayMaterial();
     this.glassMaterial = glass;
+    this.headLampMaterials.push(headlightMat);
+    this.tailLampMaterials.push(tailLampMat);
 
-    // Generic VBZ tram visual inspired by the white-blue Zürich fleet.
+    const livery: ModernTramLivery = {
+      body: white,
+      stripe: blue,
+      roof: roofGrey,
+      band: black,
+      skirt: skirtGrey,
+      door: blue,
+      glass,
+      metal,
+      // Blue band from the underframe up to just below the windows. It has to
+      // reach the bottom of the body side, not the top of the skirt: the skirt
+      // is inboard of the shell, so a shorter band leaves a white strip showing.
+      stripeY: 1.02,
+      stripeHeightM: 0.92,
+      // Cantrail line, kept high enough that the saloon header hides its inner
+      // face — the window band is see-through in interior views.
+      accentStripe: { material: blue, y: 2.9, heightM: 0.1 },
+      // Swiss-tram cabin: light grey lining, blue moquette, stainless fittings.
+      interior: {
+        floor: new THREE.MeshStandardMaterial({ map: this.makeTramFloorTexture(), color: 0x9aa0a4, roughness: 0.94 }),
+        ceiling: new THREE.MeshStandardMaterial({ color: 0xecf0f2, roughness: 0.88 }),
+        wall: new THREE.MeshStandardMaterial({ color: 0xdfe3e6, roughness: 0.86 }),
+        seatFabric: new THREE.MeshStandardMaterial({ map: this.makeTramSeatFabricTexture([30, 74, 128], [176, 198, 220]), roughness: 0.9 }),
+        seatShell: new THREE.MeshStandardMaterial({ color: 0x585e64, roughness: 0.62 }),
+        metal: new THREE.MeshStandardMaterial({ color: 0xc0c6ca, roughness: 0.3, metalness: 0.76 }),
+        accent: new THREE.MeshStandardMaterial({ color: 0xb9c0c4, roughness: 0.32, metalness: 0.7 }),
+        lightStrip: new THREE.MeshStandardMaterial({ color: 0xf6f9ff, emissive: 0xeef4ff, emissiveIntensity: 0.7, roughness: 0.5 }),
+        threshold: new THREE.MeshStandardMaterial({ color: 0xe0b200, roughness: 0.6 }),
+        // 2+1 across a 2.4 m body: a pair to port, singles to starboard.
+        seatXs: [-0.83, -0.45, 0.83]
+      }
+    };
+
+    // Cab module, short suspended link, centre module, link, cab module:
+    // ~36.4 m over the ends with 0.7 m articulation gaps.
     const sections = [
-      { center: -13.1, length: 6.8, end: -1 as -1 | 0 | 1 },
-      { center: -6.55, length: 5.1, end: 0 as -1 | 0 | 1 },
-      { center: 0, length: 6.4, end: 0 as -1 | 0 | 1 },
-      { center: 6.55, length: 5.1, end: 0 as -1 | 0 | 1 },
-      { center: 13.1, length: 6.8, end: 1 as -1 | 0 | 1 }
+      { center: -13.7, length: 9.0, end: -1 as -1 | 0 | 1 },
+      { center: -6.4, length: 4.2, end: 0 as -1 | 0 | 1 },
+      { center: 0, length: 7.2, end: 0 as -1 | 0 | 1 },
+      { center: 6.4, length: 4.2, end: 0 as -1 | 0 | 1 },
+      { center: 13.7, length: 9.0, end: 1 as -1 | 0 | 1 }
     ];
+    const bodyWidthM = 2.4;
 
     for (const section of sections) {
       const car = new THREE.Group();
-      car.name = `Articulated car Zurich tram section ${section.center}`;
+      car.name = `Articulated car Zurich Cobra section ${section.center}`;
       car.userData.centerOffsetM = section.center;
 
-      const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.48, 0.32, section.length - 0.08), silver);
-      skirt.position.y = 0.56;
-      car.add(skirt);
-      this.passengerShells.push(skirt);
+      const cabDepth = section.end === 0 ? 0 : 2.0;
+      const bodyLength = section.length - cabDepth;
+      const bodyCenterZ = (-section.end * cabDepth) / 2;
 
-      const body = new THREE.Mesh(new THREE.BoxGeometry(2.38, 2.6, section.length), shell);
-      body.position.y = 1.82;
-      body.castShadow = true;
-      car.add(body);
-      this.passengerShells.push(body);
+      // Cab modules take a door just behind the cab and one at the articulation
+      // end; the centre module a pair; the short link modules none.
+      const doorZs =
+        section.end !== 0
+          ? [bodyCenterZ + section.end * 2.6, bodyCenterZ - section.end * 2.2]
+          : section.length > 6
+            ? [-2.5, 2.5]
+            : [];
+      const windowZs =
+        section.end !== 0
+          ? [-0.95, 0.2, 1.35].map((z) => section.end * z)
+          : section.length > 6
+            ? [-1.2, 0, 1.2]
+            : [-0.9, 0.9];
 
-      const roof = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.2, section.length - 0.1), silver);
-      roof.position.y = 3.18;
-      car.add(roof);
-      this.passengerShells.push(roof);
-
-      for (const side of [-1, 1] as const) {
-        const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.14, section.length - 0.18), black);
-        band.position.set(side * 1.24, 2.32, 0);
-        car.add(band);
-        this.windowBands.push(band);
-
-        const windowCount = section.length > 6 ? 3 : 2;
-        for (let index = 0; index < windowCount; index++) {
-          const z = -section.length * 0.27 + (index * (section.length * 0.54)) / Math.max(1, windowCount - 1);
-          const windowLength = windowCount === 3 && index === 1 ? 1.38 : 1.02;
-          const win = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.9, windowLength), glass);
-          win.position.set(side * 1.255, 2.32, z);
-          car.add(win);
-        }
-
-        if (section.end === 0 || (section.end < 0 && side < 0) || (section.end > 0 && side > 0)) {
-          const doorZ = section.length > 6 ? 0.64 : 0;
-          this.addSlidingVehicleDoor(car, side * 1.255, doorZ, blue, glass, black, 1.52, 1.98);
-          const blueAccent = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.12, 1.66), lightBlue);
-          blueAccent.position.set(side * 1.225, 1.77, doorZ);
-          car.add(blueAccent);
-        }
-      }
-
-      const interiorFloor = new THREE.Mesh(new THREE.BoxGeometry(2.12, 0.08, section.length - 0.28), floor);
-      interiorFloor.position.y = 0.98;
-      car.add(interiorFloor);
-      const interiorCeiling = new THREE.Mesh(new THREE.BoxGeometry(2.08, 0.08, section.length - 0.34), ceiling);
-      interiorCeiling.position.y = 3.02;
-      car.add(interiorCeiling);
-      this.addOpaqueTransitInterior(car, section.length - 0.34, 1.08, ceiling, (side) => {
-        if (section.end === 0 || (section.end < 0 && side < 0) || (section.end > 0 && side > 0)) return [section.length > 6 ? 0.64 : 0];
-        return [];
+      this.addModernTramModule(car, livery, {
+        // The saloon stops at the cab bulkhead rather than running the full
+        // section: the Cobra's nose is drawn in far too hard at the roof to
+        // cover a lining sized for the whole module.
+        sectionLength: bodyLength,
+        saloonCenterZ: bodyCenterZ,
+        bodyLength,
+        bodyCenterZ,
+        doorZs,
+        doorWidthM: 1.3,
+        bodyWidthM,
+        windowZs,
+        windowLengthM: section.end === 0 && section.length < 6 ? 1.5 : 1.1
       });
 
-      for (const z of section.length > 6 ? [-1.6, 1.6] : [-1.0, 1.0]) {
-        for (const x of [-0.76, 0.76]) {
-          const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.12, 0.56), seat);
-          cushion.position.set(x, 1.28, z);
-          car.add(cushion);
-          const back = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.62, 0.11), seat);
-          back.position.set(x, 1.62, z - 0.26);
-          car.add(back);
-        }
-      }
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 1.82, 10), metal);
-      pole.position.set(0, 1.96, 0);
-      car.add(pole);
-
       if (section.end !== 0) {
-        const cabDirection = section.end;
-        const frontPanel = new THREE.Mesh(this.makeCabNose(blue).geometry.clone(), blue);
-        frontPanel.scale.set(1.04, 1.02, 0.84);
-        frontPanel.position.set(0, 1.9, cabDirection * (section.length / 2 - 0.16));
-        if (cabDirection > 0) frontPanel.rotation.y = Math.PI;
-        car.add(frontPanel);
-        this.cabShells.push(frontPanel);
+        const cab = new THREE.Group();
+        cab.position.z = section.end * (section.length / 2 - cabDepth);
+        if (section.end < 0) cab.rotation.y = Math.PI;
+        car.add(cab);
 
-        const face = new THREE.Mesh(new THREE.BoxGeometry(2.14, 1.96, 0.12), black);
-        face.position.set(0, 2.16, cabDirection * (section.length / 2 + 0.12));
-        car.add(face);
-        this.cabShells.push(face);
+        const nose = new THREE.Mesh(this.makeCobraCabNose(), white);
+        nose.castShadow = true;
+        cab.add(nose);
+        this.passengerShells.push(nose);
 
-        const windscreen = new THREE.Mesh(new THREE.BoxGeometry(1.84, 1.02, 0.08), glass);
-        windscreen.position.set(0, 2.46, cabDirection * (section.length / 2 + 0.18));
-        windscreen.rotation.x = cabDirection * -0.18;
-        car.add(windscreen);
+        // The Cobra's signature: a blue cap that follows the falling nose roof
+        // and overhangs the screen. Sloped to match the nose's top ring chord,
+        // and wide enough to cover the nose roof edge — a narrower cap leaves
+        // the white roof corners poking out either side of it.
+        const cabRoof = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.14, 2.0), blue);
+        cabRoof.position.set(0, 3.1, 0.92);
+        cabRoof.rotation.x = 0.26;
+        cab.add(cabRoof);
+        this.passengerShells.push(cabRoof);
 
-        const routeDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.34), ledPanel);
-        routeDisplay.position.set(0, 3.04, cabDirection * (section.length / 2 + 0.22));
-        if (cabDirection < 0) routeDisplay.rotation.y = Math.PI;
-        routeDisplay.renderOrder = 20;
-        car.add(routeDisplay);
+        // Everything on the front end mounts to this group, which lies on the
+        // planar cab face, so trim stays flush no matter how the rake changes.
+        const front = new THREE.Group();
+        front.position.set(0, 1.66, 1.81);
+        front.rotation.x = -COBRA_CAB_FRONT_RAKE;
+        cab.add(front);
+
+        const addFrontTrim = (mesh: THREE.Mesh, x: number, y: number, z: number): THREE.Mesh => {
+          mesh.position.set(x, y, z);
+          front.add(mesh);
+          this.passengerShells.push(mesh);
+          return mesh;
+        };
+
+        addFrontTrim(new THREE.Mesh(this.makeCobraCabMask(), black), 0, 0.3, 0);
+
+        const windscreenMaterial = glass.clone();
+        windscreenMaterial.depthWrite = false;
+        const windscreen = new THREE.Mesh(this.makeCobraWindscreen(), windscreenMaterial);
+        windscreen.position.set(0, 0.16, 0.04);
+        windscreen.renderOrder = 10;
+        front.add(windscreen);
+        this.cabShells.push(windscreen);
+
+        // Sits inside the mask, above the screen: any higher and the overhanging
+        // blue cap covers the film from ahead.
+        const routeDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.26), displayMat);
+        routeDisplay.position.set(0, 0.92, 0.09); // clear of the mask's +0.061 front face
+        routeDisplay.renderOrder = 30;
+        front.add(routeDisplay);
         this.cabDisplays.push(routeDisplay);
 
+        // Casing behind the destination film. The cab mask is a passenger shell
+        // and hides in interior views, which would otherwise leave passengers
+        // reading the film's mirrored back face. A cab shell hides in cab view
+        // only, so the driver still sees the line ahead.
+        const displayCasing = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.34, 0.06), black);
+        displayCasing.position.set(0, 0.92, 0.03);
+        front.add(displayCasing);
+        this.cabShells.push(displayCasing);
+
+        // Apron, top to bottom: the white band sweeping under the screen, the
+        // blue side band carried around the front, then the black lamp panel.
+        // The white band only reads against the blue, so the order matters.
+        addFrontTrim(new THREE.Mesh(this.makeCabAccentPanel(2.0, 2.06, 0.22), white), 0, -0.52, 0.02);
+        addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(2.02, 0.32, 0.1), blue), 0, -0.79, 0.01);
+        addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(1.96, 0.28, 0.1), black), 0, -1.05, 0.0);
         for (const x of [-0.68, 0.68]) {
-          const headlight = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.06, 0.08), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf7f4d4, emissiveIntensity: 2.0 }));
-          headlight.position.set(x, 1.12, cabDirection * (section.length / 2 + 0.22));
-          car.add(headlight);
+          addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.05), headlightMat), x - 0.1, -1.01, 0.06);
+          addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.12, 0.05), amber), x + 0.11, -1.01, 0.06);
+          addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.06, 0.05), tailLampMat), x, -1.12, 0.06);
         }
-      } else {
-        const internalDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.74, 0.42), interiorDisplayMat);
-        internalDisplay.position.set(0, 2.8, 0);
-        internalDisplay.rotation.y = Math.PI;
-        internalDisplay.renderOrder = 18;
-        car.add(internalDisplay);
+        const fleet = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.46, 0.15),
+          new THREE.MeshBasicMaterial({
+            map: makeLabelTexture('3002', { width: 256, height: 96, bg: '#1c2126', fg: '#f2f4f6' }),
+            side: THREE.DoubleSide
+          })
+        );
+        addFrontTrim(fleet, 0, -1.04, 0.06);
+        addFrontTrim(new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.2, 0.32), black), 0, -1.2, -0.1);
+
+        // Next-stop display on the cab bulkhead, facing back down the saloon.
+        // Shares the one interior-display material, so every module stays in sync.
+        const bulkheadDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.38), interiorDisplayMat);
+        bulkheadDisplay.position.set(0, 2.74, section.end * 2.42);
+        bulkheadDisplay.rotation.y = section.end === 1 ? Math.PI : 0;
+        bulkheadDisplay.renderOrder = 18;
+        car.add(bulkheadDisplay);
+      } else if (section.center === 0) {
+        const interiorDisplay = new THREE.Mesh(new THREE.PlaneGeometry(1.54, 0.4), interiorDisplayMat);
+        interiorDisplay.position.set(0, 2.76, 0);
+        interiorDisplay.rotation.y = Math.PI;
+        interiorDisplay.renderOrder = 18;
+        car.add(interiorDisplay);
+
+        // The passenger rig anchors to cars[2] — the centre module on a five-body
+        // Cobra — so seat the view there, at the rear of the module and in the
+        // 2+1 aisle, looking forward down the whole tram.
+        car.userData.passengerCameraLocal = [0.19, 2.05, -3.3];
+        car.userData.passengerLookAtLocal = [0.19, 1.86, 24];
       }
 
       this.cars.push(car);
       this.root.add(car);
     }
 
-    for (const z of [-9.8, -3.3, 3.3, 9.8]) {
-      const bellows = new THREE.Mesh(new THREE.BoxGeometry(2.18, 2.24, 0.72), black);
-      bellows.position.set(0, 1.84, z);
+    // Centred on, and slightly wider than, the 0.7 m articulation gaps.
+    for (const z of [-8.85, -3.95, 3.95, 8.85]) {
+      const bellows = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.5, 0.76), black);
+      bellows.position.set(0, 1.9, z);
       this.root.add(bellows);
       this.passengerShells.push(bellows);
     }
-    for (const z of [-9.95, -3.35, 3.35, 9.95]) {
-      const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.04, 0.36, 1.5), black);
+    // Be 5/6: motor bogies under the two cab modules, one under the centre body;
+    // the short link modules hang between them.
+    for (const z of [-13.2, 0, 13.2]) {
+      const bogie = new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.36, 1.5), black);
       bogie.position.set(0, 0.42, z);
       this.root.add(bogie);
     }
-    const roofHvac = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.22, 8.2), silver);
-    roofHvac.position.set(0, 3.38, -0.2);
-    this.root.add(roofHvac);
-    this.addPantograph(new THREE.Vector3(0, 3.6, 2.4), metal);
-    this.trainHalfLengthM = 16.1;
+    for (const z of [-11.6, -0.2, 11.6]) {
+      const roofEquipment = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.2, 3.4), skirtGrey);
+      roofEquipment.position.set(0, 3.36, z);
+      this.root.add(roofEquipment);
+    }
+    this.addPantograph(new THREE.Vector3(0, 3.56, 2.4), metal);
+    this.addExteriorLightThrow(18.2, 1.35);
+    this.trainHalfLengthM = 18.2;
     return this.createVehicleInstance();
   }
 
@@ -2119,126 +2211,183 @@ class ProceduralTransitVehicleFactory {
     return this.createVehicleInstance();
   }
 
-  // One articulated module of a KVV car: dark skirt, yellow body, dark window
-  // band with strip glazing, the livery band, both-side doorways and the opaque
-  // interior. Shared by the classic VBK tram and the Stadler Citylink; the cab
-  // ends are added by the callers.
-  private addKvvTramModule(
+  // One articulated module of a low-floor tram: dark skirt, liveried body, dark
+  // window band with strip glazing, the livery band(s), both-side doorways and
+  // the opaque interior. Shared by the Karlsruhe cars and the Zürich Cobra; the
+  // cab ends are added by the callers.
+  //
+  // Every side offset derives from the body half-width so a narrower car (the
+  // 2.4 m Cobra against the 2.65 m KVV cars) keeps its trim flush. Window panes
+  // are auto-spaced by default; `windowZs` overrides that where a module's door
+  // positions leave the automatic spacing nothing usable to work with.
+  private addModernTramModule(
     car: THREE.Group,
-    livery: KvvTramLivery,
-    layout: { sectionLength: number; bodyLength: number; bodyCenterZ: number; doorZs: number[]; doorWidthM: number }
+    livery: ModernTramLivery,
+    layout: {
+      sectionLength: number;
+      bodyLength: number;
+      bodyCenterZ: number;
+      doorZs: number[];
+      doorWidthM: number;
+      bodyWidthM?: number;
+      windowZs?: number[];
+      windowLengthM?: number;
+      saloonCenterZ?: number;
+    }
   ): void {
     const { sectionLength, bodyLength, bodyCenterZ, doorZs, doorWidthM } = layout;
+    const bodyWidthM = layout.bodyWidthM ?? 2.65;
+    const halfWidth = bodyWidthM / 2;
 
-    const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.34, bodyLength - 0.1), livery.skirt);
+    const skirt = new THREE.Mesh(new THREE.BoxGeometry(bodyWidthM - 0.05, 0.34, bodyLength - 0.1), livery.skirt);
     skirt.position.set(0, 0.56, bodyCenterZ);
     car.add(skirt);
     this.passengerShells.push(skirt);
 
-    const body = new THREE.Mesh(this.makeModernTramBody(2.65, 3.3, bodyLength), livery.body);
+    const body = new THREE.Mesh(this.makeModernTramBody(bodyWidthM, 3.3, bodyLength), livery.body);
     body.position.z = bodyCenterZ;
     body.castShadow = true;
     car.add(body);
     this.passengerShells.push(body);
 
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(2.02, 0.12, bodyLength - 0.2), livery.roof);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(bodyWidthM - 0.63, 0.12, bodyLength - 0.2), livery.roof);
     roof.position.set(0, 3.32, bodyCenterZ);
     car.add(roof);
     this.passengerShells.push(roof);
 
     for (const side of [-1, 1] as const) {
       const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.0, bodyLength - 0.18), livery.band);
-      band.position.set(side * 1.332, 2.2, bodyCenterZ);
+      band.position.set(side * (halfWidth + 0.007), 2.2, bodyCenterZ);
       car.add(band);
       this.windowBands.push(band);
 
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.09, livery.stripeHeightM, bodyLength - 0.14), livery.stripe);
-      stripe.position.set(side * 1.33, livery.stripeY, bodyCenterZ);
-      car.add(stripe);
+      for (const stripeSpec of [
+        { material: livery.stripe, y: livery.stripeY, heightM: livery.stripeHeightM },
+        ...(livery.accentStripe ? [livery.accentStripe] : [])
+      ]) {
+        const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.09, stripeSpec.heightM, bodyLength - 0.14), stripeSpec.material);
+        stripe.position.set(side * (halfWidth + 0.005), stripeSpec.y, bodyCenterZ);
+        car.add(stripe);
+      }
 
-      const windowCount = Math.max(2, Math.round((bodyLength - 1.6) / 2.4));
-      const windowSpan = bodyLength - 2.3;
-      for (let index = 0; index < windowCount; index++) {
-        const z = bodyCenterZ - windowSpan / 2 + (index * windowSpan) / Math.max(1, windowCount - 1);
-        // Skip panes that would land inside a doorway.
-        if (doorZs.some((doorZ) => Math.abs(z - doorZ) < doorWidthM * 0.8)) continue;
-        const pane = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.88, 1.24), livery.glass);
-        pane.position.set(side * 1.34, 2.2, z);
+      const windowZs =
+        layout.windowZs?.map((z) => bodyCenterZ + z) ??
+        (() => {
+          const windowCount = Math.max(2, Math.round((bodyLength - 1.6) / 2.4));
+          const windowSpan = bodyLength - 2.3;
+          return Array.from({ length: windowCount }, (_, index) => bodyCenterZ - windowSpan / 2 + (index * windowSpan) / Math.max(1, windowCount - 1))
+            // Skip panes that would land inside a doorway.
+            .filter((z) => !doorZs.some((doorZ) => Math.abs(z - doorZ) < doorWidthM * 0.8));
+        })();
+      for (const z of windowZs) {
+        const pane = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.88, layout.windowLengthM ?? 1.24), livery.glass);
+        pane.position.set(side * (halfWidth + 0.015), 2.2, z);
         car.add(pane);
       }
 
       for (const doorZ of doorZs) {
-        this.addSlidingVehicleDoor(car, side * 1.345, doorZ, livery.body, livery.glass, livery.band, doorWidthM, 1.98);
+        this.addSlidingVehicleDoor(car, side * (halfWidth + 0.02), doorZ, livery.door ?? livery.body, livery.glass, livery.band, doorWidthM, 1.98);
         for (const edge of [-1, 1] as const) {
           const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.09, 2.1, 0.08), livery.band);
-          jamb.position.set(side * 1.318, 1.76, doorZ + edge * (doorWidthM / 2 + 0.06));
+          jamb.position.set(side * (halfWidth - 0.007), 1.76, doorZ + edge * (doorWidthM / 2 + 0.06));
           car.add(jamb);
         }
       }
     }
 
-    this.addKvvTramInterior(car, livery.interior, { sectionLength, bodyLength, bodyCenterZ, doorZs });
+    this.addModernTramInterior(car, livery.interior, {
+      sectionLength,
+      bodyLength,
+      bodyCenterZ,
+      doorZs,
+      bodyWidthM,
+      saloonCenterZ: layout.saloonCenterZ
+    });
     this.addCabinLight(car, 2.9, bodyCenterZ);
   }
 
-  // Saloon of one KVV module: textured floor with contrasting door thresholds,
+  // Saloon of one tram module: textured floor with contrasting door thresholds,
   // lit ceiling, side lining, longitudinal grab rails with hanging handles,
   // doorway stanchions and 2+2 transverse seat rows filling the bays between
   // doors. Everything is kept off the centreline above seat-back height so the
   // anchored passenger camera keeps a clear view down the car.
-  private addKvvTramInterior(
+  private addModernTramInterior(
     car: THREE.Group,
-    interior: KvvTramInterior,
-    layout: { sectionLength: number; bodyLength: number; bodyCenterZ: number; doorZs: number[] }
+    interior: ModernTramInterior,
+    layout: {
+      sectionLength: number;
+      bodyLength: number;
+      bodyCenterZ: number;
+      doorZs: number[];
+      bodyWidthM?: number;
+      saloonCenterZ?: number;
+    }
   ): void {
     const { sectionLength, bodyLength, bodyCenterZ, doorZs } = layout;
+    // Lining sits 0.125 m inboard of the shell on each side; every fitting below
+    // is placed relative to it so a narrower body keeps the same clearances.
+    const halfWidth = (layout.bodyWidthM ?? 2.65) / 2;
+    const saloonHalfWidth = halfWidth - 0.125;
 
-    const floorPanel = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.08, sectionLength - 0.28), interior.floor);
+    // Floor, ceiling and lining run `sectionLength` about the car origin unless
+    // the caller recentres them. A cab module whose saloon is much shorter than
+    // its section must, or the lining over-runs the bulkhead and its header
+    // pokes out through the nose roof.
+    const saloonCenterZ = layout.saloonCenterZ ?? 0;
+    let saloon = car;
+    if (saloonCenterZ !== 0) {
+      saloon = new THREE.Group();
+      saloon.position.z = saloonCenterZ;
+      car.add(saloon);
+    }
+
+    const floorPanel = new THREE.Mesh(new THREE.BoxGeometry(saloonHalfWidth * 2 - 0.1, 0.08, sectionLength - 0.28), interior.floor);
     floorPanel.position.y = 0.98;
-    car.add(floorPanel);
+    saloon.add(floorPanel);
 
-    const ceilingPanel = new THREE.Mesh(new THREE.BoxGeometry(2.26, 0.08, sectionLength - 0.34), interior.ceiling);
+    const ceilingPanel = new THREE.Mesh(new THREE.BoxGeometry(saloonHalfWidth * 2 - 0.14, 0.08, sectionLength - 0.34), interior.ceiling);
     ceilingPanel.position.y = 2.98;
-    car.add(ceilingPanel);
-    this.addOpaqueTransitInterior(car, sectionLength - 0.34, 1.2, interior.wall, () => doorZs);
+    saloon.add(ceilingPanel);
+    this.addOpaqueTransitInterior(saloon, sectionLength - 0.34, saloonHalfWidth, interior.wall, () =>
+      doorZs.map((doorZ) => doorZ - saloonCenterZ)
+    );
 
     // Centre vent flanked by two continuous light strips.
     const vent = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, bodyLength - 0.6), interior.wall);
     vent.position.set(0, 2.93, bodyCenterZ);
     car.add(vent);
-    for (const x of [-0.72, 0.72]) {
-      const lightStrip = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.032, bodyLength - 0.5), interior.lightStrip);
-      lightStrip.position.set(x, 2.94, bodyCenterZ);
-      car.add(lightStrip);
-    }
-
     for (const side of [-1, 1] as const) {
+      const lightStrip = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.032, bodyLength - 0.5), interior.lightStrip);
+      lightStrip.position.set(side * (saloonHalfWidth - 0.48), 2.94, bodyCenterZ);
+      car.add(lightStrip);
+
       // Longitudinal grab rail with hanging handles down each side.
+      const railX = side * (saloonHalfWidth - 0.2);
       const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, bodyLength - 0.5, 8), interior.metal);
       rail.rotation.x = Math.PI / 2;
-      rail.position.set(side * 1.0, 2.52, bodyCenterZ);
+      rail.position.set(railX, 2.52, bodyCenterZ);
       car.add(rail);
       for (let z = bodyCenterZ - bodyLength / 2 + 1.1; z < bodyCenterZ + bodyLength / 2 - 0.6; z += 1.15) {
         const strap = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.2, 0.035), interior.metal);
-        strap.position.set(side * 1.0, 2.4, z);
+        strap.position.set(railX, 2.4, z);
         car.add(strap);
         const grip = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.016, 6, 12), interior.accent);
-        grip.position.set(side * 1.0, 2.25, z);
+        grip.position.set(railX, 2.25, z);
         car.add(grip);
       }
 
       for (const doorZ of doorZs) {
         // Contrasting step edge in the doorway, plus a stanchion and a door button.
         const threshold = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 1.5), interior.threshold);
-        threshold.position.set(side * 1.11, 1.03, doorZ);
+        threshold.position.set(side * (saloonHalfWidth - 0.09), 1.03, doorZ);
         car.add(threshold);
 
         const stanchion = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 1.9, 10), interior.accent);
-        stanchion.position.set(side * 1.04, 1.98, doorZ - 0.95);
+        stanchion.position.set(side * (saloonHalfWidth - 0.16), 1.98, doorZ - 0.95);
         car.add(stanchion);
 
         const button = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.1), interior.accent);
-        button.position.set(side * 1.13, 1.62, doorZ + 0.86);
+        button.position.set(side * (saloonHalfWidth - 0.07), 1.62, doorZ + 0.86);
         car.add(button);
       }
     }
@@ -2264,20 +2413,21 @@ class ProceduralTransitVehicleFactory {
       for (let index = 0; index < rows; index++, row++) {
         const z = start + index * rowPitchM;
         const facing: -1 | 1 = row % 2 === 0 ? 1 : -1;
-        // Pulled outboard to leave a ~0.6 m gangway down the middle.
-        for (const x of [-0.92, -0.5, 0.5, 0.92]) {
-          this.addKvvTramSeat(car, x, z, facing, interior);
+        // 2+2 pulled outboard to leave a ~0.6 m gangway down the middle. Narrow
+        // bodies pass their own columns (the 2.4 m Cobra seats 2+1).
+        for (const x of interior.seatXs ?? [-0.92, -0.5, 0.5, 0.92]) {
+          this.addModernTramSeat(car, x, z, facing, interior);
         }
       }
     }
   }
 
-  private addKvvTramSeat(
+  private addModernTramSeat(
     car: THREE.Group,
     x: number,
     z: number,
     facing: -1 | 1,
-    interior: KvvTramInterior
+    interior: ModernTramInterior
   ): void {
     const seat = new THREE.Group();
     const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.11, 0.46), interior.seatFabric);
@@ -2319,7 +2469,7 @@ class ProceduralTransitVehicleFactory {
     this.headLampMaterials.push(headlightMat);
     this.tailLampMaterials.push(tailLampMat);
 
-    const livery: KvvTramLivery = {
+    const livery: ModernTramLivery = {
       body: yellow,
       stripe: red,
       roof: roofGrey,
@@ -2331,10 +2481,10 @@ class ProceduralTransitVehicleFactory {
       stripeHeightM: 0.18,
       // Older VBK cabin: cream lining, blue moquette, warm lighting.
       interior: {
-        floor: new THREE.MeshStandardMaterial({ map: this.makeKvvFloorTexture(), roughness: 0.94 }),
+        floor: new THREE.MeshStandardMaterial({ map: this.makeTramFloorTexture(), roughness: 0.94 }),
         ceiling: new THREE.MeshStandardMaterial({ color: 0xe6e3da, roughness: 0.88 }),
         wall: new THREE.MeshStandardMaterial({ color: 0xd9d5c8, roughness: 0.86 }),
-        seatFabric: new THREE.MeshStandardMaterial({ map: this.makeKvvSeatFabricTexture([44, 72, 116], [214, 196, 82]), roughness: 0.9 }),
+        seatFabric: new THREE.MeshStandardMaterial({ map: this.makeTramSeatFabricTexture([44, 72, 116], [214, 196, 82]), roughness: 0.9 }),
         seatShell: new THREE.MeshStandardMaterial({ color: 0x9aa0a4, roughness: 0.6 }),
         metal: new THREE.MeshStandardMaterial({ color: 0xb4b9bb, roughness: 0.32, metalness: 0.74 }),
         accent: new THREE.MeshStandardMaterial({ color: 0xe2b400, roughness: 0.44, metalness: 0.2 }),
@@ -2360,7 +2510,7 @@ class ProceduralTransitVehicleFactory {
       const bodyCenterZ = (-section.end * cabDepth) / 2;
       const doorZs = section.end === 0 ? [-2.4, 2.4] : [bodyCenterZ - 2.7, bodyCenterZ + 2.7];
 
-      this.addKvvTramModule(car, livery, { sectionLength: section.length, bodyLength, bodyCenterZ, doorZs, doorWidthM: 1.5 });
+      this.addModernTramModule(car, livery, { sectionLength: section.length, bodyLength, bodyCenterZ, doorZs, doorWidthM: 1.5 });
 
       if (section.end !== 0) {
         const cab = new THREE.Group();
@@ -2514,7 +2664,7 @@ class ProceduralTransitVehicleFactory {
     this.headLampMaterials.push(headlightMat);
     this.tailLampMaterials.push(tailLampMat);
 
-    const livery: KvvTramLivery = {
+    const livery: ModernTramLivery = {
       body: yellow,
       stripe: red,
       roof: roofBlack,
@@ -2526,10 +2676,10 @@ class ProceduralTransitVehicleFactory {
       stripeHeightM: 0.34,
       // Current Stadler cabin: anthracite lining, LED strips, patterned moquette.
       interior: {
-        floor: new THREE.MeshStandardMaterial({ map: this.makeKvvFloorTexture(), color: 0x8d9296, roughness: 0.94 }),
+        floor: new THREE.MeshStandardMaterial({ map: this.makeTramFloorTexture(), color: 0x8d9296, roughness: 0.94 }),
         ceiling: new THREE.MeshStandardMaterial({ color: 0xf0f1ef, roughness: 0.86 }),
         wall: new THREE.MeshStandardMaterial({ color: 0x9fa5a9, roughness: 0.8 }),
-        seatFabric: new THREE.MeshStandardMaterial({ map: this.makeKvvSeatFabricTexture([38, 62, 104], [120, 152, 190]), roughness: 0.9 }),
+        seatFabric: new THREE.MeshStandardMaterial({ map: this.makeTramSeatFabricTexture([38, 62, 104], [120, 152, 190]), roughness: 0.9 }),
         seatShell: new THREE.MeshStandardMaterial({ color: 0x2c3134, roughness: 0.52 }),
         metal: new THREE.MeshStandardMaterial({ color: 0xc2c7c9, roughness: 0.28, metalness: 0.8 }),
         accent: new THREE.MeshStandardMaterial({ color: 0xf0c020, roughness: 0.4, metalness: 0.22 }),
@@ -2555,7 +2705,7 @@ class ProceduralTransitVehicleFactory {
       const bodyCenterZ = (-section.end * cabDepth) / 2;
       const doorZs = section.end === 0 ? [-2.5, 2.5] : [bodyCenterZ - 2.8, bodyCenterZ + 2.8];
 
-      this.addKvvTramModule(car, livery, { sectionLength: section.length, bodyLength, bodyCenterZ, doorZs, doorWidthM: 1.6 });
+      this.addModernTramModule(car, livery, { sectionLength: section.length, bodyLength, bodyCenterZ, doorZs, doorWidthM: 1.6 });
 
       if (section.end !== 0) {
         const cab = new THREE.Group();
@@ -3740,7 +3890,7 @@ class ProceduralTransitVehicleFactory {
 
   // Speckled vinyl saloon floor for the KVV cars, in the same spirit as the
   // regional-train floor but darker and cooler.
-  private makeKvvFloorTexture(): THREE.DataTexture {
+  private makeTramFloorTexture(): THREE.DataTexture {
     const size = 32;
     const pixels = new Uint8Array(size * size * 4);
     for (let y = 0; y < size; y++) {
@@ -3767,7 +3917,7 @@ class ProceduralTransitVehicleFactory {
 
   // Flecked moquette; base and fleck colours differ per operator so the two
   // Karlsruhe cabins read as different generations of rolling stock.
-  private makeKvvSeatFabricTexture(base: [number, number, number], fleck: [number, number, number]): THREE.DataTexture {
+  private makeTramSeatFabricTexture(base: [number, number, number], fleck: [number, number, number]): THREE.DataTexture {
     const size = 32;
     const pixels = new Uint8Array(size * size * 4);
     for (let y = 0; y < size; y++) {
@@ -3867,6 +4017,48 @@ class ProceduralTransitVehicleFactory {
     shape.quadraticCurveTo(0, -0.5, 0.88, -0.34);
     shape.lineTo(0.9, 0.52);
     shape.quadraticCurveTo(0, 0.68, -0.9, 0.52);
+    shape.closePath();
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelSize: 0.018, bevelThickness: 0.014, bevelSegments: 2, curveSegments: 12 });
+    geometry.translate(0, 0, -0.025);
+    return geometry;
+  }
+
+  // Zürich Cobra cab: a 2.4 m body drawn in hard at the roof so the blue cap the
+  // caller mounts above it reads as the overhanging dome of the real Be 5/6. The
+  // front ring's bottom/shoulder/roof points are collinear in (z, y), giving the
+  // one plane (COBRA_CAB_FRONT_RAKE) that the mask, screen and trim mount onto.
+  private makeCobraCabNose(): THREE.BufferGeometry {
+    return this.makeTaperedTramCab([
+      { zBottom: -0.12, zShoulder: -0.12, zTop: -0.12, bottom: 0.5, shoulder: 2.7, top: 3.3, bottomHalf: 1.21, half: 1.21, roofHalf: 1.03 },
+      { zBottom: 0.88, zShoulder: 0.84, zTop: 0.72, bottom: 0.48, shoulder: 2.66, top: 3.2, bottomHalf: 1.2, half: 1.19, roofHalf: 0.98 },
+      { zBottom: 1.58, zShoulder: 1.38, zTop: 1.18, bottom: 0.46, shoulder: 2.58, top: 3.02, bottomHalf: 1.15, half: 1.14, roofHalf: 0.94 },
+      { zBottom: 1.96, zShoulder: 1.7, zTop: 1.66, bottom: 0.5, shoulder: 2.5, top: 2.82, bottomHalf: 1.08, half: 1.08, roofHalf: 0.86 }
+    ]);
+  }
+
+  private makeCobraCabMask(): THREE.ExtrudeGeometry {
+    const shape = new THREE.Shape();
+    shape.moveTo(-0.92, -0.36);
+    shape.quadraticCurveTo(-1.0, 0.32, -0.94, 0.86);
+    shape.quadraticCurveTo(-0.9, 1.1, -0.62, 1.14);
+    shape.lineTo(0.62, 1.14);
+    shape.quadraticCurveTo(0.9, 1.1, 0.94, 0.86);
+    shape.quadraticCurveTo(1.0, 0.32, 0.92, -0.36);
+    shape.quadraticCurveTo(0, -0.52, -0.92, -0.36);
+    shape.closePath();
+    // Same depth/bevel as the other cab masks, so the front face lands at
+    // z = +0.061 and the trim offsets stay comparable across vehicles.
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.07, bevelEnabled: true, bevelSize: 0.03, bevelThickness: 0.026, bevelSegments: 3, curveSegments: 12 });
+    geometry.translate(0, 0, -0.035);
+    return geometry;
+  }
+
+  private makeCobraWindscreen(): THREE.ExtrudeGeometry {
+    const shape = new THREE.Shape();
+    shape.moveTo(-0.84, -0.18);
+    shape.quadraticCurveTo(0, -0.32, 0.84, -0.18);
+    shape.lineTo(0.86, 0.62);
+    shape.quadraticCurveTo(0, 0.76, -0.86, 0.62);
     shape.closePath();
     const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelSize: 0.018, bevelThickness: 0.014, bevelSegments: 2, curveSegments: 12 });
     geometry.translate(0, 0, -0.025);
