@@ -21,7 +21,14 @@ import type { SBahnBlueprintConfig, SBahnMaterialRole } from './SBahnBlueprintCo
 // procedural S-Bahn builder — keep it visually byte-identical unless the task
 // is about changing S-Bahn visuals.
 
-type SBahnMaterials = Record<SBahnMaterialRole, THREE.MeshStandardMaterial>;
+type SBahnMaterials = Record<SBahnMaterialRole, THREE.MeshStandardMaterial> & {
+  // Resolved trim roles: each falls back to `accent` when the config omits it,
+  // so a single-accent livery (BR 430) behaves exactly as before.
+  lowerBand: THREE.MeshStandardMaterial;
+  belt: THREE.MeshStandardMaterial;
+  door: THREE.MeshStandardMaterial;
+  nose: THREE.MeshStandardMaterial;
+};
 
 export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: ResolvedVehicleBuildContext): VehicleInstance {
   const root = new THREE.Group();
@@ -63,12 +70,12 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
       grille.position.set(0, 3.875, roofPod.position.z + slat * 0.28);
       car.add(grille);
     }
-    const lowerRed = new THREE.Mesh(new THREE.BoxGeometry(3.08, 0.28, 16.22), m.accent);
-    lowerRed.position.y = 0.62;
-    car.add(lowerRed);
-    passengerShells.push(lowerRed);
-    const belt = new THREE.Mesh(new THREE.BoxGeometry(3.09, 0.18, 16.23), m.accent);
-    belt.position.y = 1.72;
+    const lowerBand = new THREE.Mesh(new THREE.BoxGeometry(3.08, config.bands?.lowerHeightM ?? 0.28, 16.22), m.lowerBand);
+    lowerBand.position.y = config.bands?.lowerY ?? 0.62;
+    car.add(lowerBand);
+    passengerShells.push(lowerBand);
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(3.09, config.bands?.beltHeightM ?? 0.18, 16.23), m.belt);
+    belt.position.y = config.bands?.beltY ?? 1.72;
     car.add(belt);
     passengerShells.push(belt);
     for (const side of [-1, 1]) {
@@ -82,7 +89,7 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
         car.add(window);
       }
       for (const z of doorZs) {
-        addSlidingVehicleDoor(doors, car, side * 1.55, z, m.accent, m.glass, m.dark, 1.72, 2.05);
+        addSlidingVehicleDoor(doors, car, side * 1.55, z, m.door, m.glass, m.dark, 1.72, 2.05);
       }
     }
     if (index === 0 || index === carCenters.length - 1) {
@@ -90,7 +97,7 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
       // windscreen band, vertical LED light bars and a top destination display.
       const cabEnd = (index === 0 ? -1 : 1) as -1 | 1;
       const faceTilt = -cabEnd * 0.197;
-      const nose = new THREE.Mesh(makeSBahn430Nose(), m.accent);
+      const nose = new THREE.Mesh(makeSBahn430Nose(), m.nose);
       nose.position.z = cabEnd * 8.0;
       if (cabEnd < 0) nose.rotation.y = Math.PI;
       nose.castShadow = true;
@@ -108,16 +115,29 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
       windscreen.rotation.x = faceTilt;
       car.add(windscreen);
 
+      const roundLamps = config.cabLampStyle === 'round';
       for (const side of [-1, 1] as const) {
-        const housing = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.78, 0.07), m.dark);
-        housing.position.set(side * 1.12, 1.32, cabEnd * 8.88);
+        // BR 430 stacks a vertical LED bar over a tail dot in one slim housing;
+        // the CDMX cars carry two large round clusters side by side instead.
+        const housing = roundLamps
+          ? new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.29, 0.07, 20), m.dark)
+          : new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.78, 0.07), m.dark);
+        if (roundLamps) housing.rotation.x = Math.PI / 2;
+        housing.position.set(side * 1.12, roundLamps ? 1.34 : 1.32, cabEnd * 8.88);
         car.add(housing);
         cabShells.push(housing);
-        const headBar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.42, 0.055), m.headlight);
-        headBar.position.set(side * 1.12, 1.18, cabEnd * 8.92);
+
+        const headBar = roundLamps
+          ? new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.055, 20), m.headlight)
+          : new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.42, 0.055), m.headlight);
+        if (roundLamps) headBar.rotation.x = Math.PI / 2;
+        headBar.position.set(side * (roundLamps ? 1.24 : 1.12), roundLamps ? 1.34 : 1.18, cabEnd * 8.92);
         car.add(headBar);
-        const tailDot = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.055), m.tailLamp);
-        tailDot.position.set(side * 1.12, 1.56, cabEnd * 8.92);
+        const tailDot = roundLamps
+          ? new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.055, 16), m.tailLamp)
+          : new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.055), m.tailLamp);
+        if (roundLamps) tailDot.rotation.x = Math.PI / 2;
+        tailDot.position.set(side * (roundLamps ? 0.98 : 1.12), roundLamps ? 1.34 : 1.56, cabEnd * 8.92);
         car.add(tailDot);
         cabShells.push(headBar, tailDot);
 
@@ -194,7 +214,7 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
     addSBahnLuggageRacks(car, interior);
     seatRowZs.forEach((z, rowIndex) => {
       for (const x of seatXs) {
-        addSBahnSeat(car, x, z, rowIndex % 2 === 0 ? 1 : -1, interior);
+        addSBahnSeat(car, x, z, rowIndex % 2 === 0 ? 1 : -1, interior, config.seatOrientation === 'longitudinal');
       }
     });
     for (const z of poleZs) {
@@ -225,7 +245,9 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
   });
 
   const trainHalfLengthM = config.formation.halfLengthM;
-  addPantograph(root, new THREE.Vector3(config.pantograph.x, config.pantograph.y, config.pantograph.z), m.dark);
+  if (config.pantograph) {
+    addPantograph(root, new THREE.Vector3(config.pantograph.x, config.pantograph.y, config.pantograph.z), m.dark);
+  }
   addExteriorLightThrow(root, rig, trainHalfLengthM, config.headlightBeamHeightM);
 
   return {
@@ -246,7 +268,13 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
 function makeSBahnMaterials(configMaterials: SBahnBlueprintConfig['materials']): SBahnMaterials {
   const materials = {} as SBahnMaterials;
   for (const role of Object.keys(configMaterials) as SBahnMaterialRole[]) {
-    materials[role] = makeStandardMaterial(configMaterials[role]);
+    const config = configMaterials[role];
+    if (config) materials[role] = makeStandardMaterial(config);
+  }
+  // An omitted trim role reuses the accent instance rather than a copy of it, so
+  // liveries that don't split their trim allocate exactly what they did before.
+  for (const role of ['lowerBand', 'belt', 'door', 'nose'] as const) {
+    if (!materials[role]) materials[role] = materials.accent;
   }
   return materials;
 }
@@ -373,7 +401,8 @@ function addSBahnSeat(
   x: number,
   z: number,
   facing: -1 | 1,
-  m: SBahnInteriorMaterials
+  m: SBahnInteriorMaterials,
+  longitudinal = false
 ): void {
   const seat = new THREE.Group();
   const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.56), m.seatFabric);
@@ -396,6 +425,9 @@ function addSBahnSeat(
   base.position.set(0, 1.23, 0);
   seat.add(base);
   seat.position.set(x, 0, z);
+  // A bench along the wall is the same seat turned to face the aisle. Rotating
+  // about the seat origin keeps the cushion over the same floor patch.
+  if (longitudinal) seat.rotation.y = x < 0 ? Math.PI / 2 : -Math.PI / 2;
   car.add(seat);
 }
 

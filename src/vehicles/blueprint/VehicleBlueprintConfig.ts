@@ -27,6 +27,10 @@ export type VehicleSectionConfig = {
   glassMaterial?: string;
   darkMaterial?: string;
   roofMaterial?: string;
+  // Protruding chamfered snout (default) or a flat cab end that stops at the
+  // body — boxy stock like the CDMX Tren Ligero has no snout to speak of.
+  noseStyle?: 'chamfered' | 'none';
+  noseMaterial?: string;
 };
 
 export type VehicleDoorConfig = {

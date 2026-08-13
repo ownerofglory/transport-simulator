@@ -1,0 +1,47 @@
+{
+  "id": "cdmx-insurgente-caf",
+  "kind": "s-bahn",
+  "displayName": "El Insurgente (CAF, Tren Interurbano México-Toluca)",
+  "materials": {
+    "shell": { "color": "#c3c9cd", "roughness": 0.3, "metalness": 0.66 },
+    "accent": { "color": "#c8102e", "roughness": 0.36 },
+    "lowerBand": { "color": "#1d7a4c", "roughness": 0.38 },
+    "belt": { "color": "#aab1b6", "roughness": 0.3, "metalness": 0.6 },
+    "door": { "color": "#cfd4d8", "roughness": 0.28, "metalness": 0.7 },
+    "nose": { "color": "#c8102e", "roughness": 0.34 },
+    "dark": { "color": "#191d21", "roughness": 0.3 },
+    "glass": { "color": "#8ab3c4", "transparent": true, "opacity": 0.42, "roughness": 0.05, "doubleSided": true },
+    "interior": { "color": "#eceef0", "roughness": 0.86 },
+    "floor": { "color": "#6e757b", "roughness": 0.9 },
+    "seat": { "color": "#1d7a4c", "roughness": 0.88 },
+    "metal": { "color": "#a5abae", "roughness": 0.32, "metalness": 0.74 },
+    "headlight": { "color": "#ffffff", "emissive": "#fff6d8", "emissiveIntensity": 0.58 },
+    "tailLamp": { "color": "#9b1c18", "emissive": "#d42020", "emissiveIntensity": 0.4 }
+  },
+  "cabLampStyle": "round",
+  "bands": { "lowerY": 0.66, "lowerHeightM": 0.36, "beltY": 1.72, "beltHeightM": 0.14 },
+  "logo": {
+    "text": "U",
+    "background": "#c8102e",
+    "foreground": "#ffffff"
+  },
+  "destinationDisplay": {
+    "background": "#0c0e10",
+    "foreground": "#ff5a3c"
+  },
+  "formation": {
+    "carCenters": [-25.2, -8.4, 8.4, 25.2],
+    "halfLengthM": 34.2,
+    "sectionNamePrefix": "Articulated car El Insurgente section"
+  },
+  "layout": {
+    "doorZs": [-3.15, 3.15],
+    "windowZs": [-6.25, -4.85, -1.35, 0, 1.35, 4.85, 6.25],
+    "seatRowZs": [-6.2, -5.1, -1.35, 0, 1.35, 5.1, 6.2],
+    "seatXs": [-1.04, -0.58, 0.58, 1.04],
+    "poleZs": [-3.15, 0, 3.15],
+    "bogieZs": [-5.2, 5.2]
+  },
+  "pantograph": { "x": 0, "y": 3.86, "z": 8.5 },
+  "headlightBeamHeightM": 1.45
+}

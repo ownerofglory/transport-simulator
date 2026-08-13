@@ -67,6 +67,19 @@ export function buildVehicleFromBlueprint(config: VehicleBlueprintConfig, contex
     });
   }
 
+  // PassengerCameraRig reads its anchor from the car's userData, so the config's
+  // passenger anchor only takes effect once it is copied onto the car. The rig
+  // picks trainCars[2] (falling back to the middle car), so an anchor aimed at
+  // another section is ignored — configs must target the car the rig will pick.
+  const passengerAnchor = config.cameraAnchors?.passenger;
+  if (passengerAnchor) {
+    const anchorCar = cars[passengerAnchor.section ?? 0];
+    if (anchorCar) {
+      anchorCar.userData.passengerCameraLocal = passengerAnchor.position;
+      if (passengerAnchor.lookAt) anchorCar.userData.passengerLookAtLocal = passengerAnchor.lookAt;
+    }
+  }
+
   for (const explicitDisplay of config.destinationDisplays ?? []) {
     const section = config.sections[explicitDisplay.section];
     if (!section) continue;

@@ -8,33 +8,36 @@ const mexicoCityTransportModes: TransportModeDefinition[] = [
     available: true,
     vehicleFamily: 'STC Metro train',
     vehicleKind: 's-bahn',
+    vehicleDesignId: 'cdmx-metro-nm16',
     guidewayKind: 's-bahn',
     interiorCameraProfile: 's-bahn',
-    lineAccentColor: '#f06292'
+    lineAccentColor: '#ef6521' // STC orange
   },
   {
     id: 'tram',
-    label: 'Tram',
+    label: 'Tren Ligero',
     available: true,
     vehicleFamily: 'Tren Ligero',
     vehicleKind: 'stadtbahn',
     guidewayKind: 'stadtbahn',
     interiorCameraProfile: 'tram',
     passengerOffsetM: 3.0,
-    lineAccentColor: '#1b8f74',
-    // Previously fell through to the generic Stuttgart Tango builder; routed to
-    // the declarative blueprint vehicle system as the first non-critical pilot.
-    vehicleDesignId: 'generic-modern-tram'
+    lineAccentColor: '#1259a8', // STE blue
+    vehicleDesignId: 'cdmx-tren-ligero-te95'
   },
   {
+    // GTFS route_type 2 for the city; carries El Insurgente (Zinacantepec -
+    // Santa Fe) alongside the Tren Suburbano (Buenavista - Cuautitlán), so the
+    // mode is named and liveried after the line the simulator opens on.
     id: 'rail',
-    label: 'Rail',
+    label: 'Insurgente',
     available: true,
-    vehicleFamily: 'Mexico City regional rail',
+    vehicleFamily: 'El Insurgente (CAF)',
     vehicleKind: 's-bahn',
+    vehicleDesignId: 'cdmx-insurgente-caf',
     guidewayKind: 's-bahn',
     interiorCameraProfile: 's-bahn',
-    lineAccentColor: '#7b1fa2'
+    lineAccentColor: '#c8102e'
   },
   {
     id: 'cablebus',
