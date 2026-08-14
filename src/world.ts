@@ -42,6 +42,8 @@ export class TransitWorld {
   private readonly routeGeoDistancesM: number[];
   // Sun/ambient/hemisphere lighting, time-of-day, season lighting, sky + fog.
   private readonly lightingSystem = new LightingSystem(this.scene, this.renderer);
+  // Last pushed vehicle lamp state, so the per-frame check only writes on a flip.
+  private vehicleLightsOn: boolean | null = null;
   private currentSeason: Season = 'summer';
   // Cinematic (photo) presentation: enter/exit, preset cycling, camera math.
   private readonly photoSystem = new PhotoSystem();
@@ -118,7 +120,8 @@ export class TransitWorld {
         this.updateArticulatedVehicle(root, cars, distanceM, direction, trackOffsetM)
     });
     this.activeVehicle.setPresentation(this.cameraSystem.currentMode(), this.photoSystem.isActive());
-    this.activeVehicle.updateExteriorLights(this.lightingSystem.daylightFactor());
+    this.vehicleLightsOn = null; // new vehicle instance: force the lamp state to be pushed.
+    this.updateVehicleLighting();
     this.opposingLayer = new OpposingTrafficLayer(layerContext);
     this.opposingLayer.build(this.activeVehicle.root);
     this.scene.add(this.opposingLayer.root);
@@ -143,7 +146,7 @@ export class TransitWorld {
 
   setTimeOfDay(hour: number): void {
     this.lightingSystem.setTimeOfDay(hour);
-    this.activeVehicle.updateExteriorLights(this.lightingSystem.daylightFactor());
+    this.updateVehicleLighting();
   }
 
   /** Reapplies interior/cab window + shell visibility for the current view. */
@@ -212,6 +215,8 @@ export class TransitWorld {
 
     this.environment.updateStreaming(this.geoPointAt(t));
     this.environment.setUnderground(underground);
+    this.lightingSystem.updateUnderground(underground, position, tangent, deltaSeconds);
+    this.updateVehicleLighting();
     this.activeVehicle.updateDoors(doorsOpen, deltaSeconds);
     this.activeVehicle.updateInteriorDisplay(nextStation, doorsOpen);
     this.activeVehicle.place(distanceM);
@@ -301,6 +306,18 @@ export class TransitWorld {
 
   private get railGaugeM(): number {
     return this.guidewayKind === 's-bahn' ? 1.435 : TRACK_GAUGE_M;
+  }
+
+  /**
+   * Switches head/tail lamps and saloon lighting from the effective light level,
+   * so they come on in tunnels as well as after dark. Only pushed to the vehicle
+   * when the on/off state actually flips — the setter walks every lamp material.
+   */
+  private updateVehicleLighting(): void {
+    const lightsOn = this.lightingSystem.effectiveDaylightFactor() < 0.45;
+    if (lightsOn === this.vehicleLightsOn) return;
+    this.vehicleLightsOn = lightsOn;
+    this.activeVehicle.updateExteriorLights(lightsOn ? 0 : 1);
   }
 
   /** True when the route is in tunnel/underground at normalized progress t. */

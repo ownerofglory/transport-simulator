@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { GuidewayKind } from '../../domain/transport';
 import { BuilderRegistry } from '../../engine/builders/BuilderRegistry';
+import { buildTunnelBore, createTunnelMaterials, type TunnelMaterials } from '../tunnels/tunnelSection';
 import type { WorldLayerContext } from './WorldLayerContext';
 
 /** Builds the running way (rails, bus street, ferry channel, guideway) and tunnels. */
@@ -14,6 +15,10 @@ export class GuidewayLayer {
     .register('schwebebahn', () => this.buildSchwebebahnGuideway())
     .register('zacke', () => this.buildMountainRailwayTrack())
     .register('seilbahn', () => this.buildMountainRailwayTrack());
+
+  // Shared across every bore on the route so the concrete texture is built
+  // once; TransitWorld disposes it with the rest of the scene graph.
+  private tunnelMaterials: TunnelMaterials | null = null;
 
   constructor(private readonly ctx: WorldLayerContext) {}
 
@@ -265,47 +270,66 @@ export class GuidewayLayer {
     if (this.ctx.guidewayKind === 'bus' || this.ctx.guidewayKind === 'ferry' || this.ctx.guidewayKind === 'schwebebahn') return;
     const mask = this.ctx.route.tunnelMask;
     if (!mask || !mask.some(Boolean)) return;
-    const liningMaterial = new THREE.MeshStandardMaterial({
-      color: 0x777a78,
-      roughness: 0.92,
-      side: THREE.BackSide
-    });
-    const portalMaterial = new THREE.MeshStandardMaterial({ color: 0x555957, roughness: 0.88 });
-    const lightMaterial = new THREE.MeshBasicMaterial({ color: 0xffedbd });
 
-    // Wide bore so the chase camera stays inside the lining on curves.
-    const boreRadiusM = 8.2;
+    this.tunnelMaterials ??= createTunnelMaterials();
     const lastPointIndex = this.ctx.route.controlPoints.length - 1;
+
     for (const [start, end] of this.ctx.maskRanges(mask)) {
       if (end - start < 1) continue;
-      // Sample the actual route spline instead of re-smoothing raw control
-      // points: a separately smoothed tube drifts off the track on tight
-      // bends, pushing one wall into the train and camera.
-      const startT = Math.max(0, start - 1) / lastPointIndex;
-      const endT = Math.min(lastPointIndex, end + 1) / lastPointIndex;
-      const sampleCount = Math.max(16, (end - start) * 6);
-      const points: THREE.Vector3[] = [];
-      for (let i = 0; i <= sampleCount; i++) {
-        const t = startT + ((endT - startT) * i) / sampleCount;
-        points.push(this.ctx.curve.getPoint(t).add(new THREE.Vector3(0, 1.2, 0)));
-      }
-      const tunnelCurve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
-      const segments = Math.max(24, (end - start) * 6);
-      const lining = new THREE.Mesh(new THREE.TubeGeometry(tunnelCurve, segments, boreRadiusM, 18, false), liningMaterial);
-      lining.name = 'OSM tunnel lining';
-      this.root.add(lining);
+      const rangeStartT = Math.max(0, start - 1) / lastPointIndex;
+      const rangeEndT = Math.min(lastPointIndex, end + 1) / lastPointIndex;
 
-      const lightPoints = tunnelCurve.getSpacedPoints(Math.max(4, end - start)).map((point) => point.add(new THREE.Vector3(0, 5.8, 0)));
-      const lightCurve = new THREE.CatmullRomCurve3(lightPoints);
-      this.root.add(new THREE.Mesh(new THREE.TubeGeometry(lightCurve, segments, 0.075, 5), lightMaterial));
-
-      for (const t of [0, 1]) {
-        const tangent = tunnelCurve.getTangentAt(t).normalize();
-        const portal = new THREE.Mesh(new THREE.TorusGeometry(boreRadiusM, 0.5, 8, 24), portalMaterial);
-        portal.position.copy(tunnelCurve.getPointAt(t));
-        portal.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
-        this.root.add(portal);
+      // The bore runs between station boxes, not through them: an underground
+      // station has its own hall, and a bore driven across it would wall the
+      // platforms off behind the lining.
+      const spans = this.tunnelSpansBetweenStations(rangeStartT, rangeEndT);
+      for (const [startT, endT] of spans) {
+        // Sample the actual route spline instead of re-smoothing raw control
+        // points: a separately smoothed bore drifts off the track on tight
+        // bends, pushing one wall into the train and camera.
+        const lengthM = (endT - startT) * this.ctx.route.routeLengthM;
+        const sampleCount = THREE.MathUtils.clamp(Math.ceil(lengthM / 9), 12, 400);
+        const points: THREE.Vector3[] = [];
+        for (let i = 0; i <= sampleCount; i++) {
+          points.push(this.ctx.curve.getPoint(startT + ((endT - startT) * i) / sampleCount));
+        }
+        this.root.add(
+          buildTunnelBore({
+            curve: new THREE.CatmullRomCurve3(points, false, 'centripetal'),
+            lengthM,
+            guidewayKind: this.ctx.guidewayKind,
+            materials: this.tunnelMaterials,
+            // Only the real tunnel mouths get a headwall; the ends that were cut
+            // for a station open straight into that station's hall.
+            portalStart: startT === rangeStartT,
+            portalEnd: endT === rangeEndT
+          })
+        );
       }
     }
+  }
+
+  /**
+   * Splits a masked tunnel range into the spans between underground stations,
+   * leaving a gap the length of the station hall at each stop.
+   */
+  private tunnelSpansBetweenStations(startT: number, endT: number): Array<[number, number]> {
+    const routeLengthM = this.ctx.route.routeLengthM;
+    const halfHallT = 46 / routeLengthM; // station hall is 82 m long, plus approach margin.
+    const spans: Array<[number, number]> = [];
+    const stationTs = this.ctx.route.stations
+      .map((station) => station.distanceM / routeLengthM)
+      .filter((t) => t > startT - halfHallT && t < endT + halfHallT)
+      .sort((a, b) => a - b);
+
+    let cursor = startT;
+    for (const stationT of stationTs) {
+      if (stationT - halfHallT > cursor) spans.push([cursor, Math.min(stationT - halfHallT, endT)]);
+      cursor = Math.max(cursor, stationT + halfHallT);
+    }
+    if (cursor < endT) spans.push([cursor, endT]);
+
+    // Drop slivers too short to read as tunnel.
+    return spans.filter(([from, to]) => (to - from) * routeLengthM > 12);
   }
 }

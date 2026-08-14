@@ -18,8 +18,8 @@ export class ChaseCameraRig implements CameraRig {
     if (input.underground) {
       return {
         position: input.position.clone()
-          .add(input.tangent.clone().multiplyScalar(-(input.trainHalfLengthM + 22))) // closer chase camera in tunnels.
-          .add(new THREE.Vector3(0, 4.6, 0)), // low ceiling-safe camera height.
+          .add(input.tangent.clone().multiplyScalar(-(input.trainHalfLengthM + 16))) // closer chase camera in tunnels.
+          .add(new THREE.Vector3(0, 3.1, 0)), // under the ~5.6 m bore crown, clear of the roof and catenary.
         target: input.position.clone()
           .add(input.tangent.clone().multiplyScalar(12)) // look slightly ahead of train.
           .add(new THREE.Vector3(0, 1.8, 0)), // target near vehicle body height.

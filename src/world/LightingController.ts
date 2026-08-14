@@ -8,6 +8,10 @@ export class LightingController {
   // Default to noon before the app applies real/local time.
   private timeOfDayHour = 12;
 
+  // 0 on the surface … 1 fully inside a tunnel. Blended by the caller so
+  // portal transitions fade instead of popping.
+  private undergroundFactor = 0;
+
   constructor(
     private readonly scene: THREE.Scene,
     private readonly renderer: THREE.WebGLRenderer,
@@ -54,6 +58,12 @@ export class LightingController {
     this.apply();
   }
 
+  /** 0 on the surface … 1 fully underground; drives tunnel darkness and fog. */
+  setUndergroundFactor(factor: number): void {
+    this.undergroundFactor = THREE.MathUtils.clamp(factor, 0, 1);
+    this.apply();
+  }
+
   /** 0 at night, 1 at full daylight; used e.g. to switch vehicle lamps. */
   daylightFactor(): number {
     return THREE.MathUtils.smoothstep(Math.sin(((this.timeOfDayHour - 6) / 12) * Math.PI), 0, 1);
@@ -78,15 +88,20 @@ export class LightingController {
       -180 // fixed north/south offset for consistent shadows.
     );
 
-    this.sun.intensity = 0.38 + daylight * 1.95 + dawnDusk * 0.34; // base night sun + daylight + golden-hour boost.
+    // Underground, daylight must not reach the bore: the sun is cut almost to
+    // nothing and the sky ambient is replaced by a dim warm tunnel fill, so the
+    // only real light left is the lamp rig travelling with the vehicle.
+    const below = this.undergroundFactor;
+
+    this.sun.intensity = (0.38 + daylight * 1.95 + dawnDusk * 0.34) * (1 - below * 0.97); // base night sun + daylight + golden-hour boost.
     this.sun.color.set(dawnDusk > 0.2 ? 0xffbd7a : daylight > 0.2 ? 0xfff7e8 : 0x9bb9e6); // warm dusk, pale day, blue night.
 
-    this.hemisphere.intensity = 0.72 + daylight * 0.58 + dawnDusk * 0.12; // ambient light tracks daytime brightness.
+    this.hemisphere.intensity = THREE.MathUtils.lerp(0.72 + daylight * 0.58 + dawnDusk * 0.12, 0.05, below); // ambient light tracks daytime brightness.
     this.hemisphere.color.set(daylight > 0.15 ? 0xddecff : 0x7898c4); // bright sky vs blue night sky.
     this.hemisphere.groundColor.set(daylight > 0.15 ? 0x586a70 : 0x29394b); // lighter ground bounce by day.
 
-    this.visibilityFill.intensity = 0.42 * (1 - daylight) + 0.08; // stronger fill at night, small fill by day.
-    this.visibilityFill.color.set(dawnDusk > 0.2 ? 0xc79b7d : 0x89a9d2); // warm dusk fill, cool general fill.
+    this.visibilityFill.intensity = THREE.MathUtils.lerp(0.42 * (1 - daylight) + 0.08, 0.07, below); // stronger fill at night, small fill by day.
+    this.visibilityFill.color.set(below > 0.5 ? 0xb9ad95 : dawnDusk > 0.2 ? 0xc79b7d : 0x89a9d2); // warm tunnel/dusk fill, cool general fill.
 
     const seasonSky: Record<Season, THREE.Color> = {
       spring: new THREE.Color(0xb9d6ed), // soft spring blue.
@@ -101,11 +116,28 @@ export class LightingController {
     // Add orange sunrise/sunset warmth without fully replacing the seasonal sky.
     if (dawnDusk > 0.2) sky.lerp(new THREE.Color(0xd98961), dawnDusk * 0.3);
 
+    // The sky stays the background even underground: the bore encloses the view,
+    // so the only place it shows through is the portal — which is exactly the
+    // blown-out white hole you see driving towards daylight.
     this.scene.background = sky;
 
     // Fog draws farther in daylight, especially in summer.
     const fogFar = THREE.MathUtils.lerp(2300, this.currentSeason === 'summer' ? 3400 : 2700, daylight);
-    this.scene.fog = new THREE.Fog(sky, fogFar * 0.4, fogFar); // near fog starts at 40% of far distance.
+    // Underground the fog turns near-black and closes right in, so the lining
+    // falls off into darkness a few car lengths ahead instead of staying evenly lit.
+    const fogColor = sky.clone().lerp(new THREE.Color(0x07080a), below);
+    const near = THREE.MathUtils.lerp(fogFar * 0.4, 12, below);
+    const far = THREE.MathUtils.lerp(fogFar, 155, below);
+
+    // Mutate the existing fog rather than replacing it; underground blending
+    // re-applies this on every step of a portal transition.
+    if (this.scene.fog instanceof THREE.Fog) {
+      this.scene.fog.color.copy(fogColor);
+      this.scene.fog.near = near;
+      this.scene.fog.far = far;
+    } else {
+      this.scene.fog = new THREE.Fog(fogColor, near, far);
+    }
 
     // Slightly lift exposure at dusk/night so the scene stays readable.
     this.renderer.toneMappingExposure = 1.05 + dawnDusk * 0.1 + (1 - daylight) * 0.12;
