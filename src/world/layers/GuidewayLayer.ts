@@ -19,6 +19,8 @@ export class GuidewayLayer {
   // Shared across every bore on the route so the concrete texture is built
   // once; TransitWorld disposes it with the rest of the scene graph.
   private tunnelMaterials: TunnelMaterials | null = null;
+  // Lazily built arc-length parameter per control point.
+  private controlPointArcT: number[] | null = null;
 
   constructor(private readonly ctx: WorldLayerContext) {}
 
@@ -272,12 +274,14 @@ export class GuidewayLayer {
     if (!mask || !mask.some(Boolean)) return;
 
     this.tunnelMaterials ??= createTunnelMaterials();
-    const lastPointIndex = this.ctx.route.controlPoints.length - 1;
 
     for (const [start, end] of this.ctx.maskRanges(mask)) {
       if (end - start < 1) continue;
-      const rangeStartT = Math.max(0, start - 1) / lastPointIndex;
-      const rangeEndT = Math.min(lastPointIndex, end + 1) / lastPointIndex;
+      // Mask indices address control points, so they must be converted to the
+      // curve's arc-length parameter before they can be compared with station
+      // distances or sampled with getPointAt.
+      const rangeStartT = this.arcTAtControlIndex(start - 1);
+      const rangeEndT = this.arcTAtControlIndex(end + 1);
 
       // The bore runs between station boxes, not through them: an underground
       // station has its own hall, and a bore driven across it would wall the
@@ -291,7 +295,7 @@ export class GuidewayLayer {
         const sampleCount = THREE.MathUtils.clamp(Math.ceil(lengthM / 9), 12, 400);
         const points: THREE.Vector3[] = [];
         for (let i = 0; i <= sampleCount; i++) {
-          points.push(this.ctx.curve.getPoint(startT + ((endT - startT) * i) / sampleCount));
+          points.push(this.ctx.curve.getPointAt(startT + ((endT - startT) * i) / sampleCount));
         }
         this.root.add(
           buildTunnelBore({
@@ -310,12 +314,36 @@ export class GuidewayLayer {
   }
 
   /**
+   * Arc-length parameter of a control point, so tunnel mask indices, station
+   * distances, and curve sampling all share one space. Control points are not
+   * evenly spaced by distance, so index/count is not a usable approximation.
+   */
+  private arcTAtControlIndex(index: number): number {
+    if (!this.controlPointArcT) {
+      const points = this.ctx.route.controlPoints;
+      const cumulative = [0];
+      for (let i = 1; i < points.length; i++) {
+        const [ax, ay, az] = points[i - 1];
+        const [bx, by, bz] = points[i];
+        cumulative.push(cumulative[i - 1] + Math.hypot(bx - ax, by - ay, bz - az));
+      }
+      const total = cumulative[cumulative.length - 1] || 1;
+      this.controlPointArcT = cumulative.map((distance) => distance / total);
+    }
+    const clamped = THREE.MathUtils.clamp(index, 0, this.controlPointArcT.length - 1);
+    return this.controlPointArcT[clamped];
+  }
+
+  /**
    * Splits a masked tunnel range into the spans between underground stations,
    * leaving a gap the length of the station hall at each stop.
    */
   private tunnelSpansBetweenStations(startT: number, endT: number): Array<[number, number]> {
     const routeLengthM = this.ctx.route.routeLengthM;
-    const halfHallT = 46 / routeLengthM; // station hall is 82 m long, plus approach margin.
+    // Hall lengths come from the station builders: the S-Bahn box is 155 m long,
+    // the Stadtbahn one 82 m. The bore has to stop clear of whichever is built,
+    // or the lining closes over the platforms.
+    const halfHallT = (this.ctx.guidewayKind === 's-bahn' ? 88 : 46) / routeLengthM;
     const spans: Array<[number, number]> = [];
     const stationTs = this.ctx.route.stations
       .map((station) => station.distanceM / routeLengthM)
