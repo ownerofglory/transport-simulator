@@ -194,8 +194,7 @@ function sweepSection(
  * Headwall closing the ground around the bore mouth, so a portal reads as an
  * opening in a concrete face instead of the end of an invisible pipe.
  */
-function portalHeadwall(profile: THREE.Vector2[], spec: TunnelSectionSpec): THREE.BufferGeometry {
-  const margin = 3.4;
+function portalHeadwall(profile: THREE.Vector2[], spec: TunnelSectionSpec, margin: number): THREE.BufferGeometry {
   const outer = new THREE.Shape();
   outer.moveTo(-spec.halfWidthM - margin, -1.5);
   outer.lineTo(spec.halfWidthM + margin, -1.5);
@@ -297,9 +296,21 @@ export type TunnelBoreOptions = {
   lengthM: number;
   guidewayKind: GuidewayKind;
   materials: TunnelMaterials;
-  /** Headwalls cap real tunnel mouths; a bore running into a station box has none. */
-  portalStart?: boolean;
-  portalEnd?: boolean;
+  /** How each end is capped; see {@link TunnelEndCap}. */
+  portalStart?: TunnelEndCap;
+  portalEnd?: TunnelEndCap;
+};
+
+/**
+ * `portal` is a real tunnel mouth: a modest headwall around the opening.
+ * `bulkhead` is where the bore meets a station box — the wall has to reach the
+ * full width of the hall, or you see past the bore mouth into open sky.
+ */
+export type TunnelEndCap = 'none' | 'portal' | 'bulkhead';
+
+const END_CAP_MARGIN_M: Record<Exclude<TunnelEndCap, 'none'>, number> = {
+  portal: 3.4,
+  bulkhead: 9
 };
 
 /**
@@ -325,24 +336,20 @@ export function buildTunnelBore(options: TunnelBoreOptions): THREE.Group {
   buildLuminaires(group, curve, lengthM, spec, kind, materials);
   buildServices(group, curve, lengthM, spec, materials);
 
-  const portalEnds = [options.portalStart !== false ? 0 : -1, options.portalEnd !== false ? 1 : -1].filter((t) => t >= 0);
-  if (portalEnds.length > 0) {
-    const headwall = portalHeadwall(profile, spec);
-    const lateral = new THREE.Vector3();
-    const up = new THREE.Vector3();
-    const matrix = new THREE.Matrix4();
-    for (const t of portalEnds) {
-      const wall = new THREE.Mesh(headwall.clone(), materials.portal);
-      frameAt(curve, t, lateral, up);
-      const tangent = curve.getTangentAt(t);
-      // Headwall plane spans lateral/up with its normal along the bore.
-      matrix.makeBasis(lateral, up, tangent);
-      wall.quaternion.setFromRotationMatrix(matrix);
-      wall.position.copy(curve.getPointAt(t));
-      wall.name = 'Tunnel portal headwall';
-      group.add(wall);
-    }
-    headwall.dispose();
+  const lateral = new THREE.Vector3();
+  const up = new THREE.Vector3();
+  const matrix = new THREE.Matrix4();
+  for (const [t, cap] of [[0, options.portalStart ?? 'portal'], [1, options.portalEnd ?? 'portal']] as const) {
+    if (cap === 'none') continue;
+    const wall = new THREE.Mesh(portalHeadwall(profile, spec, END_CAP_MARGIN_M[cap]), materials.portal);
+    frameAt(curve, t, lateral, up);
+    const tangent = curve.getTangentAt(t);
+    // Headwall plane spans lateral/up with its normal along the bore.
+    matrix.makeBasis(lateral, up, tangent);
+    wall.quaternion.setFromRotationMatrix(matrix);
+    wall.position.copy(curve.getPointAt(t));
+    wall.name = cap === 'bulkhead' ? 'Tunnel station bulkhead' : 'Tunnel portal headwall';
+    group.add(wall);
   }
 
   return group;

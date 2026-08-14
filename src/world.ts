@@ -44,6 +44,9 @@ export class TransitWorld {
   private readonly lightingSystem = new LightingSystem(this.scene, this.renderer);
   // Last pushed vehicle lamp state, so the per-frame check only writes on a flip.
   private vehicleLightsOn: boolean | null = null;
+  // Stable reference so the per-frame camera input does not allocate a closure.
+  private readonly routePointAtDistanceBound = (distanceM: number, laneOffsetM = 0) =>
+    this.routePointAtDistance(distanceM, laneOffsetM);
   private currentSeason: Season = 'summer';
   // Cinematic (photo) presentation: enter/exit, preset cycling, camera math.
   private readonly photoSystem = new PhotoSystem();
@@ -229,7 +232,10 @@ export class TransitWorld {
       passengerOffsetM: this.modeDefinition?.passengerOffsetM ?? 0,
       trainHalfLengthM: this.activeVehicle.trainHalfLengthM,
       train: this.activeVehicle.root,
-      trainCars: this.activeVehicle.cars
+      trainCars: this.activeVehicle.cars,
+      routeDistanceM: distanceM,
+      activeLaneOffsetM: this.activeLaneOffsetM,
+      routePointAtDistance: this.routePointAtDistanceBound
     });
     if (this.photoSystem.isActive()) {
       this.photoSystem.updateCamera({

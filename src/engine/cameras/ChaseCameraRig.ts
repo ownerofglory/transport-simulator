@@ -16,12 +16,14 @@ export class ChaseCameraRig implements CameraRig {
   pose(input: CameraRigContext): CameraPose {
     const up = new THREE.Vector3(0, 1, 0);
     if (input.underground) {
+      // Follow the alignment rather than the tangent: a straight line back from
+      // the train leaves the curve on bends and puts the camera through the
+      // tunnel wall. Sampling the route keeps it in the middle of the bore.
+      const behindM = input.trainHalfLengthM + 16; // closer chase camera in tunnels.
       return {
-        position: input.position.clone()
-          .add(input.tangent.clone().multiplyScalar(-(input.trainHalfLengthM + 16))) // closer chase camera in tunnels.
+        position: input.routePointAtDistance(input.routeDistanceM - behindM, input.activeLaneOffsetM)
           .add(new THREE.Vector3(0, 3.1, 0)), // under the ~5.6 m bore crown, clear of the roof and catenary.
-        target: input.position.clone()
-          .add(input.tangent.clone().multiplyScalar(12)) // look slightly ahead of train.
+        target: input.routePointAtDistance(input.routeDistanceM + 12, input.activeLaneOffsetM) // look slightly ahead of train.
           .add(new THREE.Vector3(0, 1.8, 0)), // target near vehicle body height.
         up
       };

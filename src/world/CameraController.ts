@@ -16,6 +16,12 @@ export type CameraUpdateInput = {
   trainHalfLengthM: number;
   train: THREE.Group;
   trainCars: THREE.Group[];
+  // Route distance of the vehicle and a sampler along the alignment. A rig that
+  // must stay inside a structure (the tunnel bore) places itself along the route
+  // instead of on the tangent, which leaves the curve on bends.
+  routeDistanceM: number;
+  activeLaneOffsetM: number;
+  routePointAtDistance: (distanceM: number, laneOffsetM?: number) => THREE.Vector3;
 };
 
 /** Controls chase, passenger, and cab camera placement for the active vehicle. */

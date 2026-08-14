@@ -303,10 +303,10 @@ export class GuidewayLayer {
             lengthM,
             guidewayKind: this.ctx.guidewayKind,
             materials: this.tunnelMaterials,
-            // Only the real tunnel mouths get a headwall; the ends that were cut
-            // for a station open straight into that station's hall.
-            portalStart: startT === rangeStartT,
-            portalEnd: endT === rangeEndT
+            // Real tunnel mouths get a portal headwall; ends cut for a station
+            // get a full-width bulkhead sealing the bore against the hall.
+            portalStart: startT === rangeStartT ? 'portal' : 'bulkhead',
+            portalEnd: endT === rangeEndT ? 'portal' : 'bulkhead'
           })
         );
       }
@@ -341,9 +341,11 @@ export class GuidewayLayer {
   private tunnelSpansBetweenStations(startT: number, endT: number): Array<[number, number]> {
     const routeLengthM = this.ctx.route.routeLengthM;
     // Hall lengths come from the station builders: the S-Bahn box is 155 m long,
-    // the Stadtbahn one 82 m. The bore has to stop clear of whichever is built,
-    // or the lining closes over the platforms.
-    const halfHallT = (this.ctx.guidewayKind === 's-bahn' ? 88 : 46) / routeLengthM;
+    // the Stadtbahn one 82 m. The bore stops just *inside* each hall rather than
+    // short of it — ending flush leaves a slot of open sky between the two, and
+    // a few metres of overlap reads as the tunnel mouth at the platform end.
+    const halfHallM = this.ctx.guidewayKind === 's-bahn' ? 77.5 : 41;
+    const halfHallT = (halfHallM - 3) / routeLengthM;
     const spans: Array<[number, number]> = [];
     const stationTs = this.ctx.route.stations
       .map((station) => station.distanceM / routeLengthM)
