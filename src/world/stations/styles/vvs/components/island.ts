@@ -3,6 +3,7 @@ import { makeLabelTexture } from '../../../../../labels';
 import type { WorldLayerContext } from '../../../../layers/WorldLayerContext';
 import type { RouteStation, StationPlatformDefinition } from '../../../types';
 import { platformSpanT } from '../../../placement';
+import { DEFAULT_DECK_TOP_M } from './platform';
 import type { VvsStationMaterials } from '../VvsStationMaterials';
 import type { VvsFurnitureCounts } from './furniture';
 
@@ -27,10 +28,11 @@ export function buildVvsCenterPlatform(
   platform: StationPlatformDefinition | undefined
 ): void {
   const lengthM = platform?.lengthM ?? DEFAULT_LENGTH_M;
+  const deckTopM = platform?.heightM ?? DEFAULT_DECK_TOP_M;
   const { startT, endT } = platformSpanT(station.distanceM, lengthM, layer.route.routeLengthM);
 
   const deck = new THREE.Mesh(
-    layer.makeRouteStrip(0, ISLAND_HALF_WIDTH_M * 2, startT, endT, 24, 0.22),
+    layer.makeRouteStrip(0, ISLAND_HALF_WIDTH_M * 2, startT, endT, 24, deckTopM),
     materials.platform
   );
   deck.receiveShadow = true;
@@ -39,12 +41,12 @@ export function buildVvsCenterPlatform(
 
   for (const side of [-1, 1]) {
     const edge = new THREE.Mesh(
-      layer.makeRouteStrip(side * (ISLAND_HALF_WIDTH_M - 0.1), 0.35, startT, endT, 28, 0.245),
+      layer.makeRouteStrip(side * (ISLAND_HALF_WIDTH_M - 0.1), 0.35, startT, endT, 28, deckTopM + 0.025),
       materials.platformEdge
     );
     root.add(edge);
     const tactile = new THREE.Mesh(
-      layer.makeRouteStrip(side * (ISLAND_HALF_WIDTH_M - 0.45), 0.5, startT, endT, 28, 0.25),
+      layer.makeRouteStrip(side * (ISLAND_HALF_WIDTH_M - 0.45), 0.5, startT, endT, 28, deckTopM + 0.03),
       materials.tactile
     );
     tactile.name = `Island tactile edge ${station.name}`;

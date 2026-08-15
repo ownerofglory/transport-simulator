@@ -105,6 +105,41 @@ describe('station catalog schema 2', () => {
   });
 });
 
+describe('platform height', () => {
+  const station: RouteStation = { name: 'Unclassified Test Stop', distanceM: 500 };
+
+  it('gives Stadtbahn stops the 0.8 m high-floor deck', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    const resolved = provider.resolve(station, {
+      layer: { stationStyleId: 'vvs-stadtbahn' } as never,
+      placement: placementAt(station, false)
+    });
+    expect(resolved.platform.heightM).toBe(0.8);
+  });
+
+  it('leaves the low kerb for tram networks that only fall back to this style', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    const resolved = provider.resolve(station, {
+      layer: {} as never, // no stationStyleId: Odessa/Ulm/Lviv trams
+      placement: placementAt(station, false)
+    });
+    expect(resolved.platform.heightM).toBe(0.22);
+  });
+
+  it('carries surface canopy and parapet detail from the catalog', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    const budapester: RouteStation = { name: 'Budapester Platz', distanceM: 300 };
+    const resolved = provider.resolve(budapester, {
+      layer: { stationStyleId: 'vvs-stadtbahn' } as never,
+      placement: placementAt(budapester, false)
+    });
+    expect(resolved.platform.heightM).toBe(0.8);
+    expect(resolved.architecture?.canopy?.nameOnFascia).toBe(true);
+    expect(resolved.environment?.edgeParapet).toBe('wall');
+    expect(resolved.signage?.lines).toContain('U12');
+  });
+});
+
 describe('underground hall extent', () => {
   // The station box and the tunnel cut read this same function; if they ever
   // disagree you get daylight at the bore mouth or slabs across the bore.

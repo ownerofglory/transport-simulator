@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { makeLabelTexture } from '../../../../../labels';
+import type { StationCanopyStyle } from '../../../types';
 import type { VvsStationMaterials } from '../VvsStationMaterials';
 
 export type VvsCanopyOptions = {
@@ -6,6 +8,10 @@ export type VvsCanopyOptions = {
   platformOffsetM?: number; // lateral center of the platform this canopy covers
   centerZ?: number; // along-route center (shifted for staggered platforms)
   accent?: THREE.Material; // fascia/post accent; defaults to SSB blue
+  style?: StationCanopyStyle;
+  postMaterial?: THREE.Material;
+  // Stop name printed along the outer fascia, as the real canopies carry it.
+  nameOnFascia?: string;
 };
 
 /**
@@ -33,9 +39,24 @@ export function buildVvsCanopy(
   const half = lengthM / 2;
   const postZs = [center - half + 2, center, center + half - 2];
 
+  const style = options.style ?? 'flat-slab';
+
+  if (style === 'curved-shell') {
+    // Translucent barrel over the platform, as on the newer roadside stops.
+    const shell = new THREE.Mesh(
+      new THREE.CylinderGeometry(3.3, 3.3, lengthM, 16, 1, true, Math.PI, Math.PI),
+      materials.glass
+    );
+    shell.position.set(roofX, 3.9, center);
+    shell.rotation.z = Math.PI / 2;
+    shell.rotation.y = Math.PI / 2;
+    local.add(shell);
+  }
+
   const roof = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.24, lengthM), materials.canopy);
   roof.position.set(roofX, 4.25, center);
-  roof.rotation.z = side * -0.035;
+  // The butterfly roof tilts hard off a single spine instead of lying near flat.
+  roof.rotation.z = side * (style === 'butterfly' ? -0.14 : -0.035);
   roof.castShadow = true;
   local.add(roof);
 
@@ -45,12 +66,29 @@ export function buildVvsCanopy(
     local.add(fascia);
   }
 
+  if (options.nameOnFascia) {
+    const texture = makeLabelTexture(options.nameOnFascia, {
+      width: 1024,
+      height: 96,
+      bg: '#f2f2ef',
+      fg: '#1b1c1e'
+    });
+    const plate = new THREE.Mesh(
+      new THREE.PlaneGeometry(Math.min(lengthM - 2, 20), 0.38),
+      new THREE.MeshBasicMaterial({ map: texture, side: THREE.FrontSide })
+    );
+    plate.position.set(roofX - side * 3.15, 4.12, center);
+    plate.rotation.y = (-side * Math.PI) / 2;
+    local.add(plate);
+  }
+
   const glassBack = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.55, lengthM - 3), materials.glass);
   glassBack.position.set(glassX, 2.55, center);
   local.add(glassBack);
 
+  const postMaterial = options.postMaterial ?? accent;
   for (const z of postZs) {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, 3.55, 0.16), accent);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, 3.55, 0.16), postMaterial);
     post.position.set(postX, 2.25, z);
     post.castShadow = true;
     local.add(post);
