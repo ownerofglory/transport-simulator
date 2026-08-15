@@ -47,23 +47,81 @@ export type StationPlatformDefinition = {
   staggerM?: number;
 };
 
+// How an underground hall is roofed. Stuttgart's boxes are visibly different
+// from each other: plain slabs, longitudinal coffers, dark ribbed metal decks,
+// and Rotebühlplatz's pitched roof on exposed steel trusses.
+export type StationCeilingStyle = 'flat-slab' | 'coffered' | 'ribbed-metal' | 'trussed-vault';
+
+// Wall build-up. `enamel-panel` and `tile` add a coloured cladding field with a
+// dark plinth; `concrete` leaves the structural wall bare (the legacy look).
+export type StationWallFinish = 'concrete' | 'enamel-panel' | 'tile';
+
+export type StationColumnStyle = 'none' | 'square' | 'round';
+
+// Platform lighting: short segments (legacy), one continuous strip per side, or
+// recessed rows set into the ceiling.
+export type StationLightingStyle = 'strip-segments' | 'strip-continuous' | 'recessed-rows';
+
+// Underground box shell. Length is not configurable here: it has to agree with
+// the tunnel cut, so it comes from `undergroundHallHalfLengthM`.
+export type StationHallDefinition = {
+  widthM?: number;
+  heightM?: number;
+  ceiling?: StationCeilingStyle;
+  ceilingColor?: string;
+  trussColor?: string;
+};
+
+export type StationWallsDefinition = {
+  finish?: StationWallFinish;
+  color?: string; // station identity colour of the cladding field
+  plinthColor?: string;
+  bandColor?: string; // frieze band the station name sits in
+};
+
+export type StationColumnsDefinition = {
+  style?: StationColumnStyle;
+  color?: string;
+  spacingM?: number;
+};
+
+export type StationLightingDefinition = {
+  style?: StationLightingStyle;
+  color?: string;
+};
+
 // Appearance-only descriptors. Colors, finishes, and roof kind never determine
 // where a platform goes.
 export type StationArchitectureDefinition = {
   family?: string;
   roof?: 'none' | 'short-canopy' | 'full-canopy' | 'hall' | 'custom';
-  wallFinish?: string;
-  columnStyle?: string;
+  hall?: StationHallDefinition;
+  walls?: StationWallsDefinition;
+  columns?: StationColumnsDefinition;
+  lighting?: StationLightingDefinition;
   accentColor?: string;
   customAsset?: string;
 };
 
 // Accessibility is topology, not decoration: recorded explicitly per stop.
+// `offsetM` is along-route from the stop centre, `side` selects the platform.
 export type StationAccessDefinition = {
   type: 'stairs' | 'ramp' | 'lift' | 'escalator' | 'crossing';
   side: 'left' | 'right' | 'center';
   offsetM: number;
   direction?: string;
+  // Escalator/stair runs default to a flight from platform to street soffit;
+  // widthM covers a doubled-up bank (Stadtmitte has three side by side).
+  widthM?: number;
+};
+
+// Wayfinding content. Exit street names are real infrastructure, so they are
+// authored rather than invented; the rest is signage the stop actually carries.
+export type StationSignageDefinition = {
+  exits?: string[];
+  platformNumber?: string;
+  // Repeat distance of the name frieze along an underground wall.
+  nameBandRepeatM?: number;
 };
 
 export type StationFurnitureDefinition = {
@@ -73,6 +131,8 @@ export type StationFurnitureDefinition = {
   dfiDisplays?: number;
   bins?: number;
   bicycleParking?: boolean;
+  // Backlit advertising cases; wall-mounted underground, freestanding outside.
+  adVitrines?: number;
 };
 
 export type StationEnvironmentDefinition = {
@@ -90,6 +150,7 @@ export type StationVisualDefinition = {
   platform: StationPlatformDefinition;
   architecture?: StationArchitectureDefinition;
   access?: StationAccessDefinition[];
+  signage?: StationSignageDefinition;
   furniture?: StationFurnitureDefinition;
   environment?: StationEnvironmentDefinition;
   // Deterministic seed for controlled procedural variation of appearance-only

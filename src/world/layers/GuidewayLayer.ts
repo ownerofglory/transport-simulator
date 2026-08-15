@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { GuidewayKind } from '../../domain/transport';
 import { BuilderRegistry } from '../../engine/builders/BuilderRegistry';
+import { undergroundHallHalfLengthM } from '../stations/hallExtent';
 import { buildTunnelBore, createTunnelMaterials, type TunnelMaterials } from '../tunnels/tunnelSection';
 import type { WorldLayerContext } from './WorldLayerContext';
 
@@ -340,22 +341,24 @@ export class GuidewayLayer {
    */
   private tunnelSpansBetweenStations(startT: number, endT: number): Array<[number, number]> {
     const routeLengthM = this.ctx.route.routeLengthM;
-    // Hall lengths come from the station builders: the S-Bahn box is 155 m long,
-    // the Stadtbahn one 82 m. The bore stops just *inside* each hall rather than
-    // short of it — ending flush leaves a slot of open sky between the two, and
-    // a few metres of overlap reads as the tunnel mouth at the platform end.
-    const halfHallM = this.ctx.guidewayKind === 's-bahn' ? 77.5 : 41;
-    const halfHallT = (halfHallM - 3) / routeLengthM;
+    // Hall lengths come from the station builders via the shared extent helper,
+    // so the gap always matches the box that fills it. The bore stops just
+    // *inside* each hall rather than short of it — ending flush leaves a slot of
+    // open sky between the two, and a few metres of overlap reads as the tunnel
+    // mouth at the platform end.
     const spans: Array<[number, number]> = [];
-    const stationTs = this.ctx.route.stations
-      .map((station) => station.distanceM / routeLengthM)
-      .filter((t) => t > startT - halfHallT && t < endT + halfHallT)
-      .sort((a, b) => a - b);
+    const stops = this.ctx.route.stations
+      .map((station) => ({
+        t: station.distanceM / routeLengthM,
+        halfT: (undergroundHallHalfLengthM(this.ctx.guidewayKind, station.name) - 3) / routeLengthM
+      }))
+      .filter((stop) => stop.t > startT - stop.halfT && stop.t < endT + stop.halfT)
+      .sort((a, b) => a.t - b.t);
 
     let cursor = startT;
-    for (const stationT of stationTs) {
-      if (stationT - halfHallT > cursor) spans.push([cursor, Math.min(stationT - halfHallT, endT)]);
-      cursor = Math.max(cursor, stationT + halfHallT);
+    for (const stop of stops) {
+      if (stop.t - stop.halfT > cursor) spans.push([cursor, Math.min(stop.t - stop.halfT, endT)]);
+      cursor = Math.max(cursor, stop.t + stop.halfT);
     }
     if (cursor < endT) spans.push([cursor, endT]);
 

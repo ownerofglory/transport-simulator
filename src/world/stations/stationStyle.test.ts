@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
+import { undergroundHallHalfLengthM } from './hallExtent';
 import { createStationStyleRegistry } from './index';
 import { VvsStadtbahnStationProvider } from './styles/vvs/VvsStadtbahnStationProvider';
 import { VvsStationCatalog } from './styles/vvs/VvsStationCatalog';
@@ -73,6 +74,50 @@ describe('station style registry', () => {
     expect(resolved.furniture?.dfiDisplays).toBe(2);
     expect(resolved.environment?.plaza).toBe(true);
     expect(resolved.platform.lengthM).toBe(120);
+  });
+});
+
+describe('station catalog schema 2', () => {
+  it('carries architecture, access, and signage detail through to the definition', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    const station: RouteStation = { name: 'Rotebühlplatz (Stadtmitte)', distanceM: 400 };
+    const resolved = provider.resolve(station, { layer: {} as never, placement: placementAt(station, true) });
+
+    expect(resolved.architecture?.hall?.ceiling).toBe('trussed-vault');
+    expect(resolved.architecture?.walls?.finish).toBe('tile');
+    expect(resolved.architecture?.lighting?.style).toBe('strip-continuous');
+    expect(resolved.access?.map((entry) => entry.type)).toEqual(['escalator', 'stairs']);
+    expect(resolved.signage?.exits).toContain('Königstraße');
+  });
+
+  it('gives underground stops departure boards and ad cases, surface stops neither', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    // Absent from the catalog, so both come from the archetype defaults.
+    const station: RouteStation = { name: 'Unclassified Test Stop', distanceM: 500 };
+
+    const underground = provider.resolve(station, { layer: {} as never, placement: placementAt(station, true) });
+    expect(underground.furniture?.dfiDisplays).toBe(2);
+    expect(underground.furniture?.adVitrines).toBeGreaterThan(0);
+
+    const surface = provider.resolve(station, { layer: {} as never, placement: placementAt(station, false) });
+    expect(surface.furniture?.dfiDisplays).toBe(0);
+    expect(surface.furniture?.adVitrines).toBe(0);
+  });
+});
+
+describe('underground hall extent', () => {
+  // The station box and the tunnel cut read this same function; if they ever
+  // disagree you get daylight at the bore mouth or slabs across the bore.
+  it('grows the box to fit a long platform', () => {
+    expect(undergroundHallHalfLengthM('stadtbahn', 'Charlottenplatz')).toBe(66); // 120 m platform
+  });
+
+  it('keeps the legacy box for stops with no catalog platform', () => {
+    expect(undergroundHallHalfLengthM('stadtbahn', 'Unclassified Test Stop')).toBe(41);
+  });
+
+  it('uses the full-length S-Bahn box regardless of the Stadtbahn catalog', () => {
+    expect(undergroundHallHalfLengthM('s-bahn', 'Charlottenplatz')).toBe(77.5);
   });
 });
 

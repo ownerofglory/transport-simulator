@@ -23,11 +23,13 @@ export function buildVvsSidePlatforms(
   materials: VvsStationMaterials,
   station: RouteStation,
   platform?: StationPlatformDefinition,
-  staggerM = 0
+  staggerM = 0,
+  underground = false
 ): void {
   const lengthM = platform?.lengthM ?? DEFAULT_LENGTH_M;
   const widthM = platform?.widthM ?? DEFAULT_WIDTH_M;
   const offset = sidePlatformOffset(widthM);
+  const finish = materials.surfaces(underground);
 
   for (const side of [-1, 1]) {
     // Staggered stops shift one platform ahead of the other along the route.
@@ -36,14 +38,14 @@ export function buildVvsSidePlatforms(
 
     const platformEdge = new THREE.Mesh(
       layer.makeRouteStrip(side * offset, widthM + 0.25, startT, endT, 28, 0.12),
-      materials.platformEdge
+      finish.edge
     );
     platformEdge.receiveShadow = true;
     root.add(platformEdge);
 
     const deck = new THREE.Mesh(
       layer.makeRouteStrip(side * offset, widthM, startT, endT, 24, 0.22),
-      materials.platform
+      finish.platform
     );
     deck.receiveShadow = true;
     deck.name = `Curved platform ${station.name}`;
@@ -51,7 +53,7 @@ export function buildVvsSidePlatforms(
 
     const tactile = new THREE.Mesh(
       layer.makeRouteStrip(side * TACTILE_OFFSET_M, 0.72, startT, endT, 28, 0.245),
-      materials.tactile
+      finish.tactile
     );
     tactile.name = `Tactile platform edge ${station.name}`;
     root.add(tactile);

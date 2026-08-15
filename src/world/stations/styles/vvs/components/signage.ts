@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { makeLabelTexture } from '../../../../../labels';
 import type { WorldLayerContext } from '../../../../layers/WorldLayerContext';
 import type { RouteStation } from '../../../types';
+import type { VvsStationMaterials } from '../VvsStationMaterials';
 
 /**
  * Per-side station name signs (front + back face), registered as station
@@ -39,9 +40,79 @@ export function buildVvsStationSigns(
   }
 }
 
+/**
+ * Suspended departure board over an underground platform: the amber dot-matrix
+ * panel hanging from the soffit that every Stadtbahn box has, rather than the
+ * post-mounted boards used at surface interchanges.
+ */
+export function buildVvsSuspendedDfi(
+  local: THREE.Group,
+  layer: WorldLayerContext,
+  materials: VvsStationMaterials,
+  side: number,
+  count: number,
+  lengthM: number,
+  ceilingHeightM: number,
+  platformNumber?: string
+): void {
+  const boards = Math.max(0, Math.min(count, 4));
+  if (boards === 0) return;
+
+  const label = platformNumber
+    ? `${platformNumber}   ${layer.route.line}  ${layer.route.destination}`
+    : `${layer.route.line}  ${layer.route.destination}`;
+  const face = makeLabelTexture(label, { width: 1024, height: 150, bg: '#0d1116', fg: '#ffb300' });
+  const usable = Math.max(10, lengthM - 24);
+  const y = ceilingHeightM - 1.05;
+
+  for (let i = 0; i < boards; i += 1) {
+    const z = boards === 1 ? 0 : -usable / 2 + (usable / (boards - 1)) * i;
+    const hanger = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.9, 0.08), materials.steel);
+    hanger.position.set(side * 6.9, ceilingHeightM - 0.45, z);
+    local.add(hanger);
+
+    const board = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.86, 4.2), materials.dfi);
+    board.position.set(side * 6.9, y, z);
+    local.add(board);
+
+    for (const facing of [-1, 1]) {
+      const screen = new THREE.Mesh(
+        new THREE.PlaneGeometry(3.9, 0.66),
+        new THREE.MeshBasicMaterial({ map: face, side: THREE.FrontSide })
+      );
+      screen.position.set(side * 6.9 + facing * 0.11, y, z);
+      screen.rotation.y = (facing * Math.PI) / 2;
+      local.add(screen);
+    }
+  }
+}
+
+/** Backlit advertising cases along an underground wall. */
+export function buildVvsVitrines(
+  local: THREE.Group,
+  materials: VvsStationMaterials,
+  side: number,
+  count: number,
+  lengthM: number
+): void {
+  const cases = Math.max(0, Math.min(count, 6));
+  if (cases === 0) return;
+  const usable = Math.max(8, lengthM - 20);
+  const geometry = new THREE.BoxGeometry(0.18, 1.85, 1.25);
+  for (let i = 0; i < cases; i += 1) {
+    const z = cases === 1 ? -6 : -usable / 2 + (usable / (cases - 1)) * i;
+    const vitrine = new THREE.Mesh(geometry.clone(), materials.vitrine);
+    vitrine.position.set(side * 11.6, 1.85, z);
+    local.add(vitrine);
+  }
+  geometry.dispose();
+}
+
 /** Underground exit wayfinding sign (front + back), centered above the tracks. */
-export function buildVvsWayfinding(local: THREE.Group, station: RouteStation): void {
-  const wayfindingTexture = makeLabelTexture(`Ausgang   ${station.name}   →`, {
+export function buildVvsWayfinding(local: THREE.Group, station: RouteStation, exits?: readonly string[]): void {
+  // Real exit streets when the stop lists them, else the stop's own name.
+  const destination = exits && exits.length > 0 ? exits.join('  ·  ') : station.name;
+  const wayfindingTexture = makeLabelTexture(`Ausgang   ${destination}   →`, {
     width: 1024,
     height: 160,
     bg: '#173f62',
