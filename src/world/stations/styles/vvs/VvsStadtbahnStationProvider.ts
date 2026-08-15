@@ -8,21 +8,32 @@ import type {
   StationStyleProvider,
   StationVisualDefinition
 } from '../../types';
+import { undergroundHallHalfLengthM } from '../../hallExtent';
 import { createSeededRandom, hashString } from '../../variation';
 import { VvsStationCatalog } from './VvsStationCatalog';
 import { VvsStationMaterials } from './VvsStationMaterials';
+import { buildVvsAccess } from './components/access';
 import { buildVvsSidePlatforms, sidePlatformOffset } from './components/platform';
 import { buildVvsUndergroundHall, buildVvsUndergroundSideLighting } from './components/undergroundHall';
 import { buildVvsCanopy } from './components/canopy';
 import { buildVvsFurniture } from './components/furniture';
 import { buildVvsCenterPlatform, buildVvsIslandStation } from './components/island';
 import { buildVvsDfiBoards, buildVvsRetainingWall } from './components/environment';
-import { buildVvsStationSigns, buildVvsWayfinding } from './components/signage';
+import {
+  buildVvsStationSigns,
+  buildVvsSuspendedDfi,
+  buildVvsVitrines,
+  buildVvsWayfinding
+} from './components/signage';
 import { buildVvsTerminusBuffer } from './components/terminus';
 
 // Legacy single-item platform layout, used as the default so unlisted stops
 // keep close to the original look (seeded counts still allow 1–2 benches).
 const DEFAULT_SURFACE_PLATFORM = { layout: 'side', lengthM: 76, widthM: 8, heightM: 0.22, curved: true } as const;
+
+// Clear height to the underside of an underground ceiling, matching the legacy
+// box. Stops with a taller vault raise it through `architecture.hall.heightM`.
+const DEFAULT_CEILING_HEIGHT_M = 5.46;
 
 /**
  * SSB/VVS Stadtbahn station style. Resolves each stop into a semantic
@@ -47,13 +58,16 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     const platform = { ...DEFAULT_SURFACE_PLATFORM, ...override?.platform };
 
     // Appearance-only counts: catalog wins, else a small deterministic value.
+    // Underground stops always carry a suspended departure board and a couple of
+    // ad cases; a bare box with neither never occurs on the network.
     const furniture = {
       shelters: override?.furniture?.shelters ?? 1,
       benches: override?.furniture?.benches ?? rng.int(1, 2),
       ticketMachines: override?.furniture?.ticketMachines ?? 1,
-      dfiDisplays: override?.furniture?.dfiDisplays ?? 0,
+      dfiDisplays: override?.furniture?.dfiDisplays ?? (underground ? 2 : 0),
       bins: override?.furniture?.bins ?? rng.int(1, 2),
-      bicycleParking: override?.furniture?.bicycleParking
+      bicycleParking: override?.furniture?.bicycleParking,
+      adVitrines: override?.furniture?.adVitrines ?? (underground ? rng.int(2, 3) : 0)
     };
 
     return {
@@ -62,6 +76,8 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       archetype,
       platform,
       architecture: override?.architecture,
+      access: override?.access,
+      signage: override?.signage,
       environment: override?.environment,
       furniture,
       seed
@@ -116,13 +132,36 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       };
     }
 
-    if (underground) buildVvsUndergroundHall(scaffold.local, materials);
+    // The hall has to be exactly as long as the gap the guideway layer cuts in
+    // the tunnel bore, so its extent comes from the shared helper rather than
+    // from this stop's own platform length.
+    const hall = definition.architecture?.hall;
+    const hallLengthM = undergroundHallHalfLengthM(context.layer.guidewayKind, station.name) * 2;
+    const ceilingHeightM = hall?.heightM ?? DEFAULT_CEILING_HEIGHT_M;
+    if (underground) {
+      buildVvsUndergroundHall(scaffold.local, materials, {
+        lengthM: hallLengthM,
+        widthM: hall?.widthM,
+        heightM: ceilingHeightM,
+        ceiling: hall?.ceiling,
+        ceilingColor: hall?.ceilingColor,
+        trussColor: hall?.trussColor,
+        wallFinish: definition.architecture?.walls?.finish,
+        wallColor: definition.architecture?.walls?.color,
+        plinthColor: definition.architecture?.walls?.plinthColor,
+        stationName: definition.displayName,
+        nameBandRepeatM: definition.signage?.nameBandRepeatM
+      });
+      if (definition.access?.length) {
+        buildVvsAccess(scaffold.local, materials, definition.access, { ceilingHeightM });
+      }
+    }
 
     // Staggered stops offset the two side platforms along the route.
     const staggerM = definition.platform?.staggerM ?? 0;
 
     // Curved platforms follow the route in world space → untransformed root.
-    buildVvsSidePlatforms(scaffold.root, context.layer, materials, station, definition.platform, staggerM);
+    buildVvsSidePlatforms(scaffold.root, context.layer, materials, station, definition.platform, staggerM, underground);
     // Mixed layouts (side + center) add a narrow island deck between the tracks.
     if (layout === 'mixed') {
       buildVvsCenterPlatform(scaffold.root, context.layer, materials, station, definition.platform);
@@ -145,8 +184,30 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
 
     for (const side of [-1, 1]) {
       const zShift = side * (staggerM / 2);
-      if (underground) buildVvsUndergroundSideLighting(scaffold.local, materials, side);
-      else buildVvsCanopy(scaffold.local, materials, side, {
+      if (underground) {
+        buildVvsUndergroundSideLighting(scaffold.local, materials, side, {
+          lengthM: hallLengthM,
+          heightM: ceilingHeightM,
+          columnStyle: definition.architecture?.columns?.style,
+          columnColor: definition.architecture?.columns?.color,
+          columnSpacingM: definition.architecture?.columns?.spacingM,
+          lighting: definition.architecture?.lighting?.style,
+          lightColor: definition.architecture?.lighting?.color
+        });
+        buildVvsVitrines(scaffold.local, materials, side, definition.furniture?.adVitrines ?? 0, hallLengthM);
+        if (dfiDisplays > 0) {
+          buildVvsSuspendedDfi(
+            scaffold.local,
+            context.layer,
+            materials,
+            side,
+            dfiDisplays,
+            platformLengthM,
+            ceilingHeightM,
+            definition.signage?.platformNumber
+          );
+        }
+      } else buildVvsCanopy(scaffold.local, materials, side, {
         lengthM: canopyLen,
         platformOffsetM: platformOffset,
         centerZ: canopyCenterZ + zShift,
@@ -160,8 +221,9 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
         (retainingWall === 'right' && side === 1))) {
         buildVvsRetainingWall(scaffold.local, materials, side);
       }
-      // Interchanges add track-facing departure boards (side 1 only to avoid
-      // doubling; count spreads them along the platform).
+      // Surface interchanges add post-mounted departure boards (side 1 only to
+      // avoid doubling; count spreads them along the platform). Underground
+      // stops use the suspended boards built above instead.
       if (!underground && dfiDisplays > 0 && side === 1) {
         buildVvsDfiBoards(scaffold.local, context.layer, materials, side, station, dfiDisplays, platformLengthM, lateral);
       }
@@ -174,7 +236,7 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       buildVvsTerminusBuffer(scaffold.local, materials, platformLengthM, endSign);
     }
 
-    if (underground) buildVvsWayfinding(scaffold.local, station);
+    if (underground) buildVvsWayfinding(scaffold.local, station, definition.signage?.exits);
 
     return {
       root: scaffold.root,

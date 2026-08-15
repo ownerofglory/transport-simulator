@@ -1,9 +1,11 @@
 import type {
+  StationAccessDefinition,
   StationArchetype,
   StationArchitectureDefinition,
   StationEnvironmentDefinition,
   StationFurnitureDefinition,
-  StationPlatformDefinition
+  StationPlatformDefinition,
+  StationSignageDefinition
 } from '../../types';
 import catalogData from './configs/vvs-stadtbahn-stations.json';
 
@@ -19,6 +21,8 @@ export type VvsStationOverride = {
   archetype?: StationArchetype;
   platform?: Partial<StationPlatformDefinition>;
   architecture?: StationArchitectureDefinition;
+  access?: StationAccessDefinition[];
+  signage?: StationSignageDefinition;
   furniture?: StationFurnitureDefinition;
   environment?: StationEnvironmentDefinition;
   seed?: number;

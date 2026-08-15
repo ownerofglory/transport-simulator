@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "style": "vvs-stadtbahn",
   "stations": {
     "Bad Cannstatt Wilhelmsplatz": {
@@ -134,11 +134,61 @@
       },
       "architecture": {
         "family": "two-level-underground",
-        "roof": "hall"
+        "roof": "hall",
+        "hall": {
+          "widthM": 28,
+          "heightM": 5.8,
+          "ceiling": "coffered",
+          "ceilingColor": "#c9c3b4"
+        },
+        "walls": {
+          "finish": "tile",
+          "color": "#cfc6b1",
+          "plinthColor": "#33302b"
+        },
+        "columns": {
+          "style": "square",
+          "color": "#b9b3a5",
+          "spacingM": 22
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#fff0cd"
+        }
       },
       "furniture": {
         "dfiDisplays": 4,
-        "ticketMachines": 2
+        "ticketMachines": 2,
+        "adVitrines": 4
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -26,
+          "direction": "Rathaus"
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 24,
+          "direction": "Planie"
+        },
+        {
+          "type": "lift",
+          "side": "left",
+          "offsetM": 12,
+          "direction": "Charlottenplatz"
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Rathaus",
+          "Planie",
+          "Konrad-Adenauer-Straße"
+        ],
+        "platformNumber": "2",
+        "nameBandRepeatM": 28
       }
     },
     "Degerloch": {
@@ -152,17 +202,59 @@
       },
       "architecture": {
         "family": "major-underground",
-        "roof": "hall"
+        "roof": "hall",
+        "hall": {
+          "widthM": 27,
+          "heightM": 5.6,
+          "ceiling": "ribbed-metal",
+          "ceilingColor": "#d2cfc8"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#e3d8a8",
+          "plinthColor": "#2a2a28"
+        },
+        "columns": {
+          "style": "round",
+          "color": "#4f5458",
+          "spacingM": 22
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#fff3d8"
+        }
       },
       "furniture": {
         "dfiDisplays": 2,
         "benches": 3,
         "ticketMachines": 2,
-        "bins": 2
+        "bins": 2,
+        "adVitrines": 2
       },
       "environment": {
         "plaza": true,
         "vegetation": "urban"
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -28,
+          "direction": "Zahnradbahn"
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 26,
+          "direction": "Epplestraße"
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Epplestraße",
+          "Zahnradbahn"
+        ],
+        "nameBandRepeatM": 28
       }
     },
     "EnBW-City": {
@@ -320,12 +412,62 @@
       },
       "architecture": {
         "family": "four-track-underground",
-        "roof": "hall"
+        "roof": "hall",
+        "hall": {
+          "widthM": 29,
+          "heightM": 5.6,
+          "ceiling": "coffered",
+          "ceilingColor": "#3c3a37"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#e8e9ea",
+          "plinthColor": "#1d3f6b"
+        },
+        "columns": {
+          "style": "square",
+          "color": "#d9541e",
+          "spacingM": 20
+        },
+        "lighting": {
+          "style": "recessed-rows",
+          "color": "#fff2d6"
+        }
       },
       "furniture": {
         "dfiDisplays": 4,
         "benches": 2,
-        "ticketMachines": 2
+        "ticketMachines": 2,
+        "adVitrines": 4
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -34,
+          "direction": "Klett-Passage"
+        },
+        {
+          "type": "escalator",
+          "side": "right",
+          "offsetM": 30,
+          "direction": "Schlossgarten"
+        },
+        {
+          "type": "lift",
+          "side": "right",
+          "offsetM": -20,
+          "direction": "Arnulf-Klett-Platz"
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Klett-Passage",
+          "Königstraße",
+          "Schlossgarten"
+        ],
+        "platformNumber": "3",
+        "nameBandRepeatM": 30
       }
     },
     "Hauptfriedhof": {
@@ -511,15 +653,57 @@
       },
       "architecture": {
         "family": "urban-underground",
-        "roof": "hall"
+        "roof": "hall",
+        "hall": {
+          "widthM": 26,
+          "heightM": 5.5,
+          "ceiling": "ribbed-metal",
+          "ceilingColor": "#d8d5ce"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#d8dfe4",
+          "plinthColor": "#26282c"
+        },
+        "columns": {
+          "style": "round",
+          "color": "#5a5f63",
+          "spacingM": 20
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#fff6e4"
+        }
       },
       "furniture": {
         "dfiDisplays": 2,
-        "ticketMachines": 2
+        "ticketMachines": 2,
+        "adVitrines": 2
       },
       "environment": {
         "plaza": true,
         "vegetation": "urban"
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -22,
+          "direction": "Marienplatz"
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 22,
+          "direction": "Böblinger Straße"
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Marienplatz",
+          "Böblinger Straße"
+        ],
+        "nameBandRepeatM": 24
       }
     },
     "Mercedesstraße": {
@@ -689,11 +873,54 @@
       },
       "architecture": {
         "family": "three-track-underground",
-        "roof": "hall"
+        "roof": "hall",
+        "hall": {
+          "widthM": 28,
+          "heightM": 5.6,
+          "ceiling": "coffered",
+          "ceilingColor": "#cbc6bb"
+        },
+        "walls": {
+          "finish": "tile",
+          "color": "#b9c4bd",
+          "plinthColor": "#2d2f2e"
+        },
+        "columns": {
+          "style": "square",
+          "color": "#c7c2b6",
+          "spacingM": 22
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#fff1d2"
+        }
       },
       "furniture": {
         "dfiDisplays": 3,
-        "ticketMachines": 2
+        "ticketMachines": 2,
+        "adVitrines": 3
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -26,
+          "direction": "Marktplatz"
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 26,
+          "direction": "Eberhardstraße"
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Marktplatz",
+          "Eberhardstraße"
+        ],
+        "platformNumber": "1",
+        "nameBandRepeatM": 28
       }
     },
     "Rosensteinbrücke": {
@@ -725,11 +952,57 @@
       },
       "architecture": {
         "family": "major-underground",
-        "roof": "hall"
+        "roof": "hall",
+        "hall": {
+          "widthM": 26,
+          "heightM": 5.4,
+          "ceiling": "trussed-vault",
+          "ceilingColor": "#e6e3dc",
+          "trussColor": "#a33526"
+        },
+        "walls": {
+          "finish": "tile",
+          "color": "#c1481f",
+          "plinthColor": "#2b2724"
+        },
+        "columns": {
+          "style": "square",
+          "color": "#ded9d0",
+          "spacingM": 24
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#fff4dd"
+        }
       },
       "furniture": {
         "dfiDisplays": 2,
-        "ticketMachines": 2
+        "ticketMachines": 2,
+        "adVitrines": 3
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -30,
+          "direction": "Königstraße"
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 28,
+          "direction": "Marienstraße"
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Königstraße",
+          "Eberhardstraße",
+          "Marienstraße",
+          "Gerberviertel"
+        ],
+        "platformNumber": "1",
+        "nameBandRepeatM": 26
       }
     },
     "Ruhbank (Fernsehturm)": {
