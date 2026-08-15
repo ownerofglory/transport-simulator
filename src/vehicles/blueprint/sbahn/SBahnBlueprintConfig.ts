@@ -20,11 +20,30 @@ export const SBAHN_MATERIAL_ROLES = [
 
 export type SBahnMaterialRole = (typeof SBAHN_MATERIAL_ROLES)[number];
 
+// Trim the BR 430 paints in one colour but other operators do not: the CDMX
+// metro is orange with a green skirt and stainless doors, El Insurgente a
+// stainless body with a red cab. Each of these falls back to `accent`, so a
+// config that omits them keeps the BR 430's single-accent behaviour.
+export const SBAHN_OPTIONAL_MATERIAL_ROLES = ['lowerBand', 'belt', 'door', 'nose'] as const;
+
+export type SBahnOptionalMaterialRole = (typeof SBAHN_OPTIONAL_MATERIAL_ROLES)[number];
+
 export type SBahnBlueprintConfig = {
   id: string;
   kind: 's-bahn';
   displayName: string;
-  materials: Record<SBahnMaterialRole, BlueprintStandardMaterialConfig>;
+  materials: Record<SBahnMaterialRole, BlueprintStandardMaterialConfig> &
+    Partial<Record<SBahnOptionalMaterialRole, BlueprintStandardMaterialConfig>>;
+  // Vertical LED bars (BR 430) or round clusters (both CDMX cars). Defaults to 'bar'.
+  cabLampStyle?: 'bar' | 'round';
+  // Height and centre of the two side bands. The BR 430 wears two thin red
+  // stripes; the CDMX metro a deep green skirt reaching the window line.
+  bands?: {
+    lowerY?: number;
+    lowerHeightM?: number;
+    beltY?: number;
+    beltHeightM?: number;
+  };
   // Operator logo shown on both cab ends.
   logo: {
     text: string;
@@ -50,11 +69,15 @@ export type SBahnBlueprintConfig = {
     poleZs: number[];
     bogieZs: number[];
   };
-  pantograph: {
+  // Omitted on third-rail stock (the rubber-tyred CDMX metro takes no pantograph).
+  pantograph?: {
     x: number;
     y: number;
     z: number;
   };
+  // Airport-style rows (BR 430, El Insurgente) or benches along the walls
+  // (CDMX metro). Defaults to 'transverse'.
+  seatOrientation?: 'transverse' | 'longitudinal';
   headlightBeamHeightM: number;
 };
 
@@ -78,6 +101,13 @@ export function parseSBahnBlueprint(raw: unknown): SBahnBlueprintParseResult {
     for (const role of SBAHN_MATERIAL_ROLES) {
       collectMaterialConfigErrors(materials[role], `materials.${role}`, errors);
     }
+    for (const role of SBAHN_OPTIONAL_MATERIAL_ROLES) {
+      if (materials[role] !== undefined) collectMaterialConfigErrors(materials[role], `materials.${role}`, errors);
+    }
+  }
+
+  if (root.cabLampStyle !== undefined && root.cabLampStyle !== 'bar' && root.cabLampStyle !== 'round') {
+    errors.push('cabLampStyle must be "bar" or "round"');
   }
 
   for (const [key, fields] of [
@@ -104,9 +134,26 @@ export function parseSBahnBlueprint(raw: unknown): SBahnBlueprintParseResult {
     }
   }
 
-  const pantograph = asRecord(root.pantograph, 'pantograph', errors);
-  if (pantograph) {
-    for (const key of ['x', 'y', 'z'] as const) requireNumber(pantograph, key, errors, 'pantograph.');
+  if (root.pantograph !== undefined) {
+    const pantograph = asRecord(root.pantograph, 'pantograph', errors);
+    if (pantograph) {
+      for (const key of ['x', 'y', 'z'] as const) requireNumber(pantograph, key, errors, 'pantograph.');
+    }
+  }
+
+  if (root.seatOrientation !== undefined && root.seatOrientation !== 'transverse' && root.seatOrientation !== 'longitudinal') {
+    errors.push('seatOrientation must be "transverse" or "longitudinal"');
+  }
+
+  if (root.bands !== undefined) {
+    const bands = asRecord(root.bands, 'bands', errors);
+    if (bands) {
+      for (const key of ['lowerY', 'lowerHeightM', 'beltY', 'beltHeightM'] as const) {
+        if (bands[key] !== undefined && (typeof bands[key] !== 'number' || !Number.isFinite(bands[key]))) {
+          errors.push(`bands.${key} must be a finite number`);
+        }
+      }
+    }
   }
 
   requireNumber(root, 'headlightBeamHeightM', errors);

@@ -1,0 +1,47 @@
+{
+  "id": "cdmx-metro-nm16",
+  "kind": "s-bahn",
+  "displayName": "STC Metro CDMX (NM-16 / FE-10)",
+  "materials": {
+    "shell": { "color": "#ef6521", "roughness": 0.36, "metalness": 0.08 },
+    "accent": { "color": "#8dc63f", "roughness": 0.38 },
+    "lowerBand": { "color": "#8dc63f", "roughness": 0.38 },
+    "belt": { "color": "#ef6521", "roughness": 0.36, "metalness": 0.08 },
+    "door": { "color": "#b8bfc4", "roughness": 0.34, "metalness": 0.62 },
+    "nose": { "color": "#ef6521", "roughness": 0.36, "metalness": 0.08 },
+    "dark": { "color": "#15181b", "roughness": 0.34 },
+    "glass": { "color": "#7fa8b8", "transparent": true, "opacity": 0.42, "roughness": 0.06, "doubleSided": true },
+    "interior": { "color": "#e8e6df", "roughness": 0.88 },
+    "floor": { "color": "#7d838a", "roughness": 0.9 },
+    "seat": { "color": "#f07a22", "roughness": 0.86 },
+    "metal": { "color": "#9ea4a6", "roughness": 0.34, "metalness": 0.7 },
+    "headlight": { "color": "#ffffff", "emissive": "#fff2cc", "emissiveIntensity": 0.6 },
+    "tailLamp": { "color": "#8c1f1c", "emissive": "#7a1512", "emissiveIntensity": 0.35 }
+  },
+  "cabLampStyle": "round",
+  "bands": { "lowerY": 1.0, "lowerHeightM": 1.24, "beltY": 1.76, "beltHeightM": 0.3 },
+  "logo": {
+    "text": "M",
+    "background": "#ef6521",
+    "foreground": "#ffffff"
+  },
+  "destinationDisplay": {
+    "background": "#0c0e10",
+    "foreground": "#ff9d1c"
+  },
+  "formation": {
+    "carCenters": [-42, -25.2, -8.4, 8.4, 25.2, 42],
+    "halfLengthM": 50.4,
+    "sectionNamePrefix": "Articulated car CDMX Metro section"
+  },
+  "layout": {
+    "doorZs": [-5.4, 0, 5.4],
+    "windowZs": [-7.2, -3.85, -2.7, -1.55, 1.55, 2.7, 3.85, 7.2],
+    "seatRowZs": [-4.15, -3.65, -3.15, -2.65, -2.15, -1.65, 1.65, 2.15, 2.65, 3.15, 3.65, 4.15],
+    "seatXs": [-1.1, 1.1],
+    "poleZs": [-3.6, -1.2, 1.2, 3.6],
+    "bogieZs": [-5.2, 5.2]
+  },
+  "seatOrientation": "longitudinal",
+  "headlightBeamHeightM": 1.4
+}

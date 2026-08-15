@@ -709,7 +709,15 @@ export class Live3DScene {
       passengerOffsetM: 0,
       trainHalfLengthM: follow.trainHalfLengthM,
       train: follow.root,
-      trainCars: follow.cars
+      trainCars: follow.cars,
+      // Live vehicles are placed along their own track geometry, so offsets are
+      // relative to the vehicle rather than to a route distance.
+      routeDistanceM: 0,
+      activeLaneOffsetM: 0,
+      routePointAtDistance: (offsetM: number) => {
+        const pose = this.trackMotion.offsetPoseOf(vehicle.runId, offsetM);
+        return pose ? new THREE.Vector3(pose.x, baseY, pose.z) : position.clone();
+      }
     };
     const rig = this.rigs[this.cameraMode];
     const pose = rig.pose(input);

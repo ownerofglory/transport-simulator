@@ -1,0 +1,99 @@
+{
+  "id": "cdmx-tren-ligero-te95",
+  "kind": "tram",
+  "displayName": "Tren Ligero CDMX (TE-95 articulated LRV)",
+  "dimensions": {
+    "lengthM": 28,
+    "widthM": 2.5,
+    "heightM": 3.5,
+    "floorHeightM": 1.0
+  },
+  "materials": {
+    "body": { "color": "#eef1f4", "roughness": 0.42, "metalness": 0.08 },
+    "blue": { "color": "#1259a8", "roughness": 0.36, "metalness": 0.08 },
+    "accent": { "color": "#1259a8", "roughness": 0.36 },
+    "glass": { "color": "#9bc8d8", "opacity": 0.42, "transparent": true },
+    "dark": { "color": "#2a3138", "roughness": 0.3 },
+    "roof": { "color": "#c9ced2", "roughness": 0.52 },
+    "interior": { "color": "#e6e9ec", "roughness": 0.86 },
+    "floor": { "color": "#6b7278", "roughness": 0.92 },
+    "seat": { "color": "#12457f", "roughness": 0.88 },
+    "metal": { "color": "#9aa1a5", "roughness": 0.34, "metalness": 0.72 }
+  },
+  "sections": [
+    { "center": -9.6, "length": 8.4, "cab": "front", "darkMaterial": "blue", "noseStyle": "none" },
+    { "center": 0, "length": 7.2, "cab": null, "darkMaterial": "blue" },
+    { "center": 9.6, "length": 8.4, "cab": "rear", "darkMaterial": "blue", "noseStyle": "none" }
+  ],
+  "doors": [
+    { "side": "both", "section": 0, "z": 2.2, "material": "blue" },
+    { "side": "both", "section": 0, "z": -0.6, "material": "blue" },
+    { "side": "both", "section": 1, "z": -1.7, "material": "blue" },
+    { "side": "both", "section": 1, "z": 1.7, "material": "blue" },
+    { "side": "both", "section": 2, "z": -2.2, "material": "blue" },
+    { "side": "both", "section": 2, "z": 0.6, "material": "blue" }
+  ],
+  "gangways": [
+    { "z": -5.4, "widthM": 2.24, "heightM": 2.3, "lengthM": 0.72, "material": "dark" },
+    { "z": 5.4, "widthM": 2.24, "heightM": 2.3, "lengthM": 0.72, "material": "dark" }
+  ],
+  "bogies": [
+    { "z": -11.2, "widthM": 2.1, "lengthM": 1.6, "material": "dark" },
+    { "z": 0, "widthM": 2.1, "lengthM": 1.6, "material": "dark" },
+    { "z": 11.2, "widthM": 2.1, "lengthM": 1.6, "material": "dark" }
+  ],
+  "pantographs": [
+    { "x": 0, "y": 3.6, "z": 1.6, "material": "metal" }
+  ],
+  "roofEquipment": [
+    {
+      "type": "hvac",
+      "x": 0,
+      "y": 3.4,
+      "z": -1.8,
+      "widthM": 1.6,
+      "heightM": 0.2,
+      "lengthM": 4.2,
+      "material": "roof"
+    }
+  ],
+  "destinationDisplays": [
+    {
+      "section": 0,
+      "position": [0, 3.02, -4.46],
+      "rotationY": 3.14159,
+      "widthM": 1.5,
+      "heightM": 0.3,
+      "background": "#0c0e10",
+      "foreground": "#ff9d1c",
+      "text": "route-destination"
+    },
+    {
+      "section": 2,
+      "position": [0, 3.02, 4.46],
+      "rotationY": 0,
+      "widthM": 1.5,
+      "heightM": 0.3,
+      "background": "#0c0e10",
+      "foreground": "#ff9d1c",
+      "text": "route-destination"
+    }
+  ],
+  "interior": {
+    "enabled": true,
+    "seatMaterial": "seat",
+    "floorMaterial": "floor",
+    "wallMaterial": "interior",
+    "poleMaterial": "metal",
+    "autoSeats": true,
+    "autoPoles": true,
+    "autoPassengerShell": true
+  },
+  "cameraAnchors": {
+    "passenger": {
+      "section": 2,
+      "position": [0.55, 2.2, 3.3],
+      "lookAt": [0.55, 2.05, -26]
+    }
+  }
+}

@@ -3,7 +3,7 @@ import { VvsStadtbahnStationProvider } from './styles/vvs/VvsStadtbahnStationPro
 
 export * from './types';
 export { StationStyleRegistry } from './StationStyleRegistry';
-export { resolveStationPlacement } from './placement';
+export { orientAlongRoute, resolveStationPlacement } from './placement';
 
 /**
  * Registry of the station styles known to the app. Cities/modes select one via

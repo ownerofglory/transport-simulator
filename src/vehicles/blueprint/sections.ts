@@ -83,11 +83,13 @@ export function buildBlueprintSection(
   if (section.cab === 'front' || section.cab === 'rear') {
     const cabDirection = section.cab === 'front' ? -1 : 1;
     const cabZ = cabDirection * (section.length / 2);
-    const nose = makeCabNose(widthM, bodyHeight, bodyMaterial);
-    nose.position.set(0, bodyCenterY, cabZ);
-    if (cabDirection > 0) nose.rotation.y = Math.PI;
-    group.add(nose);
-    cabShells.push(nose);
+    if (section.noseStyle !== 'none') {
+      const nose = makeCabNose(widthM, bodyHeight, resolveMaterial(materials, section.noseMaterial, section.bodyMaterial ?? 'body'));
+      nose.position.set(0, bodyCenterY, cabZ);
+      if (cabDirection > 0) nose.rotation.y = Math.PI;
+      group.add(nose);
+      cabShells.push(nose);
+    }
 
     const face = new THREE.Mesh(new THREE.BoxGeometry(widthM * 0.9, bodyHeight * 0.78, 0.1), darkMaterial);
     face.position.set(0, bodyCenterY + bodyHeight * 0.1, cabZ + cabDirection * 0.14);

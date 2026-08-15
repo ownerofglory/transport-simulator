@@ -1,14 +1,11 @@
 import * as THREE from 'three';
 import { smoothTrackXZ } from './liveTrackGeometry';
+import { buildTunnelBore, createTunnelMaterials, type TunnelMaterials } from '../../world/tunnels/tunnelSection';
 import type { Projection } from './liveProjection';
 import type { TrackedVehicle } from './LiveVehicleStore';
 import { LiveTunnelIndex } from './LiveTunnelIndex';
 
 const TUNNEL_DEPTH_M = 5;
-// Match Explore's tunnel bore (GuidewayLayer): a wide, smooth lining so the
-// follow camera stays comfortably inside on curves instead of feeling cramped.
-const BORE_RADIUS_M = 8.2;
-const BORE_RADIAL_SEGMENTS = 18;
 
 /**
  * Builds the same route-derived lining/portals used by Explore, but only for
@@ -20,6 +17,8 @@ export class LiveTunnelLayer {
   readonly group = new THREE.Group();
   private readonly built = new Set<string>();
   private terrainRevision = -1;
+  // One material/texture set shared by every bore, kept across rebuilds.
+  private materials: TunnelMaterials | null = null;
 
   constructor(
     private readonly projection: Projection,
@@ -60,9 +59,10 @@ export class LiveTunnelLayer {
     this.group.traverse((object) => {
       const mesh = object as THREE.Mesh;
       mesh.geometry?.dispose?.();
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      materials.filter(Boolean).forEach((material) => material.dispose());
     });
+    // Materials/textures are shared by every bore, so they are released once here.
+    this.materials?.dispose();
+    this.materials = null;
     this.group.removeFromParent();
   }
 
@@ -71,9 +71,7 @@ export class LiveTunnelLayer {
     const mask = route.tunnelMask ?? [];
     if (points.length < 2 || !mask.some(Boolean)) return;
 
-    const liningMaterial = new THREE.MeshStandardMaterial({ color: 0x777a78, roughness: 0.92, side: THREE.BackSide });
-    const portalMaterial = new THREE.MeshStandardMaterial({ color: 0x555957, roughness: 0.88 });
-    const lightMaterial = new THREE.MeshBasicMaterial({ color: 0xffedbd });
+    this.materials ??= createTunnelMaterials();
     for (const [start, end] of ranges(mask)) {
       if (end - start < 1) continue;
       const routePoints = points.slice(Math.max(0, start - 1), Math.min(points.length, end + 2));
@@ -85,20 +83,16 @@ export class LiveTunnelLayer {
       for (const p of curvePoints) p.y = this.groundHeightAt(p.x, p.z) - TUNNEL_DEPTH_M;
       if (curvePoints.length < 2) continue;
       const curve = new THREE.CatmullRomCurve3(curvePoints, false, 'centripetal');
-      const segments = Math.max(16, curvePoints.length * 3);
-      const lining = new THREE.Mesh(new THREE.TubeGeometry(curve, segments, BORE_RADIUS_M, BORE_RADIAL_SEGMENTS, false), liningMaterial);
-      lining.name = 'Live tunnel lining';
-      this.group.add(lining);
-
-      const lights = curve.getSpacedPoints(Math.max(3, Math.floor(curve.getLength() / 40))).map((point) => point.add(new THREE.Vector3(0, 5.8, 0)));
-      if (lights.length > 1) this.group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lights), segments, 0.075, 5), lightMaterial));
-
-      for (const t of [0, 1]) {
-        const portal = new THREE.Mesh(new THREE.TorusGeometry(BORE_RADIUS_M, 0.5, 8, 24), portalMaterial);
-        portal.position.copy(curve.getPointAt(t));
-        portal.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), curve.getTangentAt(t).normalize());
-        this.group.add(portal);
-      }
+      this.group.add(
+        buildTunnelBore({
+          curve,
+          lengthM: curve.getLength(),
+          // Live tunnels are rail alignments; the shared section table keys off
+          // guideway kind and stadtbahn is the right default for these bores.
+          guidewayKind: 'stadtbahn',
+          materials: this.materials
+        })
+      );
     }
   }
 }

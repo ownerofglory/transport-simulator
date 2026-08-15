@@ -40,6 +40,12 @@ export class VehicleVisualController {
 
   private doorOpenAmount = 0;
 
+  // Lit-saloon state: the emissive material is created on first use and the
+  // bands' own materials are kept so the swap can be undone in daylight.
+  private windowsLit = false;
+  private litWindowMaterial: THREE.MeshStandardMaterial | null = null;
+  private unlitBandMaterials: (THREE.Material | THREE.Material[])[] | null = null;
+
   constructor(
     private readonly instance: VehicleInstance,
     private readonly display: VehicleInteriorDisplay | null,
@@ -100,13 +106,47 @@ export class VehicleVisualController {
     for (const display of this.instance.cabDisplays) display.visible = !cabView;
   }
 
-  /** Head/tail lamps come on in low light (night, dawn, dusk). */
+  /** Head/tail lamps and lit windows come on in low light (night, dawn, dusk, tunnels). */
   updateExteriorLights(daylightFactor: number): void {
-    this.instance.setExteriorLightsOn?.(daylightFactor < 0.45);
+    const lightsOn = daylightFactor < 0.45;
+    this.instance.setExteriorLightsOn?.(lightsOn);
+    this.setWindowsLit(lightsOn);
+  }
+
+  /**
+   * Makes the saloon read as lit from outside.
+   *
+   * The window bands are dark strips sitting behind the glass, so with the
+   * interior lit the windows still showed as black holes in a tunnel. Swapping
+   * the band material for a warm emissive one puts the glow behind the glass
+   * where it belongs. The bands carry body materials shared with other trim, so
+   * this swaps the mesh's material rather than mutating the material itself.
+   */
+  private setWindowsLit(lit: boolean): void {
+    const bands = this.instance.windowBands;
+    if (lit === this.windowsLit || bands.length === 0) return;
+    this.windowsLit = lit;
+
+    if (lit) {
+      this.unlitBandMaterials ??= bands.map((band) => band.material);
+      this.litWindowMaterial ??= new THREE.MeshStandardMaterial({
+        color: 0xffeacb,
+        emissive: 0xffdca6,
+        emissiveIntensity: 1.1,
+        roughness: 0.65
+      });
+      for (const band of bands) band.material = this.litWindowMaterial;
+      return;
+    }
+
+    const unlit = this.unlitBandMaterials;
+    if (unlit) for (const [index, band] of bands.entries()) band.material = unlit[index];
   }
 
   dispose(): void {
     this.instance.dispose?.();
     this.display?.dispose();
+    this.litWindowMaterial?.dispose();
+    this.litWindowMaterial = null;
   }
 }

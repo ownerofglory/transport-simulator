@@ -13,9 +13,13 @@ import type { ResolvedVehicleBuildContext, VehicleBuildContext, VehicleInstance 
 import { resolveRouteVehicleDefinition, type VehicleDefinition } from './VehicleDefinition';
 import { fallbackTransportModeDefinition, type TransportModeDefinition } from '../domain/transport';
 import type { DemoRoute } from '../route';
+import { parseSBahnBlueprint } from './blueprint/sbahn/SBahnBlueprintConfig';
 import genericModernTram from './configs/generic-modern-tram.json';
 import genericBus from './configs/generic-bus.json';
 import stuttgartDt8Tango from './configs/stuttgart-dt8-tango.json';
+import cdmxTrenLigero from './configs/cdmx-tren-ligero-te95.json';
+import cdmxMetro from './configs/cdmx-metro-nm16.json';
+import cdmxInsurgente from './configs/cdmx-insurgente-caf.json';
 
 // Default app-wide vehicle registry. Built-in kind builders delegate to the
 // existing procedural factory (unchanged behavior); blueprint configs are
@@ -44,12 +48,23 @@ vehicleRegistry.registerBuilder(defaultSBahnBlueprint.id, (context) => buildSBah
 vehicleRegistry.registerBuilder('karlsruhe-vbk-tram', createKarlsruheTramVehicle);
 vehicleRegistry.registerBuilder('karlsruhe-avg-citylink', createKarlsruheCitylinkVehicle);
 
-for (const rawConfig of [genericModernTram, genericBus, stuttgartDt8Tango]) {
+for (const rawConfig of [genericModernTram, genericBus, stuttgartDt8Tango, cdmxTrenLigero]) {
   const result = vehicleRegistry.registerBlueprintFromJson(rawConfig);
   if (!result.ok) {
     // A broken built-in config should never crash the app at import time; surface it loudly instead.
     console.error(`Built-in vehicle blueprint "${(rawConfig as { id?: string }).id ?? 'unknown'}" failed validation:`, result.errors);
   }
+}
+
+// S-Bahn-family liveries go through the S-Bahn parser rather than the generic
+// blueprint validator, so they register here instead of in the loop above.
+for (const rawConfig of [cdmxMetro, cdmxInsurgente]) {
+  const parsed = parseSBahnBlueprint(rawConfig);
+  if (!parsed.ok) {
+    console.error(`Built-in S-Bahn blueprint "${(rawConfig as { id?: string }).id ?? 'unknown'}" failed validation:`, parsed.errors);
+    continue;
+  }
+  vehicleRegistry.registerBuilder(parsed.config.id, (context) => buildSBahnVehicle(parsed.config, context));
 }
 
 // Minimal route/mode synthesized from a definition so the registry and existing

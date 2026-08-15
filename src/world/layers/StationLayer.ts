@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { makeLabelTexture } from '../../labels';
 import type { GuidewayKind } from '../../domain/transport';
 import { BuilderRegistry } from '../../engine/builders/BuilderRegistry';
-import { createStationStyleRegistry, resolveStationPlacement } from '../stations';
+import { createStationStyleRegistry, orientAlongRoute, resolveStationPlacement } from '../stations';
 import type { StationStyleProvider } from '../stations';
 import type { WorldLayerContext } from './WorldLayerContext';
 
@@ -77,7 +77,7 @@ export class StationLayer {
       const stationGroup = new THREE.Group();
       stationGroup.name = `DB S-Bahn station ${station.name}`;
       stationGroup.position.copy(center);
-      stationGroup.rotation.y = yaw;
+      orientAlongRoute(stationGroup, tangent);
       this.root.add(stationGroup);
 
       for (const side of [-1, 1]) {
@@ -135,6 +135,11 @@ export class StationLayer {
           wall.position.set(side * 11.7, 2.75, 0);
           stationGroup.add(wall);
         }
+        // Invert slab: the box is otherwise open below the platform edges, which
+        // shows as daylight under the station where it meets the tunnel bore.
+        const floor = new THREE.Mesh(new THREE.BoxGeometry(24, 0.4, 155), undergroundMaterial);
+        floor.position.y = -0.32;
+        stationGroup.add(floor);
       }
     }
   }

@@ -17,6 +17,14 @@ export function buildVvsUndergroundHall(local: THREE.Group, materials: VvsStatio
     wall.receiveShadow = true;
     local.add(wall);
   }
+
+  // Invert slab. Without it the box is open below the platform edges, and since
+  // the ground plane is hidden underground that reads as daylight under the
+  // station where it meets the tunnel bore.
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(27, 0.4, 82), materials.undergroundWall);
+  floor.position.y = -0.32;
+  floor.receiveShadow = true;
+  local.add(floor);
 }
 
 /** Per-side underground pillars and ceiling light strips. */

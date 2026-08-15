@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { orientAlongRoute } from './placement';
 import type { StationPlacement } from './types';
 
 /**
@@ -22,7 +23,7 @@ export function createStationScaffold(name: string, placement: StationPlacement)
   root.name = name;
   const local = new THREE.Group();
   local.position.copy(placement.center);
-  local.rotation.y = placement.yaw;
+  orientAlongRoute(local, placement.tangent);
   root.add(local);
   return { root, local };
 }
