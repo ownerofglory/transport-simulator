@@ -45,6 +45,7 @@ export type StationPlatformDefinition = {
   heightM: number;
   curved?: boolean;
   staggerM?: number;
+  surfaceFinish?: StationSurfaceFinish;
 };
 
 // How an underground hall is roofed. Stuttgart's boxes are visibly different
@@ -85,6 +86,24 @@ export type StationColumnsDefinition = {
   spacingM?: number;
 };
 
+// Surface canopy form. `flat-slab` is the common thin white deck on slender
+// posts; `butterfly` is the cantilevered spine roof; `curved-shell` the
+// translucent barrel used on the newer stops.
+export type StationCanopyStyle = 'flat-slab' | 'butterfly' | 'curved-shell';
+
+export type StationCanopyDefinition = {
+  style?: StationCanopyStyle;
+  fasciaColor?: string;
+  postColor?: string;
+  // Stops print the stop name along the canopy fascia rather than only on
+  // separate sign plates.
+  nameOnFascia?: boolean;
+};
+
+// Deck finish of a surface platform. Stuttgart lays most of its stops in block
+// paving with a contrasting edge band rather than plain slab.
+export type StationSurfaceFinish = 'slab' | 'block-paving' | 'asphalt';
+
 export type StationLightingDefinition = {
   style?: StationLightingStyle;
   color?: string;
@@ -99,6 +118,7 @@ export type StationArchitectureDefinition = {
   walls?: StationWallsDefinition;
   columns?: StationColumnsDefinition;
   lighting?: StationLightingDefinition;
+  canopy?: StationCanopyDefinition;
   accentColor?: string;
   customAsset?: string;
 };
@@ -122,6 +142,11 @@ export type StationSignageDefinition = {
   platformNumber?: string;
   // Repeat distance of the name frieze along an underground wall.
   nameBandRepeatM?: number;
+  // The blue "U Stadtbahn" totem mast that marks a surface stop from the
+  // street. Defaults on for surface stops; set false where the stop has none.
+  totem?: boolean;
+  // Lines called at the stop, listed on the totem under the station name.
+  lines?: string[];
 };
 
 export type StationFurnitureDefinition = {
@@ -133,10 +158,17 @@ export type StationFurnitureDefinition = {
   bicycleParking?: boolean;
   // Backlit advertising cases; wall-mounted underground, freestanding outside.
   adVitrines?: number;
+  // Orange SSB information/ticket kiosk found at the busier surface stops.
+  infoKiosk?: boolean;
+  // Lamp columns along the platform; 0 leaves the stop lit only by its canopy.
+  lampColumns?: number;
 };
 
 export type StationEnvironmentDefinition = {
   retainingWall?: 'left' | 'right' | 'both';
+  // Outer edge treatment. Viaduct and bridge stops are closed by a solid
+  // parapet; everything else gets the usual tubular railing.
+  edgeParapet?: 'railing' | 'wall';
   roadCrossing?: boolean;
   plaza?: boolean;
   vegetation?: 'none' | 'urban' | 'suburban' | 'wooded';

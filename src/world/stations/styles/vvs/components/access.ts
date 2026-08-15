@@ -16,12 +16,13 @@ import type { VvsStationMaterials } from '../VvsStationMaterials';
  * seeded — where you can leave a station is infrastructure, not decoration.
  */
 
-const PLATFORM_TOP_M = 0.22;
 const RUN_WIDTH_M = 2.4;
 const DEFAULT_LATERAL_M = 9.4; // against the back of a side platform
 
 export type VvsAccessOptions = {
   ceilingHeightM: number;
+  // Deck the runs start from; a high platform lifts every flight with it.
+  deckTopM: number;
   lateralM?: number;
 };
 
@@ -35,8 +36,8 @@ export function buildVvsAccess(
     if (entry.type === 'crossing') continue; // a surface feature, not a shaft
     const side = entry.side === 'right' ? 1 : entry.side === 'left' ? -1 : 0;
     const x = side * (options.lateralM ?? DEFAULT_LATERAL_M);
-    if (entry.type === 'lift') buildLift(local, materials, x, entry.offsetM, options.ceilingHeightM);
-    else buildRun(local, materials, entry, x, side, options.ceilingHeightM);
+    if (entry.type === 'lift') buildLift(local, materials, x, entry.offsetM, options);
+    else buildRun(local, materials, entry, x, side, options);
   }
 }
 
@@ -47,10 +48,11 @@ function buildRun(
   entry: StationAccessDefinition,
   x: number,
   side: number,
-  ceilingHeightM: number
+  options: VvsAccessOptions
 ): void {
+  const { ceilingHeightM, deckTopM } = options;
   const widthM = entry.widthM ?? (entry.type === 'escalator' ? RUN_WIDTH_M * 2 : RUN_WIDTH_M);
-  const riseM = ceilingHeightM + 1.4; // continues past the soffit into the shaft
+  const riseM = ceilingHeightM - deckTopM + 1.4; // continues past the soffit into the shaft
   const runM = riseM / Math.tan(THREE.MathUtils.degToRad(30));
   const pitch = Math.atan2(riseM, runM);
   const slopeM = Math.hypot(riseM, runM);
@@ -58,7 +60,7 @@ function buildRun(
 
   const deckMaterial = entry.type === 'escalator' ? materials.treads : materials.platform;
   const deck = new THREE.Mesh(new THREE.BoxGeometry(widthM, 0.3, slopeM), deckMaterial);
-  deck.position.set(x, PLATFORM_TOP_M + riseM / 2, centerZ);
+  deck.position.set(x, deckTopM + riseM / 2, centerZ);
   deck.rotation.x = -pitch;
   deck.castShadow = true;
   local.add(deck);
@@ -67,7 +69,7 @@ function buildRun(
   // stairs since Stuttgart's boxes use steel handrails throughout.
   for (const edge of [-1, 1]) {
     const balustrade = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.05, slopeM), materials.steel);
-    balustrade.position.set(x + (edge * widthM) / 2, PLATFORM_TOP_M + riseM / 2 + 0.62, centerZ);
+    balustrade.position.set(x + (edge * widthM) / 2, deckTopM + riseM / 2 + 0.62, centerZ);
     balustrade.rotation.x = -pitch;
     local.add(balustrade);
   }
@@ -82,16 +84,17 @@ function buildLift(
   materials: VvsStationMaterials,
   x: number,
   offsetM: number,
-  ceilingHeightM: number
+  options: VvsAccessOptions
 ): void {
-  const heightM = ceilingHeightM - 0.1;
+  const { ceilingHeightM, deckTopM } = options;
+  const heightM = ceilingHeightM - deckTopM - 0.1;
   const shaft = new THREE.Mesh(new THREE.BoxGeometry(2.2, heightM, 2.4), materials.glass);
-  shaft.position.set(x, PLATFORM_TOP_M + heightM / 2, offsetM);
+  shaft.position.set(x, deckTopM + heightM / 2, offsetM);
   local.add(shaft);
 
   for (const edge of [-1, 1]) {
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, heightM, 0.14), materials.steel);
-    post.position.set(x + edge * 1.1, PLATFORM_TOP_M + heightM / 2, offsetM + 1.2);
+    post.position.set(x + edge * 1.1, deckTopM + heightM / 2, offsetM + 1.2);
     local.add(post);
   }
 

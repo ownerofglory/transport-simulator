@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { createStationScaffold, disposeStation } from '../../StationFactory';
 import type {
   RouteStation,
@@ -13,7 +14,7 @@ import { createSeededRandom, hashString } from '../../variation';
 import { VvsStationCatalog } from './VvsStationCatalog';
 import { VvsStationMaterials } from './VvsStationMaterials';
 import { buildVvsAccess } from './components/access';
-import { buildVvsSidePlatforms, sidePlatformOffset } from './components/platform';
+import { DEFAULT_DECK_TOP_M, buildVvsSidePlatforms, sidePlatformOffset } from './components/platform';
 import { buildVvsUndergroundHall, buildVvsUndergroundSideLighting } from './components/undergroundHall';
 import { buildVvsCanopy } from './components/canopy';
 import { buildVvsFurniture } from './components/furniture';
@@ -25,11 +26,26 @@ import {
   buildVvsVitrines,
   buildVvsWayfinding
 } from './components/signage';
+import {
+  buildVvsEdgeParapet,
+  buildVvsInfoKiosk,
+  buildVvsLampColumns,
+  buildVvsPlatformRailing,
+  buildVvsSurfaceVitrines,
+  buildVvsTotem
+} from './components/surfaceFurniture';
 import { buildVvsTerminusBuffer } from './components/terminus';
 
 // Legacy single-item platform layout, used as the default so unlisted stops
 // keep close to the original look (seeded counts still allow 1–2 benches).
 const DEFAULT_SURFACE_PLATFORM = { layout: 'side', lengthM: 76, widthM: 8, heightM: 0.22, curved: true } as const;
+
+// The Stadtbahn is a high-platform network: every stop, surface or underground,
+// boards level from a 0.8 m deck — that is what the tram-to-Stadtbahn
+// conversion was for. The low 0.22 m kerb above stays the default for the
+// street-running tram networks that borrow this provider as their fallback, so
+// the height is only raised when a mode selects this style by name.
+const SSB_PLATFORM_HEIGHT_M = 0.8;
 
 // Clear height to the underside of an underground ceiling, matching the legacy
 // box. Stops with a taller vault raise it through `architecture.hall.heightM`.
@@ -55,7 +71,12 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     const rng = createSeededRandom(seed);
 
     const archetype = override?.archetype ?? (underground ? 'underground-side' : 'surface-side');
-    const platform = { ...DEFAULT_SURFACE_PLATFORM, ...override?.platform };
+    const ssb = context.layer?.stationStyleId === 'vvs-stadtbahn';
+    const platform = {
+      ...DEFAULT_SURFACE_PLATFORM,
+      ...(ssb ? { heightM: SSB_PLATFORM_HEIGHT_M } : {}),
+      ...override?.platform
+    };
 
     // Appearance-only counts: catalog wins, else a small deterministic value.
     // Underground stops always carry a suspended departure board and a couple of
@@ -111,6 +132,15 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     );
     context.root.add(scaffold.root);
 
+    // Everything that stands *on* the platform rides this group, so raising the
+    // deck raises the canopy, furniture, and signs with it. The components were
+    // authored around the legacy tram kerb, so the group carries the difference.
+    const deckTopM = definition.platform?.heightM ?? DEFAULT_DECK_TOP_M;
+    const deck = new THREE.Group();
+    deck.name = 'Platform deck fittings';
+    deck.position.y = deckTopM - DEFAULT_DECK_TOP_M;
+    scaffold.local.add(deck);
+
     // Island platforms are a distinct topology; everything else uses the paired
     // side-platform layout (surface or underground). Selected by explicit layout
     // or the surface-island archetype.
@@ -153,7 +183,7 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
         nameBandRepeatM: definition.signage?.nameBandRepeatM
       });
       if (definition.access?.length) {
-        buildVvsAccess(scaffold.local, materials, definition.access, { ceilingHeightM });
+        buildVvsAccess(scaffold.local, materials, definition.access, { ceilingHeightM, deckTopM });
       }
     }
 
@@ -176,6 +206,7 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     const platformOffset = sidePlatformOffset(definition.platform?.widthM ?? 8);
     const lateral = platformOffset - 7.4;
     const roof = definition.architecture?.roof;
+    const canopy = definition.architecture?.canopy;
     // Interchanges default to a full canopy (unless the catalog says otherwise).
     const interchange = definition.archetype === 'surface-interchange';
     const fullCanopy = roof === 'full-canopy' || roof === 'hall' || (interchange && roof === undefined);
@@ -207,14 +238,17 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
             definition.signage?.platformNumber
           );
         }
-      } else buildVvsCanopy(scaffold.local, materials, side, {
+      } else buildVvsCanopy(deck, materials, side, {
         lengthM: canopyLen,
         platformOffsetM: platformOffset,
         centerZ: canopyCenterZ + zShift,
-        accent
+        accent,
+        style: canopy?.style,
+        postMaterial: canopy?.postColor ? materials.painted(canopy.postColor) : undefined,
+        nameOnFascia: canopy?.nameOnFascia ? definition.displayName : undefined
       });
-      buildVvsFurniture(scaffold.local, materials, side, underground, counts, lateral, zShift);
-      buildVvsStationSigns(scaffold.local, context.layer, side, station, underground, lateral, zShift, accentColor);
+      buildVvsFurniture(deck, materials, side, underground, counts, lateral, zShift);
+      buildVvsStationSigns(deck, context.layer, side, station, underground, lateral, zShift, accentColor);
 
       // Hillside/cutting stops carry a retaining wall behind the platform.
       if (!underground && (retainingWall === 'both' || (retainingWall === 'left' && side === -1) ||
@@ -225,7 +259,11 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       // avoid doubling; count spreads them along the platform). Underground
       // stops use the suspended boards built above instead.
       if (!underground && dfiDisplays > 0 && side === 1) {
-        buildVvsDfiBoards(scaffold.local, context.layer, materials, side, station, dfiDisplays, platformLengthM, lateral);
+        buildVvsDfiBoards(deck, context.layer, materials, side, station, dfiDisplays, platformLengthM, lateral);
+      }
+
+      if (!underground) {
+        this.buildSurfaceStreetFurniture(deck, context, materials, definition, side, platformLengthM, lateral);
       }
     }
 
@@ -242,5 +280,38 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       root: scaffold.root,
       dispose: () => disposeStation(scaffold.root, materials.shared)
     };
+  }
+
+  /**
+   * The street-level kit a Stuttgart surface stop carries: the blue U totem, the
+   * back railing, lamp columns, poster cases, an info kiosk at the busier stops,
+   * and a parapet where the platform sits on a viaduct rather than on ground.
+   */
+  private buildSurfaceStreetFurniture(
+    deck: THREE.Group,
+    context: StationBuildContext,
+    materials: VvsStationMaterials,
+    definition: StationVisualDefinition,
+    side: number,
+    platformLengthM: number,
+    lateral: number
+  ): void {
+    const furniture = definition.furniture ?? {};
+    const signage = definition.signage;
+
+    if (signage?.totem !== false) {
+      buildVvsTotem(deck, materials, side, { name: definition.displayName, distanceM: 0 }, lateral, signage?.lines);
+    }
+
+    const parapet = definition.environment?.edgeParapet;
+    if (parapet === 'wall') buildVvsEdgeParapet(deck, materials, side, platformLengthM, lateral);
+    else buildVvsPlatformRailing(deck, materials, side, platformLengthM, lateral);
+
+    buildVvsLampColumns(deck, materials, side, furniture.lampColumns ?? 2, platformLengthM, lateral);
+    buildVvsSurfaceVitrines(deck, materials, side, furniture.adVitrines ?? 0, platformLengthM, lateral);
+    // One kiosk per stop, on the same side as the departure boards.
+    if (furniture.infoKiosk && side === 1) {
+      buildVvsInfoKiosk(deck, context.layer, materials, side, lateral);
+    }
   }
 }

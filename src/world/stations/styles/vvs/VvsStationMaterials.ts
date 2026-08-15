@@ -42,6 +42,10 @@ export class VvsStationMaterials {
   readonly canopy = new THREE.MeshStandardMaterial({ color: 0xd7dde0, roughness: 0.38, metalness: 0.34 });
   readonly bench = new THREE.MeshStandardMaterial({ color: 0x234e68, roughness: 0.68 });
   readonly machine = new THREE.MeshStandardMaterial({ color: 0xffd800, roughness: 0.48 });
+  // Dark grey of masts, lamp columns, and sign posts.
+  readonly mast = new THREE.MeshStandardMaterial({ color: 0x3a3d41, roughness: 0.55, metalness: 0.32 });
+  // SSB orange of the information kiosks and service points.
+  readonly kiosk = new THREE.MeshStandardMaterial({ color: 0xe8791a, roughness: 0.52 });
   readonly light = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff4cf, emissiveIntensity: 2.1 });
   // Underground surfaces carry a slight emissive term. The world's underground
   // lighting is tuned for a tunnel bore — near-zero ambient, tight fog — which
@@ -109,6 +113,8 @@ export class VvsStationMaterials {
     this.concrete,
     this.dfi,
     this.buffer,
+    this.mast,
+    this.kiosk,
     this.plinth,
     this.ceilingMetal,
     this.steel,
