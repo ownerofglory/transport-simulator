@@ -4,7 +4,8 @@ import type {
   StationCeilingStyle,
   StationColumnStyle,
   StationLightingStyle,
-  StationWallFinish
+  StationWallFinish,
+  StationWallMural
 } from '../../../types';
 import type { VvsStationMaterials } from '../VvsStationMaterials';
 
@@ -37,6 +38,7 @@ export type VvsUndergroundHallOptions = {
   wallFinish?: StationWallFinish;
   wallColor?: string;
   plinthColor?: string;
+  mural?: StationWallMural;
   stationName?: string;
   nameBandRepeatM?: number;
 };
@@ -86,6 +88,12 @@ function buildSideWall(
   wall.receiveShadow = true;
   local.add(wall);
 
+  // Artwork is independent of the finish: Killesberg's filmstrip runs along
+  // bare concrete, which is exactly what makes it the thing you remember.
+  if (options.mural === 'film-strip') {
+    buildFilmStrip(local, materials, side, side * (wallX - 0.24), lengthM);
+  }
+
   const finish = options.wallFinish ?? 'concrete';
   if (finish === 'concrete' || !options.wallColor) return;
 
@@ -112,6 +120,68 @@ function buildSideWall(
   local.add(head);
 
   buildNameFrieze(local, side, faceX, lengthM, options);
+}
+
+/**
+ * Killesberg's Kodak filmstrip: a carrier band running the length of the track
+ * wall, its frames lit and its sprocket holes punched along both edges. Built
+ * from three instanced runs so a 300 m wall stays three draw calls.
+ */
+function buildFilmStrip(
+  local: THREE.Group,
+  materials: VvsStationMaterials,
+  side: number,
+  faceX: number,
+  lengthM: number
+): void {
+  const runM = Math.max(12, lengthM - 8);
+  const centreY = 2.6;
+  const carrierHeightM = 1.9;
+
+  const carrier = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, carrierHeightM, runM),
+    materials.filmCarrier
+  );
+  carrier.position.set(faceX, centreY, 0);
+  local.add(carrier);
+
+  const dummy = new THREE.Object3D();
+  const frameSpacingM = 2.3;
+  const frameCount = Math.max(1, Math.floor(runM / frameSpacingM));
+  const frames = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.04, 1.16, 1.72),
+    materials.filmFrame,
+    frameCount
+  );
+  const firstFrameZ = -((frameCount - 1) * frameSpacingM) / 2;
+  for (let i = 0; i < frameCount; i += 1) {
+    dummy.position.set(faceX - side * 0.03, centreY, firstFrameZ + i * frameSpacingM);
+    dummy.updateMatrix();
+    frames.setMatrixAt(i, dummy.matrix);
+  }
+  frames.instanceMatrix.needsUpdate = true;
+  local.add(frames);
+
+  // Sprockets: two rows along the carrier edges, as on real 35 mm stock.
+  const holeSpacingM = 0.42;
+  const holeRows = [centreY + carrierHeightM / 2 - 0.22, centreY - carrierHeightM / 2 + 0.22];
+  const holeCount = Math.max(2, Math.floor(runM / holeSpacingM));
+  const perforations = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.04, 0.13, 0.13),
+    materials.filmPerforation,
+    holeCount * holeRows.length
+  );
+  const firstHoleZ = -((holeCount - 1) * holeSpacingM) / 2;
+  let index = 0;
+  for (const y of holeRows) {
+    for (let i = 0; i < holeCount; i += 1) {
+      dummy.position.set(faceX - side * 0.03, y, firstHoleZ + i * holeSpacingM);
+      dummy.updateMatrix();
+      perforations.setMatrixAt(index++, dummy.matrix);
+    }
+  }
+  perforations.instanceMatrix.needsUpdate = true;
+  local.add(perforations);
 }
 
 /**

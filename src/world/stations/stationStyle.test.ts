@@ -185,6 +185,18 @@ describe('island platforms', () => {
     expect(profile.spreadAtDistance(2000 - 44 - ISLAND_TAPER_M)).toBe(0);
   });
 
+  it('gives Killesberg its filmstrip walls on a column-free island', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    const station: RouteStation = { name: 'Killesberg', distanceM: 2759 };
+    const resolved = provider.resolve(station, { layer: ssbLayer, placement: placementAt(station, true) });
+    expect(resolved.platform.layout).toBe('island');
+    expect(resolved.architecture?.walls?.mural).toBe('film-strip');
+    expect(resolved.architecture?.walls?.finish).toBe('concrete');
+    expect(resolved.architecture?.columns?.style).toBe('none');
+    // Still a terminus: the buffer stops belong on the spread tracks.
+    expect(resolved.archetype).toBe('terminus');
+  });
+
   it('leaves the tracks alone for tram networks that only fall back to this style', () => {
     const stations: RouteStation[] = [{ name: 'EnBW City', distanceM: 2000 }];
     expect(islandSpreadZones(stations, 'stadtbahn', 2.1, undefined)).toEqual([]);

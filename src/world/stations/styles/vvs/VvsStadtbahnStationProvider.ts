@@ -198,6 +198,7 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
         wallFinish: definition.architecture?.walls?.finish,
         wallColor: definition.architecture?.walls?.color,
         plinthColor: definition.architecture?.walls?.plinthColor,
+        mural: definition.architecture?.walls?.mural,
         stationName: definition.displayName,
         nameBandRepeatM: definition.signage?.nameBandRepeatM
       });

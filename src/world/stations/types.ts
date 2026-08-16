@@ -73,11 +73,19 @@ export type StationHallDefinition = {
   trussColor?: string;
 };
 
+/**
+ * A wall's own artwork, where a station is known for it rather than for its
+ * finish. `film-strip` is Killesberg's Kodak filmstrip, which runs the length
+ * of both track walls in memory of the works the stop was built for.
+ */
+export type StationWallMural = 'none' | 'film-strip';
+
 export type StationWallsDefinition = {
   finish?: StationWallFinish;
   color?: string; // station identity colour of the cladding field
   plinthColor?: string;
   bandColor?: string; // frieze band the station name sits in
+  mural?: StationWallMural;
 };
 
 export type StationColumnsDefinition = {
