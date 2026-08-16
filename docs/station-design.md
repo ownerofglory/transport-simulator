@@ -53,10 +53,12 @@ layout, dimensions, height and accessibility are authored or not present.
   },
   "architecture": {
     "hall":    { "widthM": 20, "heightM": 4.6,
-                 "ceiling": "flat-slab | coffered | ribbed-metal | trussed-vault" },
+                 "ceiling": "flat-slab | coffered | ribbed-metal
+                           | trussed-vault | metal-vault" },
     "walls":   { "finish": "concrete | enamel-panel | tile",
                  "color": "#c8102e",     // identity colour of the cladding field
-                 "plinthColor": "…", "bandColor": "…",
+                 "plinthColor": "…",
+                 "bandColor": "…",     // band the repeated name sits in
                  "mural": "film-strip" },// artwork, independent of the finish
     "columns": { "style": "none | square | round", "color": "…", "spacingM": 18 },
     "lighting":{ "style": "strip-segments | strip-continuous | recessed-rows" },
@@ -160,7 +162,12 @@ would undo it. See `docs/` history or the tool's own header for what it fixes.
    rebuild existing station meshes** — a full reload is required.
 
 Photographs are the reference for colours, ceiling type, column form and
-lighting. Where a station is known for its artwork rather than its finish, add
-it to the kit rather than approximating with a colour — Killesberg's Kodak
-filmstrip is a wall mural (`walls.mural`) built as three instanced runs, so a
-long wall stays three draw calls.
+lighting. Where a station's defining feature is not yet in the kit, add it to
+the kit rather than approximating — Killesberg's Kodak filmstrip became
+`walls.mural` (three instanced runs, so a long wall stays three draw calls),
+and the airport station's clad soffit became the `metal-vault` ceiling.
+
+Two stops can share a name across networks: `Flughafen/Messe` is a surface
+Stadtbahn terminus and an underground S-Bahn vault. They stay distinct because
+each style reads its own catalog — never add one network's stop to the other's
+file.

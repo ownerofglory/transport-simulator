@@ -38,6 +38,7 @@ export type VvsUndergroundHallOptions = {
   wallFinish?: StationWallFinish;
   wallColor?: string;
   plinthColor?: string;
+  bandColor?: string;
   mural?: StationWallMural;
   stationName?: string;
   nameBandRepeatM?: number;
@@ -198,10 +199,12 @@ function buildNameFrieze(
   const repeatM = options.nameBandRepeatM ?? 0;
   if (repeatM <= 0 || !options.stationName) return;
 
+  // The band the name sits in is often not the wall colour: the airport station
+  // runs a light strip along an anthracite wall.
   const texture = makeLabelTexture(options.stationName, {
     width: 1024,
     height: 128,
-    bg: options.wallColor ?? '#c8c8c3',
+    bg: options.bandColor ?? options.wallColor ?? '#c8c8c3',
     fg: '#1c1c1c'
   });
   const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.FrontSide });
@@ -229,6 +232,11 @@ function buildCeiling(
   // loading gauge, so no stop can be broken by getting them.
   const style = options.ceiling ?? 'coffered';
   const deck = options.ceilingColor ? materials.painted(options.ceilingColor) : materials.undergroundWall;
+
+  if (style === 'metal-vault') {
+    buildMetalVault(local, materials, widthM, lengthM, heightM, deck);
+    return;
+  }
 
   if (style === 'trussed-vault') {
     buildTrussedVault(local, materials, widthM, lengthM, heightM, options, deck);
@@ -273,6 +281,40 @@ function buildCeiling(
     ribs.instanceMatrix.needsUpdate = true;
     local.add(ribs);
   }
+}
+
+/**
+ * Shallow metal barrel spanning the box, with a structural slab above it so the
+ * space over the vault can never read as open sky. The arc is a half cylinder
+ * squashed to the rise, which is what the clad soffits actually look like:
+ * segmental, not semicircular.
+ */
+function buildMetalVault(
+  local: THREE.Group,
+  materials: VvsStationMaterials,
+  widthM: number,
+  lengthM: number,
+  heightM: number,
+  deck: THREE.Material
+): void {
+  const riseM = 1.8;
+  const radiusM = Math.max(1, widthM / 2 - WALL_INSET_M);
+
+  const vault = new THREE.Mesh(
+    new THREE.CylinderGeometry(radiusM, radiusM, lengthM, 28, 1, true, Math.PI, Math.PI),
+    materials.ceilingMetal
+  );
+  vault.position.set(0, heightM, 0);
+  vault.rotation.z = Math.PI / 2;
+  vault.rotation.y = Math.PI / 2;
+  // Squashed to the real rise; a full semicircle would crown metres too high.
+  vault.scale.y = riseM / radiusM;
+  vault.receiveShadow = true;
+  local.add(vault);
+
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(widthM, 0.45, lengthM), deck);
+  slab.position.y = heightM + riseM + 0.4;
+  local.add(slab);
 }
 
 /** Rotebühlplatz's pitched roof carried on exposed painted steel trusses. */

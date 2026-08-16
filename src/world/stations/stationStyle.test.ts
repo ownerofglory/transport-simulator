@@ -246,6 +246,29 @@ describe('S-Bahn Stammstrecke islands', () => {
     expect(colours.get('Schwabstraße')).toBe('#f2b800');
   });
 
+  it('separates the two Flughafen/Messe stops by style, not by name', () => {
+    const registry = createStationStyleRegistry();
+    const station: RouteStation = { name: 'Flughafen/Messe', distanceM: 1000 };
+
+    const sbahn = registry.resolveOptional('db-sbahn')!.resolve(station, {
+      layer: { stationStyleId: 'db-sbahn' } as never,
+      placement: placementAt(station, true)
+    });
+    const stadtbahn = registry.resolveOptional('vvs-stadtbahn')!.resolve(station, {
+      layer: { stationStyleId: 'vvs-stadtbahn' } as never,
+      placement: placementAt(station, false)
+    });
+
+    // Both are islands, but they are different stations: an underground vault
+    // against a surface terminus.
+    expect(sbahn.platform.layout).toBe('island');
+    expect(stadtbahn.platform.layout).toBe('island');
+    expect(sbahn.architecture?.hall?.ceiling).toBe('metal-vault');
+    expect(sbahn.platform.lengthM).toBe(210);
+    expect(stadtbahn.archetype).toBe('terminus');
+    expect(stadtbahn.architecture?.hall).toBeUndefined();
+  });
+
   it('opens the S-Bahn tracks by the wider car body', () => {
     // 11 m deck: 5.5 m to each edge plus 1.55 m of car body → 7.05 m out, which
     // is 4.7 m outside the S-Bahn's 2.35 m track offset.

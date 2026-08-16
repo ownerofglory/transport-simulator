@@ -51,7 +51,13 @@ export type StationPlatformDefinition = {
 // How an underground hall is roofed. Stuttgart's boxes are visibly different
 // from each other: plain slabs, longitudinal coffers, dark ribbed metal decks,
 // and Rotebühlplatz's pitched roof on exposed steel trusses.
-export type StationCeilingStyle = 'flat-slab' | 'coffered' | 'ribbed-metal' | 'trussed-vault';
+export type StationCeilingStyle =
+  | 'flat-slab'
+  | 'coffered'
+  | 'ribbed-metal'
+  | 'trussed-vault'
+  // Shallow metal barrel over the whole box, as at the airport station.
+  | 'metal-vault';
 
 // Wall build-up. `enamel-panel` and `tile` add a coloured cladding field with a
 // dark plinth; `concrete` leaves the structural wall bare (the legacy look).
