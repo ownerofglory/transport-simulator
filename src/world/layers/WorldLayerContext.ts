@@ -24,7 +24,11 @@ export type WorldLayerContext = {
 
   stationIsUnderground(t: number): boolean;
   normalAt(t: number): THREE.Vector3;
+  // A track's lateral offset at t. Equals the base offset everywhere except
+  // where the tracks part around an island platform.
+  laneOffsetAtT(t: number, baseOffsetM: number): number;
   offsetCurvePoints(offsetM: number, segments: number, heightM: number): THREE.Vector3[];
+  offsetCurvePointsAt(offsetAt: (t: number) => number, segments: number, heightM: number): THREE.Vector3[];
   surfaceHeightAt(t: number): number;
   makeRouteStrip(offsetM: number, widthM: number, startT: number, endT: number, segments: number, heightM: number): THREE.BufferGeometry;
   makeTrackStrip(offsetM: number, widthM: number, segments: number): THREE.BufferGeometry;

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { undergroundHallHalfLengthM } from './hallExtent';
+import { ISLAND_TAPER_M, islandSpreadZones, islandTrackSpreadM } from './trackLayout';
+import { TrackSpreadProfile } from '../trackSpread';
 import { createStationStyleRegistry } from './index';
 import { VvsStadtbahnStationProvider } from './styles/vvs/VvsStadtbahnStationProvider';
 import { VvsStationCatalog } from './styles/vvs/VvsStationCatalog';
@@ -80,7 +82,8 @@ describe('station style registry', () => {
 describe('station catalog schema 2', () => {
   it('carries architecture, access, and signage detail through to the definition', () => {
     const provider = new VvsStadtbahnStationProvider();
-    const station: RouteStation = { name: 'Rotebühlplatz (Stadtmitte)', distanceM: 400 };
+    // Keyed by the name the route feed carries, not the fuller signage name.
+    const station: RouteStation = { name: 'Rotebühlplatz', distanceM: 400 };
     const resolved = provider.resolve(station, { layer: {} as never, placement: placementAt(station, true) });
 
     expect(resolved.architecture?.hall?.ceiling).toBe('trussed-vault');
@@ -137,6 +140,54 @@ describe('platform height', () => {
     expect(resolved.architecture?.canopy?.nameOnFascia).toBe(true);
     expect(resolved.environment?.edgeParapet).toBe('wall');
     expect(resolved.signage?.lines).toContain('U12');
+  });
+});
+
+describe('island platforms', () => {
+  const enbw: RouteStation = { name: 'EnBW City', distanceM: 3646 };
+  const ssbLayer = { stationStyleId: 'vvs-stadtbahn' } as never;
+
+  it('resolves an island stop to the island layout in both surface and tunnel', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    for (const underground of [false, true]) {
+      const resolved = provider.resolve(enbw, { layer: ssbLayer, placement: placementAt(enbw, underground) });
+      expect(resolved.platform.layout).toBe('island');
+      expect(resolved.platform.widthM).toBe(9);
+    }
+  });
+
+  it('opens the tracks just wide enough to clear the deck', () => {
+    // 9 m deck: each edge 4.5 m out, plus 1.3 m of car body → tracks at 5.8 m,
+    // which is 3.7 m outside the normal 2.1 m offset.
+    expect(islandTrackSpreadM(9, 2.1)).toBeCloseTo(3.7);
+    // A deck narrow enough to fit between the tracks as they run needs nothing.
+    expect(islandTrackSpreadM(1.4, 2.1)).toBe(0);
+  });
+
+  it('spreads the tracks only around island stops on the route', () => {
+    const stations: RouteStation[] = [
+      { name: 'Fasanenhof', distanceM: 1000 },
+      { name: 'EnBW City', distanceM: 2000 }
+    ];
+    const profile = new TrackSpreadProfile(islandSpreadZones(stations, 'stadtbahn', 2.1, 'vvs-stadtbahn'));
+    expect(profile.spreadAtDistance(1000)).toBe(0); // side platforms: untouched
+    expect(profile.spreadAtDistance(2000)).toBeCloseTo(3.7);
+    expect(profile.laneOffsetAt(2000, -2.1)).toBeCloseTo(-5.8);
+    expect(profile.laneOffsetAt(2000, 2.1)).toBeCloseTo(5.8);
+    // Closed again well before the next stop.
+    expect(profile.spreadAtDistance(2000 - 44 - ISLAND_TAPER_M)).toBe(0);
+  });
+
+  it('leaves the tracks alone for tram networks that only fall back to this style', () => {
+    const stations: RouteStation[] = [{ name: 'EnBW City', distanceM: 2000 }];
+    expect(islandSpreadZones(stations, 'stadtbahn', 2.1, undefined)).toEqual([]);
+  });
+
+  it('stretches an underground island box past the taper, so the bore starts on straight track', () => {
+    const halfLengthM = undergroundHallHalfLengthM('stadtbahn', 'EnBW City', 'vvs-stadtbahn');
+    expect(halfLengthM).toBeGreaterThan(80 / 2 + ISLAND_TAPER_M);
+    // Same stop without the style selected by name: the legacy box.
+    expect(undergroundHallHalfLengthM('stadtbahn', 'EnBW City')).toBe(46);
   });
 });
 

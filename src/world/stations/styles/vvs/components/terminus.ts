@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import type { VvsStationMaterials } from '../VvsStationMaterials';
 
 // Stadtbahn tracks sit at ±2.1m (guideway spacing); a terminus caps each with a
-// buffer stop and a low end wall across both tracks.
+// buffer stop and a low end wall across both tracks. An island terminus is wider:
+// its tracks have been pulled apart around the platform, and the buffers have to
+// follow them or they stand in the six-foot.
 const TRACK_OFFSET_M = 2.1;
 
 /**
@@ -14,11 +16,12 @@ export function buildVvsTerminusBuffer(
   local: THREE.Group,
   materials: VvsStationMaterials,
   platformLengthM: number,
-  endSign: number
+  endSign: number,
+  trackOffsetM = TRACK_OFFSET_M
 ): void {
   const endZ = endSign * (platformLengthM / 2 + 1.5);
 
-  for (const x of [-TRACK_OFFSET_M, TRACK_OFFSET_M]) {
+  for (const x of [-trackOffsetM, trackOffsetM]) {
     const beam = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.7, 0.5), materials.buffer);
     beam.position.set(x, 0.6, endZ);
     beam.castShadow = true;
@@ -31,7 +34,9 @@ export function buildVvsTerminusBuffer(
     }
   }
 
-  const endWall = new THREE.Mesh(new THREE.BoxGeometry(11, 3.2, 0.5), materials.concrete);
+  // Wide enough to close the gap behind both buffers, whatever the spacing.
+  const wallWidthM = Math.max(11, trackOffsetM * 2 + 6.6);
+  const endWall = new THREE.Mesh(new THREE.BoxGeometry(wallWidthM, 3.2, 0.5), materials.concrete);
   endWall.position.set(0, 1.4, endZ + endSign * 1.2);
   endWall.receiveShadow = true;
   local.add(endWall);

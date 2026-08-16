@@ -1,5 +1,11 @@
 import type { GuidewayKind } from '../../domain/transport';
 import { VvsStationCatalog } from './styles/vvs/VvsStationCatalog';
+import {
+  DEFAULT_ISLAND_LENGTH_M,
+  ISLAND_TAPER_M,
+  catalogIslandWidthM,
+  islandSpreadHalfLengthM
+} from './trackLayout';
 
 /**
  * How far an underground station box reaches either side of the stop.
@@ -21,8 +27,19 @@ const PLATFORM_END_MARGIN_M = 6;
 
 const catalog = new VvsStationCatalog();
 
-export function undergroundHallHalfLengthM(guidewayKind: GuidewayKind, stationName: string): number {
+export function undergroundHallHalfLengthM(
+  guidewayKind: GuidewayKind,
+  stationName: string,
+  stationStyleId?: string
+): number {
   if (guidewayKind === 's-bahn') return SBAHN_HALF_HALL_M;
   const platformLengthM = catalog.get(stationName)?.platform?.lengthM ?? 0;
-  return Math.max(RAIL_MIN_HALF_HALL_M, platformLengthM / 2 + PLATFORM_END_MARGIN_M);
+  const halfLengthM = Math.max(RAIL_MIN_HALF_HALL_M, platformLengthM / 2 + PLATFORM_END_MARGIN_M);
+  if (catalogIslandWidthM(stationName, guidewayKind, stationStyleId) === null) return halfLengthM;
+
+  // An island stop's tracks are still swinging back together well past the
+  // platform ends. The box has to reach beyond that: the bore begins where the
+  // box stops, and it is bored around tracks at their normal spacing.
+  const spreadEndM = islandSpreadHalfLengthM(platformLengthM || DEFAULT_ISLAND_LENGTH_M) + ISLAND_TAPER_M;
+  return Math.max(halfLengthM, spreadEndM + PLATFORM_END_MARGIN_M);
 }
