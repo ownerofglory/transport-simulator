@@ -130,7 +130,7 @@ for (const route of feed.routes) {
   }
 
   route.tunnelMask = mask;
-  route.tunnelRanges = maskRanges(mask, distances);
+  route.tunnelRanges = maskRanges(mask, distances, route.routeLengthM);
   changedRoutes += 1;
 
   for (const stop of deep) {
@@ -234,13 +234,21 @@ function controlPointDistances(points, routeLengthM) {
  */
 function depthProfile(runs, distances, zones) {
   const depths = new Array(distances.length).fill(0);
+  const lastIndex = distances.length - 1;
   for (const [start, end] of runs) {
     const runLengthM = distances[end] - distances[start];
     const rampM = Math.max(1, Math.min(RAMP_M, runLengthM / 2));
+    // A run that stops because the ROUTE stops is not a portal: the tunnel
+    // carries on past the end of the modelled alignment, so the ramp to the
+    // surface belongs only at a real boundary. Schwabstraße is the case that
+    // matters — several routes terminate there, inside the Stammstrecke.
+    const rampAtStart = start > 0;
+    const rampAtEnd = end < lastIndex;
     for (let i = start; i <= end; i++) {
-      const fromStart = distances[i] - distances[start];
-      const fromEnd = distances[end] - distances[i];
-      depths[i] = MAX_DEPTH_M * clamp(Math.min(fromStart, fromEnd) / rampM, 0, 1);
+      const fromStart = rampAtStart ? distances[i] - distances[start] : Infinity;
+      const fromEnd = rampAtEnd ? distances[end] - distances[i] : Infinity;
+      const reach = Math.min(fromStart, fromEnd);
+      depths[i] = MAX_DEPTH_M * (Number.isFinite(reach) ? clamp(reach / rampM, 0, 1) : 1);
     }
     for (const zone of zones) {
       if (zone.stop.distanceM < distances[start] || zone.stop.distanceM > distances[end]) continue;
@@ -269,11 +277,26 @@ function indexRanges(mask) {
   return ranges;
 }
 
-function maskRanges(mask, distances) {
+/**
+ * Ranges in route distance. Bounds are widened rather than rounded to nearest:
+ * a stop sitting exactly on a range end — a terminus inside the tunnel, like
+ * Schwabstraße — must test as inside it, and `stationIsUnderground` compares
+ * inclusively against these numbers.
+ */
+function maskRanges(mask, distances, routeLengthM) {
+  const lastIndex = distances.length - 1;
   return indexRanges(mask).map(([start, end]) => ({
-    startM: round(distances[start]),
-    endM: round(distances[end])
+    startM: start === 0 ? 0 : floor(distances[start]),
+    endM: end === lastIndex ? Math.max(ceil(distances[end]), routeLengthM ?? 0) : ceil(distances[end])
   }));
+}
+
+function floor(value) {
+  return Math.floor(value * 100) / 100;
+}
+
+function ceil(value) {
+  return Math.ceil(value * 100) / 100;
 }
 
 function clamp(value, min, max) {
