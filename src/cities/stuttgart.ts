@@ -33,6 +33,7 @@ const stuttgartTransportModes: TransportModeDefinition[] = [
     vehicleFamily: 'DB class 430',
     vehicleKind: 's-bahn',
     guidewayKind: 's-bahn',
+    stationStyleId: 'db-sbahn',
     interiorCameraProfile: 's-bahn',
     lineAccentColor: '#e0202b'
   },

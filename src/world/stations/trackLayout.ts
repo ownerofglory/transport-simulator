@@ -1,7 +1,7 @@
 import type { GuidewayKind } from '../../domain/transport';
 import type { TrackSpreadZone } from '../trackSpread';
 import type { RouteStation, StationArchetype, StationPlatformDefinition } from './types';
-import { VvsStationCatalog } from './styles/vvs/VvsStationCatalog';
+import { catalogFor } from './catalogs';
 
 /**
  * Where a route's tracks have to pull apart for an island platform.
@@ -17,10 +17,18 @@ import { VvsStationCatalog } from './styles/vvs/VvsStationCatalog';
  * formula.
  */
 
-// Half the body width of a Stadtbahn car. The side-platform builder holds its
+// Half the body width of a car. The Stadtbahn side-platform builder holds its
 // track-side edge 3.4 m out from a track centred at 2.1 m, which is the same
-// clearance measured the other way.
-const VEHICLE_HALF_WIDTH_M = 1.3;
+// clearance measured the other way; an S-Bahn car is wider.
+const VEHICLE_HALF_WIDTH_M: Partial<Record<GuidewayKind, number>> = {
+  stadtbahn: 1.3,
+  's-bahn': 1.55
+};
+const DEFAULT_VEHICLE_HALF_WIDTH_M = 1.3;
+
+export function vehicleHalfWidthM(guidewayKind: GuidewayKind): number {
+  return VEHICLE_HALF_WIDTH_M[guidewayKind] ?? DEFAULT_VEHICLE_HALF_WIDTH_M;
+}
 
 // Island decks default to the width a side platform gets, so a stop that only
 // says `layout: island` still comes out a usable size.
@@ -32,8 +40,17 @@ export const DEFAULT_ISLAND_LENGTH_M = 76;
 
 // Transition either side of the platform. A 3.2 m throw over 30 m is roughly a
 // 1:9 turnout, which is what the real junctions into an island station use, and
-// it keeps the swing gentle enough to ride through.
+// it keeps the swing gentle enough to ride through. S-Bahn islands throw
+// further and are taken faster, so their transition is longer.
+const TAPER_M: Partial<Record<GuidewayKind, number>> = {
+  stadtbahn: 30,
+  's-bahn': 45
+};
 export const ISLAND_TAPER_M = 30;
+
+export function islandTaperM(guidewayKind: GuidewayKind): number {
+  return TAPER_M[guidewayKind] ?? ISLAND_TAPER_M;
+}
 
 // The tracks stay fully apart a little past the platform ends, so the taper
 // never starts alongside the deck.
@@ -44,16 +61,13 @@ export function islandSpreadHalfLengthM(platformLengthM: number): number {
   return platformLengthM / 2 + PLATFORM_END_CLEARANCE_M;
 }
 
-// Moving the running tracks is topology, and the catalog is keyed by bare stop
-// name, so a station name shared with another city would otherwise re-lay its
-// tracks. Only the network that selects this style by name gets islands.
-const SSB_STYLE_ID = 'vvs-stadtbahn';
-
-const catalog = new VvsStationCatalog();
-
 /** How far each track moves outward to clear an island deck of this width. */
-export function islandTrackSpreadM(platformWidthM: number, baseTrackOffsetM: number): number {
-  return Math.max(0, platformWidthM / 2 + VEHICLE_HALF_WIDTH_M - Math.abs(baseTrackOffsetM));
+export function islandTrackSpreadM(
+  platformWidthM: number,
+  baseTrackOffsetM: number,
+  vehicleHalfM = DEFAULT_VEHICLE_HALF_WIDTH_M
+): number {
+  return Math.max(0, platformWidthM / 2 + vehicleHalfM - Math.abs(baseTrackOffsetM));
 }
 
 /**
@@ -61,8 +75,11 @@ export function islandTrackSpreadM(platformWidthM: number, baseTrackOffsetM: num
  * emergency walkway and pole line, not a platform. Used by `mixed` layouts,
  * which previously drew a deck wide enough for the trains to clip through.
  */
-export function interTrackWalkwayWidthM(baseTrackOffsetM: number): number {
-  return Math.max(0.6, 2 * (Math.abs(baseTrackOffsetM) - VEHICLE_HALF_WIDTH_M) - 0.2);
+export function interTrackWalkwayWidthM(
+  baseTrackOffsetM: number,
+  vehicleHalfM = DEFAULT_VEHICLE_HALF_WIDTH_M
+): number {
+  return Math.max(0.6, 2 * (Math.abs(baseTrackOffsetM) - vehicleHalfM) - 0.2);
 }
 
 /** True when a resolved stop puts its platform between the tracks. */
@@ -82,7 +99,11 @@ export function catalogIslandWidthM(
   guidewayKind: GuidewayKind,
   stationStyleId?: string
 ): number | null {
-  if (stationStyleId !== SSB_STYLE_ID) return null;
+  // Moving the running tracks is topology, and catalogs are keyed by bare stop
+  // name, so a name shared with another city must not re-lay its tracks. Only a
+  // mode that names its style gets islands.
+  const catalog = catalogFor(stationStyleId);
+  if (!catalog) return null;
   if (guidewayKind !== 'stadtbahn' && guidewayKind !== 's-bahn') return null;
   const override = catalog.get(stationName);
   if (!override || !isIslandLayout(override.platform, override.archetype)) return null;
@@ -96,16 +117,18 @@ export function islandSpreadZones(
   baseTrackOffsetM: number,
   stationStyleId?: string
 ): TrackSpreadZone[] {
+  const catalog = catalogFor(stationStyleId);
+  if (!catalog) return [];
   const zones: TrackSpreadZone[] = [];
   for (const station of stations) {
     const widthM = catalogIslandWidthM(station.name, guidewayKind, stationStyleId);
     if (widthM === null) continue;
-    const spreadM = islandTrackSpreadM(widthM, baseTrackOffsetM);
+    const spreadM = islandTrackSpreadM(widthM, baseTrackOffsetM, vehicleHalfWidthM(guidewayKind));
     if (spreadM <= 0) continue;
     zones.push({
       centerM: station.distanceM,
       halfLengthM: islandSpreadHalfLengthM(catalog.get(station.name)?.platform?.lengthM ?? DEFAULT_ISLAND_LENGTH_M),
-      taperM: ISLAND_TAPER_M,
+      taperM: islandTaperM(guidewayKind),
       spreadM
     });
   }

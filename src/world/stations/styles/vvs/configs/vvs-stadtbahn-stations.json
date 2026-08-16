@@ -1511,7 +1511,6 @@
       }
     },
     "Rotebühlplatz": {
-      "displayName": "Rotebühlplatz (Stadtmitte)",
       "archetype": "underground-interchange",
       "platform": {
         "layout": "side",

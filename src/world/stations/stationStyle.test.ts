@@ -1,7 +1,13 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { undergroundHallHalfLengthM } from './hallExtent';
-import { ISLAND_TAPER_M, islandSpreadZones, islandTrackSpreadM } from './trackLayout';
+import {
+  ISLAND_TAPER_M,
+  islandSpreadZones,
+  islandTaperM,
+  islandTrackSpreadM,
+  vehicleHalfWidthM
+} from './trackLayout';
 import { TrackSpreadProfile } from '../trackSpread';
 import { createStationStyleRegistry } from './index';
 import { VvsStadtbahnStationProvider } from './styles/vvs/VvsStadtbahnStationProvider';
@@ -22,11 +28,12 @@ function placementAt(station: RouteStation, underground: boolean): StationPlacem
 }
 
 describe('station style registry', () => {
-  it('resolves the vvs-stadtbahn provider and no others by default', () => {
+  it('resolves the registered station styles and nothing else', () => {
     const registry = createStationStyleRegistry();
     expect(registry.has('vvs-stadtbahn')).toBe(true);
     expect(registry.resolveOptional('vvs-stadtbahn')?.id).toBe('vvs-stadtbahn');
-    expect(registry.resolveOptional('db-sbahn')).toBeUndefined();
+    expect(registry.resolveOptional('db-sbahn')?.id).toBe('db-sbahn');
+    expect(registry.resolveOptional('rer')).toBeUndefined();
     expect(registry.resolveOptional(undefined)).toBeUndefined();
   });
 
@@ -188,6 +195,58 @@ describe('island platforms', () => {
     expect(halfLengthM).toBeGreaterThan(80 / 2 + ISLAND_TAPER_M);
     // Same stop without the style selected by name: the legacy box.
     expect(undergroundHallHalfLengthM('stadtbahn', 'EnBW City')).toBe(46);
+  });
+});
+
+describe('S-Bahn Stammstrecke islands', () => {
+  const style = 'db-sbahn';
+  const hbf: RouteStation = { name: 'Stuttgart Hauptbahnhof (tief)', distanceM: 4000 };
+
+  it('gives the Stammstrecke stops an island platform at S-Bahn boarding height', () => {
+    const provider = createStationStyleRegistry().resolveOptional(style)!;
+    const resolved = provider.resolve(hbf, {
+      layer: { stationStyleId: style } as never,
+      placement: placementAt(hbf, true)
+    });
+    expect(resolved.platform.layout).toBe('island');
+    expect(resolved.platform.heightM).toBe(0.96);
+    expect(resolved.platform.lengthM).toBe(210);
+    expect(resolved.displayName).toBe('Stuttgart Hauptbahnhof');
+  });
+
+  it('gives each Stammstrecke stop its own wall colour on one design', () => {
+    const provider = createStationStyleRegistry().resolveOptional(style)!;
+    const colours = new Map<string, string | undefined>();
+    for (const name of ['Stuttgart Hauptbahnhof (tief)', 'Stadtmitte', 'Feuersee', 'Schwabstraße']) {
+      const station: RouteStation = { name, distanceM: 1000 };
+      const resolved = provider.resolve(station, {
+        layer: { stationStyleId: style } as never,
+        placement: placementAt(station, true)
+      });
+      expect(resolved.architecture?.columns?.style).toBe('round');
+      expect(resolved.architecture?.lighting?.style).toBe('strip-continuous');
+      colours.set(name, resolved.architecture?.walls?.color);
+    }
+    expect(new Set(colours.values()).size).toBe(4);
+    expect(colours.get('Stuttgart Hauptbahnhof (tief)')).toBe('#c8102e');
+    expect(colours.get('Stadtmitte')).toBe('#009a4d');
+    expect(colours.get('Feuersee')).toBe('#1f5fbf');
+    expect(colours.get('Schwabstraße')).toBe('#f2b800');
+  });
+
+  it('opens the S-Bahn tracks by the wider car body', () => {
+    // 11 m deck: 5.5 m to each edge plus 1.55 m of car body → 7.05 m out, which
+    // is 4.7 m outside the S-Bahn's 2.35 m track offset.
+    expect(islandTrackSpreadM(11, 2.35, vehicleHalfWidthM('s-bahn'))).toBeCloseTo(4.7);
+    // The same deck on a narrower Stadtbahn car needs less room.
+    expect(islandTrackSpreadM(11, 2.35, vehicleHalfWidthM('stadtbahn'))).toBeCloseTo(4.45);
+  });
+
+  it('stretches the S-Bahn box past its longer taper', () => {
+    const halfLengthM = undergroundHallHalfLengthM('s-bahn', 'Feuersee', style);
+    expect(halfLengthM).toBe(210 / 2 + 4 + islandTaperM('s-bahn') + 6);
+    // Unnamed style: the legacy S-Bahn box, untouched.
+    expect(undergroundHallHalfLengthM('s-bahn', 'Feuersee')).toBe(77.5);
   });
 });
 
