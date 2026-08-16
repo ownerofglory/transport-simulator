@@ -15,6 +15,7 @@ const karlsruheTransportModes: TransportModeDefinition[] = [
     vehicleKind: 'stadtbahn',
     vehicleDesignId: 'karlsruhe-vbk-tram',
     guidewayKind: 'stadtbahn',
+    stationStyleId: 'kvv-stadtbahn',
     interiorCameraProfile: 'tram',
     passengerOffsetM: 2.8, // fallback passenger camera offset in meters for tram interiors
     lineAccentColor: '#e2001a' // VBK-like red accent
@@ -27,6 +28,7 @@ const karlsruheTransportModes: TransportModeDefinition[] = [
     vehicleKind: 'stadtbahn',
     vehicleDesignId: 'karlsruhe-avg-citylink',
     guidewayKind: 'stadtbahn',
+    stationStyleId: 'kvv-stadtbahn',
     // Tram profile so the interior camera anchors to a car mesh the way the other
     // articulated trams do, rather than using the un-anchored rail fallback.
     interiorCameraProfile: 'tram',

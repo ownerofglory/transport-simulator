@@ -10,7 +10,12 @@ import type {
   StationVisualDefinition
 } from '../../types';
 import { undergroundHallHalfLengthM } from '../../hallExtent';
-import { interTrackWalkwayWidthM, isIslandLayout, islandTrackSpreadM } from '../../trackLayout';
+import {
+  interTrackWalkwayWidthM,
+  isIslandLayout,
+  islandTrackSpreadM,
+  vehicleHalfWidthM
+} from '../../trackLayout';
 import { createSeededRandom, hashString } from '../../variation';
 import { VvsStationCatalog } from './VvsStationCatalog';
 import { VvsStationMaterials } from './VvsStationMaterials';
@@ -50,8 +55,27 @@ const DEFAULT_SURFACE_PLATFORM = { layout: 'side', lengthM: 76, widthM: 8, heigh
 // boards level from a 0.8 m deck — that is what the tram-to-Stadtbahn
 // conversion was for. The low 0.22 m kerb above stays the default for the
 // street-running tram networks that borrow this provider as their fallback, so
-// the height is only raised when a mode selects this style by name.
+// the height is only raised when a mode selects a style by name.
 const SSB_PLATFORM_HEIGHT_M = 0.8;
+
+/**
+ * What separates one network's use of this kit from another's. The components
+ * are generic; only the identity, the boarding height, and whether the stops
+ * carry SSB street furniture differ, so a second network (DB's S-Bahn) is a
+ * different set of options over the same builders rather than a second copy.
+ */
+export type VvsStationStyleOptions = {
+  id: string;
+  platformHeightM: number;
+  /** The blue U totem and the orange SSB kiosk are SSB kit; DB stops have neither. */
+  ssbStreetFurniture: boolean;
+};
+
+const SSB_STYLE: VvsStationStyleOptions = {
+  id: 'vvs-stadtbahn',
+  platformHeightM: SSB_PLATFORM_HEIGHT_M,
+  ssbStreetFurniture: true
+};
 
 // Clear height to the underside of an underground ceiling, matching the legacy
 // box. Stops with a taller vault raise it through `architecture.hall.heightM`.
@@ -65,10 +89,16 @@ const DEFAULT_CEILING_HEIGHT_M = 5.46;
  * The palette is created lazily and reused across every stop in a route.
  */
 export class VvsStadtbahnStationProvider implements StationStyleProvider {
-  readonly id = 'vvs-stadtbahn';
   private materials: VvsStationMaterials | undefined;
 
-  constructor(private readonly catalog = new VvsStationCatalog()) {}
+  constructor(
+    private readonly catalog = new VvsStationCatalog(),
+    private readonly style: VvsStationStyleOptions = SSB_STYLE
+  ) {}
+
+  get id(): string {
+    return this.style.id;
+  }
 
   resolve(station: RouteStation, context: StationResolveContext): StationVisualDefinition {
     const underground = context.placement.underground;
@@ -77,10 +107,10 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     const rng = createSeededRandom(seed);
 
     const archetype = override?.archetype ?? (underground ? 'underground-side' : 'surface-side');
-    const ssb = context.layer?.stationStyleId === 'vvs-stadtbahn';
+    const styled = context.layer?.stationStyleId === this.style.id;
     const platform = {
       ...DEFAULT_SURFACE_PLATFORM,
-      ...(ssb ? { heightM: SSB_PLATFORM_HEIGHT_M } : {}),
+      ...(styled ? { heightM: this.style.platformHeightM } : {}),
       ...override?.platform,
       // A stop can be marked as an island by either field; the layout is the one
       // switch the builders (and the world's track spread) read afterwards.
@@ -168,6 +198,9 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
         wallFinish: definition.architecture?.walls?.finish,
         wallColor: definition.architecture?.walls?.color,
         plinthColor: definition.architecture?.walls?.plinthColor,
+        bandColor: definition.architecture?.walls?.bandColor,
+        nameColor: definition.architecture?.walls?.nameColor,
+        mural: definition.architecture?.walls?.mural,
         stationName: definition.displayName,
         nameBandRepeatM: definition.signage?.nameBandRepeatM
       });
@@ -192,7 +225,10 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       if (layout === 'mixed') {
         buildVvsCenterPlatform(scaffold.root, context.layer, materials, station, {
           ...definition.platform,
-          widthM: interTrackWalkwayWidthM(context.layer.oppositeLaneOffsetM)
+          widthM: interTrackWalkwayWidthM(
+            context.layer.oppositeLaneOffsetM,
+            vehicleHalfWidthM(context.layer.guidewayKind)
+          )
         }, underground);
       }
     }
@@ -284,7 +320,12 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       // An island terminus buffers on the spread tracks, not the normal pair.
       const baseOffsetM = Math.abs(context.layer.oppositeLaneOffsetM);
       const trackOffsetM = island
-        ? baseOffsetM + islandTrackSpreadM(definition.platform?.widthM ?? 8, baseOffsetM)
+        ? baseOffsetM +
+          islandTrackSpreadM(
+            definition.platform?.widthM ?? 8,
+            baseOffsetM,
+            vehicleHalfWidthM(context.layer.guidewayKind)
+          )
         : baseOffsetM;
       buildVvsTerminusBuffer(scaffold.local, materials, platformLengthM, endSign, trackOffsetM);
     }
@@ -398,7 +439,7 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
 
     // A surface island is still marked from the street by its totem; the rest of
     // the street kit (back railing, parapet) belongs to a platform with a back.
-    if (!underground && definition.signage?.totem !== false) {
+    if (!underground && this.style.ssbStreetFurniture && definition.signage?.totem !== false) {
       buildVvsTotem(
         deck,
         materials,
@@ -429,7 +470,7 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     const furniture = definition.furniture ?? {};
     const signage = definition.signage;
 
-    if (signage?.totem !== false) {
+    if (this.style.ssbStreetFurniture && signage?.totem !== false) {
       buildVvsTotem(deck, materials, side, { name: definition.displayName, distanceM: 0 }, lateral, signage?.lines);
     }
 
@@ -440,7 +481,7 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     buildVvsLampColumns(deck, materials, side, furniture.lampColumns ?? 2, platformLengthM, lateral);
     buildVvsSurfaceVitrines(deck, materials, side, furniture.adVitrines ?? 0, platformLengthM, lateral);
     // One kiosk per stop, on the same side as the departure boards.
-    if (furniture.infoKiosk && side === 1) {
+    if (this.style.ssbStreetFurniture && furniture.infoKiosk && side === 1) {
       buildVvsInfoKiosk(deck, context.layer, materials, side, lateral);
     }
   }

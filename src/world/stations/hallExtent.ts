@@ -1,10 +1,10 @@
 import type { GuidewayKind } from '../../domain/transport';
-import { VvsStationCatalog } from './styles/vvs/VvsStationCatalog';
+import { catalogFor, fallbackCatalog } from './catalogs';
 import {
   DEFAULT_ISLAND_LENGTH_M,
-  ISLAND_TAPER_M,
   catalogIslandWidthM,
-  islandSpreadHalfLengthM
+  islandSpreadHalfLengthM,
+  islandTaperM
 } from './trackLayout';
 
 /**
@@ -16,30 +16,32 @@ import {
  * hall, or the hall's slabs cut across the inside of the bore. One function so
  * they cannot drift.
  *
- * Rail halls grow with the platform they contain (Charlottenplatz's 120 m
- * platform does not fit the 82 m default box), with headroom for the stairs and
- * back wall beyond the platform ends.
+ * Halls grow with the platform they contain (Charlottenplatz's 120 m platform
+ * does not fit the 82 m default box, and an S-Bahn Stammstrecke platform is
+ * 210 m), with headroom for the stairs and back wall beyond the platform ends.
  */
 
-const SBAHN_HALF_HALL_M = 77.5; // 155 m box: full S-Bahn platform plus ends
+const SBAHN_MIN_HALF_HALL_M = 77.5; // 155 m box: full S-Bahn platform plus ends
 const RAIL_MIN_HALF_HALL_M = 41; // legacy 82 m box
 const PLATFORM_END_MARGIN_M = 6;
-
-const catalog = new VvsStationCatalog();
 
 export function undergroundHallHalfLengthM(
   guidewayKind: GuidewayKind,
   stationName: string,
   stationStyleId?: string
 ): number {
-  if (guidewayKind === 's-bahn') return SBAHN_HALF_HALL_M;
+  // Without a named style, fall back to the VVS catalog: that is what every
+  // stadtbahn city gets, and it keeps their boxes the length they already were.
+  const catalog = catalogFor(stationStyleId) ?? fallbackCatalog();
   const platformLengthM = catalog.get(stationName)?.platform?.lengthM ?? 0;
-  const halfLengthM = Math.max(RAIL_MIN_HALF_HALL_M, platformLengthM / 2 + PLATFORM_END_MARGIN_M);
+  const minHalfLengthM = guidewayKind === 's-bahn' ? SBAHN_MIN_HALF_HALL_M : RAIL_MIN_HALF_HALL_M;
+  const halfLengthM = Math.max(minHalfLengthM, platformLengthM / 2 + PLATFORM_END_MARGIN_M);
   if (catalogIslandWidthM(stationName, guidewayKind, stationStyleId) === null) return halfLengthM;
 
   // An island stop's tracks are still swinging back together well past the
   // platform ends. The box has to reach beyond that: the bore begins where the
   // box stops, and it is bored around tracks at their normal spacing.
-  const spreadEndM = islandSpreadHalfLengthM(platformLengthM || DEFAULT_ISLAND_LENGTH_M) + ISLAND_TAPER_M;
+  const spreadEndM =
+    islandSpreadHalfLengthM(platformLengthM || DEFAULT_ISLAND_LENGTH_M) + islandTaperM(guidewayKind);
   return Math.max(halfLengthM, spreadEndM + PLATFORM_END_MARGIN_M);
 }

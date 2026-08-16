@@ -1,0 +1,338 @@
+{
+  "schemaVersion": 2,
+  "style": "db-sbahn",
+  "stations": {
+    "Feuersee": {
+      "archetype": "underground-island",
+      "platform": {
+        "layout": "island",
+        "lengthM": 210,
+        "widthM": 11,
+        "heightM": 0.96,
+        "curved": true
+      },
+      "architecture": {
+        "family": "stammstrecke",
+        "roof": "hall",
+        "hall": {
+          "widthM": 21,
+          "heightM": 4.9,
+          "ceiling": "ribbed-metal",
+          "ceilingColor": "#8f9295"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#1f5fbf",
+          "plinthColor": "#23262a"
+        },
+        "columns": {
+          "style": "round",
+          "color": "#4a4e52",
+          "spacingM": 18
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#fff4e2"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "center",
+          "offsetM": -34,
+          "direction": "Johannesstraße"
+        },
+        {
+          "type": "stairs",
+          "side": "center",
+          "offsetM": 40,
+          "direction": "Feuersee"
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Johannesstraße",
+          "Feuersee"
+        ],
+        "platformNumber": "1",
+        "nameBandRepeatM": 34,
+        "totem": false
+      },
+      "furniture": {
+        "benches": 2,
+        "bins": 2,
+        "ticketMachines": 2,
+        "dfiDisplays": 3,
+        "adVitrines": 3
+      }
+    },
+    "Flughafen/Messe": {
+      "archetype": "underground-island",
+      "platform": {
+        "layout": "island",
+        "lengthM": 210,
+        "widthM": 11,
+        "heightM": 0.96,
+        "curved": true
+      },
+      "architecture": {
+        "family": "airport-vault",
+        "roof": "hall",
+        "hall": {
+          "widthM": 19,
+          "heightM": 5.0,
+          "ceiling": "metal-vault",
+          "ceilingColor": "#9aa0a4"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#3a3e42",
+          "plinthColor": "#26292c",
+          "bandColor": "#e9eaec"
+        },
+        "columns": {
+          "style": "round",
+          "color": "#b7bdb8",
+          "spacingM": 16
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#f2f6ff"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "center",
+          "offsetM": 30,
+          "direction": "Terminal 1–4"
+        },
+        {
+          "type": "stairs",
+          "side": "center",
+          "offsetM": -34,
+          "direction": "Messe"
+        },
+        {
+          "type": "lift",
+          "side": "center",
+          "offsetM": -6
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Terminal 1–4",
+          "Messe"
+        ],
+        "platformNumber": "2",
+        "nameBandRepeatM": 30,
+        "totem": false
+      },
+      "furniture": {
+        "benches": 3,
+        "bins": 2,
+        "ticketMachines": 2,
+        "dfiDisplays": 3,
+        "adVitrines": 2
+      }
+    },
+    "Schwabstraße": {
+      "archetype": "underground-island",
+      "platform": {
+        "layout": "island",
+        "lengthM": 210,
+        "widthM": 11,
+        "heightM": 0.96,
+        "curved": true
+      },
+      "architecture": {
+        "family": "stammstrecke",
+        "roof": "hall",
+        "hall": {
+          "widthM": 21,
+          "heightM": 4.9,
+          "ceiling": "ribbed-metal",
+          "ceilingColor": "#8f9295"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#f2b800",
+          "plinthColor": "#23262a"
+        },
+        "columns": {
+          "style": "round",
+          "color": "#4a4e52",
+          "spacingM": 18
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#fff4e2"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "center",
+          "offsetM": -38,
+          "direction": "Reinsburgstraße"
+        },
+        {
+          "type": "stairs",
+          "side": "center",
+          "offsetM": 44,
+          "direction": "Schwabstraße"
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Reinsburgstraße",
+          "Schwabstraße"
+        ],
+        "platformNumber": "1",
+        "nameBandRepeatM": 34,
+        "totem": false
+      },
+      "furniture": {
+        "benches": 2,
+        "bins": 2,
+        "ticketMachines": 2,
+        "dfiDisplays": 3,
+        "adVitrines": 3
+      }
+    },
+    "Stadtmitte": {
+      "archetype": "underground-island",
+      "platform": {
+        "layout": "island",
+        "lengthM": 210,
+        "widthM": 11,
+        "heightM": 0.96,
+        "curved": true
+      },
+      "architecture": {
+        "family": "stammstrecke",
+        "roof": "hall",
+        "hall": {
+          "widthM": 21,
+          "heightM": 4.9,
+          "ceiling": "ribbed-metal",
+          "ceilingColor": "#8f9295"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#009a4d",
+          "plinthColor": "#23262a"
+        },
+        "columns": {
+          "style": "round",
+          "color": "#4a4e52",
+          "spacingM": 18
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#fff4e2"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "center",
+          "offsetM": -36,
+          "direction": "Rotebühlplatz"
+        },
+        {
+          "type": "stairs",
+          "side": "center",
+          "offsetM": 42,
+          "direction": "Königstraße"
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Rotebühlplatz",
+          "Königstraße"
+        ],
+        "platformNumber": "1",
+        "nameBandRepeatM": 34,
+        "totem": false
+      },
+      "furniture": {
+        "benches": 3,
+        "bins": 2,
+        "ticketMachines": 2,
+        "dfiDisplays": 3,
+        "adVitrines": 4
+      }
+    },
+    "Stuttgart Hauptbahnhof (tief)": {
+      "displayName": "Stuttgart Hauptbahnhof",
+      "archetype": "underground-island",
+      "platform": {
+        "layout": "island",
+        "lengthM": 210,
+        "widthM": 11,
+        "heightM": 0.96,
+        "curved": true
+      },
+      "architecture": {
+        "family": "stammstrecke",
+        "roof": "hall",
+        "hall": {
+          "widthM": 21,
+          "heightM": 4.9,
+          "ceiling": "ribbed-metal",
+          "ceilingColor": "#8f9295"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#c8102e",
+          "plinthColor": "#23262a"
+        },
+        "columns": {
+          "style": "round",
+          "color": "#4a4e52",
+          "spacingM": 18
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#fff4e2"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "center",
+          "offsetM": -40,
+          "direction": "Klett-Passage"
+        },
+        {
+          "type": "escalator",
+          "side": "center",
+          "offsetM": 46,
+          "direction": "Arnulf-Klett-Platz"
+        },
+        {
+          "type": "lift",
+          "side": "center",
+          "offsetM": 8
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Klett-Passage",
+          "Arnulf-Klett-Platz"
+        ],
+        "platformNumber": "101",
+        "nameBandRepeatM": 34,
+        "totem": false
+      },
+      "furniture": {
+        "benches": 3,
+        "bins": 2,
+        "ticketMachines": 2,
+        "dfiDisplays": 4,
+        "adVitrines": 4
+      }
+    }
+  }
+}

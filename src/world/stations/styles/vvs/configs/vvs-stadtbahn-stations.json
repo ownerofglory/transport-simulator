@@ -857,18 +857,65 @@
     "Killesberg": {
       "archetype": "terminus",
       "platform": {
-        "layout": "side",
+        "layout": "island",
         "lengthM": 80,
-        "widthM": 8,
+        "widthM": 9.5,
         "heightM": 0.8,
         "curved": true
       },
       "architecture": {
         "family": "park-terminus",
-        "roof": "hall"
+        "roof": "hall",
+        "hall": {
+          "widthM": 20,
+          "heightM": 5.2,
+          "ceiling": "flat-slab",
+          "ceilingColor": "#8e8b84"
+        },
+        "walls": {
+          "finish": "concrete",
+          "mural": "film-strip"
+        },
+        "columns": {
+          "style": "none"
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#fff2d4"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "center",
+          "offsetM": 6,
+          "direction": "Höhenpark Killesberg"
+        },
+        {
+          "type": "stairs",
+          "side": "center",
+          "offsetM": -8,
+          "direction": "Ausgang"
+        },
+        {
+          "type": "lift",
+          "side": "center",
+          "offsetM": 20
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Höhenpark Killesberg",
+          "Stresemannstraße"
+        ],
+        "platformNumber": "1"
       },
       "furniture": {
-        "dfiDisplays": 2
+        "dfiDisplays": 2,
+        "benches": 2,
+        "bins": 2,
+        "ticketMachines": 1,
+        "adVitrines": 2
       },
       "environment": {
         "plaza": true,
@@ -1511,7 +1558,6 @@
       }
     },
     "Rotebühlplatz": {
-      "displayName": "Rotebühlplatz (Stadtmitte)",
       "archetype": "underground-interchange",
       "platform": {
         "layout": "side",

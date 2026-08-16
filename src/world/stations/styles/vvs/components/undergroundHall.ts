@@ -4,7 +4,8 @@ import type {
   StationCeilingStyle,
   StationColumnStyle,
   StationLightingStyle,
-  StationWallFinish
+  StationWallFinish,
+  StationWallMural
 } from '../../../types';
 import type { VvsStationMaterials } from '../VvsStationMaterials';
 
@@ -37,6 +38,9 @@ export type VvsUndergroundHallOptions = {
   wallFinish?: StationWallFinish;
   wallColor?: string;
   plinthColor?: string;
+  bandColor?: string;
+  nameColor?: string;
+  mural?: StationWallMural;
   stationName?: string;
   nameBandRepeatM?: number;
 };
@@ -86,6 +90,12 @@ function buildSideWall(
   wall.receiveShadow = true;
   local.add(wall);
 
+  // Artwork is independent of the finish: Killesberg's filmstrip runs along
+  // bare concrete, which is exactly what makes it the thing you remember.
+  if (options.mural === 'film-strip') {
+    buildFilmStrip(local, materials, side, side * (wallX - 0.24), lengthM);
+  }
+
   const finish = options.wallFinish ?? 'concrete';
   if (finish === 'concrete' || !options.wallColor) return;
 
@@ -115,6 +125,68 @@ function buildSideWall(
 }
 
 /**
+ * Killesberg's Kodak filmstrip: a carrier band running the length of the track
+ * wall, its frames lit and its sprocket holes punched along both edges. Built
+ * from three instanced runs so a 300 m wall stays three draw calls.
+ */
+function buildFilmStrip(
+  local: THREE.Group,
+  materials: VvsStationMaterials,
+  side: number,
+  faceX: number,
+  lengthM: number
+): void {
+  const runM = Math.max(12, lengthM - 8);
+  const centreY = 2.6;
+  const carrierHeightM = 1.9;
+
+  const carrier = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, carrierHeightM, runM),
+    materials.filmCarrier
+  );
+  carrier.position.set(faceX, centreY, 0);
+  local.add(carrier);
+
+  const dummy = new THREE.Object3D();
+  const frameSpacingM = 2.3;
+  const frameCount = Math.max(1, Math.floor(runM / frameSpacingM));
+  const frames = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.04, 1.16, 1.72),
+    materials.filmFrame,
+    frameCount
+  );
+  const firstFrameZ = -((frameCount - 1) * frameSpacingM) / 2;
+  for (let i = 0; i < frameCount; i += 1) {
+    dummy.position.set(faceX - side * 0.03, centreY, firstFrameZ + i * frameSpacingM);
+    dummy.updateMatrix();
+    frames.setMatrixAt(i, dummy.matrix);
+  }
+  frames.instanceMatrix.needsUpdate = true;
+  local.add(frames);
+
+  // Sprockets: two rows along the carrier edges, as on real 35 mm stock.
+  const holeSpacingM = 0.42;
+  const holeRows = [centreY + carrierHeightM / 2 - 0.22, centreY - carrierHeightM / 2 + 0.22];
+  const holeCount = Math.max(2, Math.floor(runM / holeSpacingM));
+  const perforations = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.04, 0.13, 0.13),
+    materials.filmPerforation,
+    holeCount * holeRows.length
+  );
+  const firstHoleZ = -((holeCount - 1) * holeSpacingM) / 2;
+  let index = 0;
+  for (const y of holeRows) {
+    for (let i = 0; i < holeCount; i += 1) {
+      dummy.position.set(faceX - side * 0.03, y, firstHoleZ + i * holeSpacingM);
+      dummy.updateMatrix();
+      perforations.setMatrixAt(index++, dummy.matrix);
+    }
+  }
+  perforations.instanceMatrix.needsUpdate = true;
+  local.add(perforations);
+}
+
+/**
  * Station name repeated along the wall field, as the enamel-panel stations
  * carry it. Skipped when the stop has no name band configured.
  */
@@ -128,11 +200,13 @@ function buildNameFrieze(
   const repeatM = options.nameBandRepeatM ?? 0;
   if (repeatM <= 0 || !options.stationName) return;
 
+  // The band the name sits in is often not the wall colour: the airport station
+  // runs a light strip along an anthracite wall.
   const texture = makeLabelTexture(options.stationName, {
     width: 1024,
     height: 128,
-    bg: options.wallColor ?? '#c8c8c3',
-    fg: '#1c1c1c'
+    bg: options.bandColor ?? options.wallColor ?? '#c8c8c3',
+    fg: options.nameColor ?? '#1c1c1c'
   });
   const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.FrontSide });
   const geometry = new THREE.PlaneGeometry(7.2, 0.9);
@@ -159,6 +233,11 @@ function buildCeiling(
   // loading gauge, so no stop can be broken by getting them.
   const style = options.ceiling ?? 'coffered';
   const deck = options.ceilingColor ? materials.painted(options.ceilingColor) : materials.undergroundWall;
+
+  if (style === 'metal-vault') {
+    buildMetalVault(local, materials, widthM, lengthM, heightM, deck);
+    return;
+  }
 
   if (style === 'trussed-vault') {
     buildTrussedVault(local, materials, widthM, lengthM, heightM, options, deck);
@@ -203,6 +282,40 @@ function buildCeiling(
     ribs.instanceMatrix.needsUpdate = true;
     local.add(ribs);
   }
+}
+
+/**
+ * Shallow metal barrel spanning the box, with a structural slab above it so the
+ * space over the vault can never read as open sky. The arc is a half cylinder
+ * squashed to the rise, which is what the clad soffits actually look like:
+ * segmental, not semicircular.
+ */
+function buildMetalVault(
+  local: THREE.Group,
+  materials: VvsStationMaterials,
+  widthM: number,
+  lengthM: number,
+  heightM: number,
+  deck: THREE.Material
+): void {
+  const riseM = 1.8;
+  const radiusM = Math.max(1, widthM / 2 - WALL_INSET_M);
+
+  const vault = new THREE.Mesh(
+    new THREE.CylinderGeometry(radiusM, radiusM, lengthM, 28, 1, true, Math.PI, Math.PI),
+    materials.ceilingMetal
+  );
+  vault.position.set(0, heightM, 0);
+  vault.rotation.z = Math.PI / 2;
+  vault.rotation.y = Math.PI / 2;
+  // Squashed to the real rise; a full semicircle would crown metres too high.
+  vault.scale.y = riseM / radiusM;
+  vault.receiveShadow = true;
+  local.add(vault);
+
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(widthM, 0.45, lengthM), deck);
+  slab.position.y = heightM + riseM + 0.4;
+  local.add(slab);
 }
 
 /** Rotebühlplatz's pitched roof carried on exposed painted steel trusses. */
@@ -260,6 +373,57 @@ function buildTrussedVault(
     diagonals.instanceMatrix.needsUpdate = true;
     local.add(diagonals);
   }
+}
+
+/**
+ * A field of fluorescent tubes hung from the soffit on thin drop rods at
+ * varied heights and angles. Deterministic: the scatter comes from the tube
+ * index, not a random source, so a station looks the same every session.
+ */
+function buildSuspendedTubes(
+  local: THREE.Group,
+  materials: VvsStationMaterials,
+  xM: number,
+  lengthM: number,
+  heightM: number,
+  lampMaterial: THREE.Material
+): void {
+  const spacingM = 2.6;
+  const count = Math.max(2, Math.floor((lengthM - 6) / spacingM));
+  const first = -((count - 1) * spacingM) / 2;
+
+  const tubes = new THREE.InstancedMesh(new THREE.BoxGeometry(0.09, 0.09, 2.4), lampMaterial, count);
+  const rods = new THREE.InstancedMesh(new THREE.BoxGeometry(0.03, 1, 0.03), materials.steel, count);
+  const dummy = new THREE.Object3D();
+
+  for (let i = 0; i < count; i += 1) {
+    const scatter = pseudoRandom(i);
+    const lateral = xM + (scatter - 0.5) * 3.4;
+    const drop = 0.35 + pseudoRandom(i + 97) * 0.9;
+    const z = first + i * spacingM + (scatter - 0.5) * 0.8;
+
+    dummy.rotation.set(0, (pseudoRandom(i + 13) - 0.5) * 0.9, (pseudoRandom(i + 41) - 0.5) * 0.35);
+    dummy.position.set(lateral, heightM - drop, z);
+    dummy.updateMatrix();
+    tubes.setMatrixAt(i, dummy.matrix);
+
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.set(1, drop, 1);
+    dummy.position.set(lateral, heightM - drop / 2, z);
+    dummy.updateMatrix();
+    rods.setMatrixAt(i, dummy.matrix);
+    dummy.scale.set(1, 1, 1);
+  }
+
+  tubes.instanceMatrix.needsUpdate = true;
+  rods.instanceMatrix.needsUpdate = true;
+  local.add(tubes, rods);
+}
+
+/** Stable [0,1) scatter from an integer, so the field never changes between runs. */
+function pseudoRandom(index: number): number {
+  const value = Math.sin(index * 12.9898) * 43758.5453;
+  return value - Math.floor(value);
 }
 
 export type VvsUndergroundSideOptions = {
@@ -373,6 +537,11 @@ function buildPlatformLighting(
     const strip = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.12, lengthM - 2), material);
     strip.position.set(xM, y, 0);
     local.add(strip);
+    return;
+  }
+
+  if (style === 'suspended-tubes') {
+    buildSuspendedTubes(local, materials, xM, lengthM, heightM, material);
     return;
   }
 

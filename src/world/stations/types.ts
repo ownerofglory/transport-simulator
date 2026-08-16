@@ -51,7 +51,13 @@ export type StationPlatformDefinition = {
 // How an underground hall is roofed. Stuttgart's boxes are visibly different
 // from each other: plain slabs, longitudinal coffers, dark ribbed metal decks,
 // and Rotebühlplatz's pitched roof on exposed steel trusses.
-export type StationCeilingStyle = 'flat-slab' | 'coffered' | 'ribbed-metal' | 'trussed-vault';
+export type StationCeilingStyle =
+  | 'flat-slab'
+  | 'coffered'
+  | 'ribbed-metal'
+  | 'trussed-vault'
+  // Shallow metal barrel over the whole box, as at the airport station.
+  | 'metal-vault';
 
 // Wall build-up. `enamel-panel` and `tile` add a coloured cladding field with a
 // dark plinth; `concrete` leaves the structural wall bare (the legacy look).
@@ -61,7 +67,13 @@ export type StationColumnStyle = 'none' | 'square' | 'round';
 
 // Platform lighting: short segments (legacy), one continuous strip per side, or
 // recessed rows set into the ceiling.
-export type StationLightingStyle = 'strip-segments' | 'strip-continuous' | 'recessed-rows';
+export type StationLightingStyle =
+  | 'strip-segments'
+  | 'strip-continuous'
+  | 'recessed-rows'
+  // Karlsruhe's Kombilösung: a dense field of tubes hung at varied heights and
+  // angles, which is what makes those boxes recognisable rather than the walls.
+  | 'suspended-tubes';
 
 // Underground box shell. Length is not configurable here: it has to agree with
 // the tunnel cut, so it comes from `undergroundHallHalfLengthM`.
@@ -73,11 +85,20 @@ export type StationHallDefinition = {
   trussColor?: string;
 };
 
+/**
+ * A wall's own artwork, where a station is known for it rather than for its
+ * finish. `film-strip` is Killesberg's Kodak filmstrip, which runs the length
+ * of both track walls in memory of the works the stop was built for.
+ */
+export type StationWallMural = 'none' | 'film-strip';
+
 export type StationWallsDefinition = {
   finish?: StationWallFinish;
   color?: string; // station identity colour of the cladding field
   plinthColor?: string;
   bandColor?: string; // frieze band the station name sits in
+  nameColor?: string; // lettering of the repeated station name
+  mural?: StationWallMural;
 };
 
 export type StationColumnsDefinition = {

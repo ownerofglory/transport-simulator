@@ -94,6 +94,23 @@ export class VvsStationMaterials {
     roughness: 0.3
   });
 
+  // Killesberg's Kodak filmstrip: a near-black carrier with lit frames and pale
+  // perforations. The frames carry an emissive term for the same reason the
+  // other underground finishes do — the box is lit for a bore, not a gallery.
+  readonly filmCarrier = new THREE.MeshStandardMaterial({ color: 0x14151a, roughness: 0.6 });
+  readonly filmFrame = new THREE.MeshStandardMaterial({
+    color: 0xb08a52,
+    emissive: 0x6b5228,
+    emissiveIntensity: 0.5,
+    roughness: 0.45
+  });
+  readonly filmPerforation = new THREE.MeshStandardMaterial({
+    color: 0xe8e4d8,
+    emissive: 0x4a473e,
+    emissiveIntensity: 0.4,
+    roughness: 0.7
+  });
+
   // Materials owned by this palette (reused across stops); per-stop disposal
   // must skip these so a removed station doesn't free shared resources.
   readonly shared = new Set<THREE.Material>([
@@ -119,7 +136,10 @@ export class VvsStationMaterials {
     this.ceilingMetal,
     this.steel,
     this.treads,
-    this.vitrine
+    this.vitrine,
+    this.filmCarrier,
+    this.filmFrame,
+    this.filmPerforation
   ]);
 
   // Per-color variants, cached and reused across every stop that requests the
