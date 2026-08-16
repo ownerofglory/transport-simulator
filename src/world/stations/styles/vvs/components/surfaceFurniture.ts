@@ -28,9 +28,12 @@ export function buildVvsTotem(
   station: RouteStation,
   lateral: number,
   lines: readonly string[] | undefined,
-  offsetM = -18
+  offsetM = -18,
+  // Absolute lateral position, for layouts that are not measured from a side
+  // platform (an island stands its totem near its own centre line).
+  xM?: number
 ): void {
-  const x = side * (10.4 + lateral);
+  const x = xM ?? side * (10.4 + lateral);
 
   const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 3.6, 8), materials.mast);
   mast.position.set(x, 1.8, offsetM);

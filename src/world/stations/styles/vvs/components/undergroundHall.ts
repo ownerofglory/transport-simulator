@@ -272,6 +272,12 @@ export type VvsUndergroundSideOptions = {
   lightColor?: string;
 };
 
+// Laterals of the legacy side-platform box: columns behind the platform, lights
+// over its track edge.
+const SIDE_COLUMN_X_M = 9.7;
+const SIDE_LIGHT_X_M = 7.1;
+const SIDE_STRIP_X_M = 6.4;
+
 /** Per-side underground column row and platform lighting. */
 export function buildVvsUndergroundSideLighting(
   local: THREE.Group,
@@ -279,16 +285,46 @@ export function buildVvsUndergroundSideLighting(
   side: number,
   options: VvsUndergroundSideOptions = {}
 ): void {
+  buildVvsUndergroundColumnRow(local, materials, side * SIDE_COLUMN_X_M, options);
+  buildVvsUndergroundLighting(
+    local,
+    materials,
+    side * (options.lighting === 'strip-continuous' ? SIDE_STRIP_X_M : SIDE_LIGHT_X_M),
+    options
+  );
+}
+
+/**
+ * A row of columns at a given lateral position. Side platforms carry one row
+ * behind each platform; an island carries a single row down its centre line.
+ */
+export function buildVvsUndergroundColumnRow(
+  local: THREE.Group,
+  materials: VvsStationMaterials,
+  xM: number,
+  options: VvsUndergroundSideOptions = {}
+): void {
   const lengthM = options.lengthM ?? DEFAULT_LENGTH_M;
   const heightM = options.heightM ?? DEFAULT_CLEAR_HEIGHT_M;
-  buildColumnRow(local, materials, side, lengthM, heightM, options);
-  buildPlatformLighting(local, materials, side, lengthM, heightM, options);
+  buildColumnRow(local, materials, xM, lengthM, heightM, options);
+}
+
+/** A run of platform lighting at a given lateral position. */
+export function buildVvsUndergroundLighting(
+  local: THREE.Group,
+  materials: VvsStationMaterials,
+  xM: number,
+  options: VvsUndergroundSideOptions = {}
+): void {
+  const lengthM = options.lengthM ?? DEFAULT_LENGTH_M;
+  const heightM = options.heightM ?? DEFAULT_CLEAR_HEIGHT_M;
+  buildPlatformLighting(local, materials, xM, lengthM, heightM, options);
 }
 
 function buildColumnRow(
   local: THREE.Group,
   materials: VvsStationMaterials,
-  side: number,
+  xM: number,
   lengthM: number,
   heightM: number,
   options: VvsUndergroundSideOptions
@@ -310,7 +346,7 @@ function buildColumnRow(
   const columns = new THREE.InstancedMesh(geometry, material, count);
   const dummy = new THREE.Object3D();
   for (let i = 0; i < count; i += 1) {
-    dummy.position.set(side * 9.7, (heightM - 0.2) / 2, first + i * spacingM);
+    dummy.position.set(xM, (heightM - 0.2) / 2, first + i * spacingM);
     dummy.updateMatrix();
     columns.setMatrixAt(i, dummy.matrix);
   }
@@ -322,7 +358,7 @@ function buildColumnRow(
 function buildPlatformLighting(
   local: THREE.Group,
   materials: VvsStationMaterials,
-  side: number,
+  xM: number,
   lengthM: number,
   heightM: number,
   options: VvsUndergroundSideOptions
@@ -335,7 +371,7 @@ function buildPlatformLighting(
     // One unbroken line over the platform edge — the strongest cue that a box
     // is lit rather than merely bright, and what most of the halls actually use.
     const strip = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.12, lengthM - 2), material);
-    strip.position.set(side * 6.4, y, 0);
+    strip.position.set(xM, y, 0);
     local.add(strip);
     return;
   }
@@ -351,7 +387,7 @@ function buildPlatformLighting(
   );
   const dummy = new THREE.Object3D();
   for (let i = 0; i < count; i += 1) {
-    dummy.position.set(side * 7.1, y, first + i * spacingM);
+    dummy.position.set(xM, y, first + i * spacingM);
     dummy.updateMatrix();
     lamps.setMatrixAt(i, dummy.matrix);
   }

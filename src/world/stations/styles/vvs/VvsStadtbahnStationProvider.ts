@@ -10,15 +10,21 @@ import type {
   StationVisualDefinition
 } from '../../types';
 import { undergroundHallHalfLengthM } from '../../hallExtent';
+import { interTrackWalkwayWidthM, isIslandLayout, islandTrackSpreadM } from '../../trackLayout';
 import { createSeededRandom, hashString } from '../../variation';
 import { VvsStationCatalog } from './VvsStationCatalog';
 import { VvsStationMaterials } from './VvsStationMaterials';
 import { buildVvsAccess } from './components/access';
 import { DEFAULT_DECK_TOP_M, buildVvsSidePlatforms, sidePlatformOffset } from './components/platform';
-import { buildVvsUndergroundHall, buildVvsUndergroundSideLighting } from './components/undergroundHall';
+import {
+  buildVvsUndergroundColumnRow,
+  buildVvsUndergroundHall,
+  buildVvsUndergroundLighting,
+  buildVvsUndergroundSideLighting
+} from './components/undergroundHall';
 import { buildVvsCanopy } from './components/canopy';
 import { buildVvsFurniture } from './components/furniture';
-import { buildVvsCenterPlatform, buildVvsIslandStation } from './components/island';
+import { buildVvsCenterPlatform, buildVvsIslandFittings, islandHalfWidthM } from './components/island';
 import { buildVvsDfiBoards, buildVvsRetainingWall } from './components/environment';
 import {
   buildVvsStationSigns,
@@ -75,7 +81,10 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     const platform = {
       ...DEFAULT_SURFACE_PLATFORM,
       ...(ssb ? { heightM: SSB_PLATFORM_HEIGHT_M } : {}),
-      ...override?.platform
+      ...override?.platform,
+      // A stop can be marked as an island by either field; the layout is the one
+      // switch the builders (and the world's track spread) read afterwards.
+      ...(isIslandLayout(override?.platform, override?.archetype) ? { layout: 'island' as const } : {})
     };
 
     // Appearance-only counts: catalog wins, else a small deterministic value.
@@ -141,32 +150,12 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     deck.position.y = deckTopM - DEFAULT_DECK_TOP_M;
     scaffold.local.add(deck);
 
-    // Island platforms are a distinct topology; everything else uses the paired
-    // side-platform layout (surface or underground). Selected by explicit layout
-    // or the surface-island archetype.
-    if (!underground && (layout === 'island' || definition.archetype === 'surface-island')) {
-      buildVvsIslandStation(
-        scaffold.root,
-        scaffold.local,
-        context.layer,
-        materials,
-        station,
-        definition.platform,
-        canopyLengthM,
-        counts,
-        accent
-      );
-      return {
-        root: scaffold.root,
-        dispose: () => disposeStation(scaffold.root, materials.shared)
-      };
-    }
-
     // The hall has to be exactly as long as the gap the guideway layer cuts in
     // the tunnel bore, so its extent comes from the shared helper rather than
     // from this stop's own platform length.
     const hall = definition.architecture?.hall;
-    const hallLengthM = undergroundHallHalfLengthM(context.layer.guidewayKind, station.name) * 2;
+    const hallLengthM =
+      undergroundHallHalfLengthM(context.layer.guidewayKind, station.name, context.layer.stationStyleId) * 2;
     const ceilingHeightM = hall?.heightM ?? DEFAULT_CEILING_HEIGHT_M;
     if (underground) {
       buildVvsUndergroundHall(scaffold.local, materials, {
@@ -189,12 +178,23 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
 
     // Staggered stops offset the two side platforms along the route.
     const staggerM = definition.platform?.staggerM ?? 0;
+    const island = layout === 'island';
 
-    // Curved platforms follow the route in world space → untransformed root.
-    buildVvsSidePlatforms(scaffold.root, context.layer, materials, station, definition.platform, staggerM, underground);
-    // Mixed layouts (side + center) add a narrow island deck between the tracks.
-    if (layout === 'mixed') {
-      buildVvsCenterPlatform(scaffold.root, context.layer, materials, station, definition.platform);
+    if (island) {
+      // One deck between the tracks. The world has already pulled the tracks
+      // apart around this stop by the same width, so the deck lands in the gap.
+      buildVvsCenterPlatform(scaffold.root, context.layer, materials, station, definition.platform, underground);
+    } else {
+      // Curved platforms follow the route in world space → untransformed root.
+      buildVvsSidePlatforms(scaffold.root, context.layer, materials, station, definition.platform, staggerM, underground);
+      // Mixed layouts add the narrow walkway that fits between two normal
+      // tracks — not a platform: at 4.2 m centres there is no room for one.
+      if (layout === 'mixed') {
+        buildVvsCenterPlatform(scaffold.root, context.layer, materials, station, {
+          ...definition.platform,
+          widthM: interTrackWalkwayWidthM(context.layer.oppositeLaneOffsetM)
+        }, underground);
+      }
     }
 
     const retainingWall = definition.environment?.retainingWall;
@@ -213,7 +213,17 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     const canopyLen = roof === 'none' ? 0 : fullCanopy ? Math.min(platformLengthM * 0.9, platformLengthM - 4) : canopyLengthM;
     const canopyCenterZ = fullCanopy ? 0 : 8;
 
-    for (const side of [-1, 1]) {
+    if (island) {
+      this.buildIslandStation(scaffold.local, deck, context, materials, definition, station, {
+        canopyLengthM: canopyLen,
+        accent,
+        underground,
+        hallLengthM,
+        ceilingHeightM,
+        platformLengthM,
+        dfiDisplays
+      });
+    } else for (const side of [-1, 1]) {
       const zShift = side * (staggerM / 2);
       if (underground) {
         buildVvsUndergroundSideLighting(scaffold.local, materials, side, {
@@ -271,7 +281,12 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     // with buffer stops and an end wall.
     if (definition.archetype === 'terminus') {
       const endSign = placement.t >= 0.5 ? 1 : -1;
-      buildVvsTerminusBuffer(scaffold.local, materials, platformLengthM, endSign);
+      // An island terminus buffers on the spread tracks, not the normal pair.
+      const baseOffsetM = Math.abs(context.layer.oppositeLaneOffsetM);
+      const trackOffsetM = island
+        ? baseOffsetM + islandTrackSpreadM(definition.platform?.widthM ?? 8, baseOffsetM)
+        : baseOffsetM;
+      buildVvsTerminusBuffer(scaffold.local, materials, platformLengthM, endSign, trackOffsetM);
     }
 
     if (underground) buildVvsWayfinding(scaffold.local, station, definition.signage?.exits);
@@ -280,6 +295,121 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       root: scaffold.root,
       dispose: () => disposeStation(scaffold.root, materials.shared)
     };
+  }
+
+  /**
+   * An island stop: one deck between the tracks. Nothing here is per-side —
+   * there is a single platform — so the canopy, furniture, and signs are built
+   * once, and the underground fittings that a side box hangs over each platform
+   * (columns, lighting, departure boards) collapse onto the centre line.
+   */
+  private buildIslandStation(
+    local: THREE.Group,
+    deck: THREE.Group,
+    context: StationBuildContext,
+    materials: VvsStationMaterials,
+    definition: StationVisualDefinition,
+    station: RouteStation,
+    options: {
+      canopyLengthM: number;
+      accent: THREE.Material;
+      underground: boolean;
+      hallLengthM: number;
+      ceilingHeightM: number;
+      platformLengthM: number;
+      dfiDisplays: number;
+    }
+  ): void {
+    const { underground, hallLengthM, ceilingHeightM } = options;
+    const halfWidthM = islandHalfWidthM(definition.platform);
+    const furniture = definition.furniture ?? {};
+
+    if (underground) {
+      // A single row of columns down the centre of the deck, and a light run
+      // over each platform edge.
+      buildVvsUndergroundColumnRow(local, materials, 0, {
+        lengthM: hallLengthM,
+        heightM: ceilingHeightM,
+        columnStyle: definition.architecture?.columns?.style,
+        columnColor: definition.architecture?.columns?.color,
+        columnSpacingM: definition.architecture?.columns?.spacingM
+      });
+      for (const side of [-1, 1]) {
+        buildVvsUndergroundLighting(local, materials, side * (halfWidthM - 0.9), {
+          lengthM: hallLengthM,
+          heightM: ceilingHeightM,
+          lighting: definition.architecture?.lighting?.style,
+          lightColor: definition.architecture?.lighting?.color
+        });
+        buildVvsVitrines(local, materials, side, furniture.adVitrines ?? 0, hallLengthM);
+        if (options.dfiDisplays > 0) {
+          buildVvsSuspendedDfi(
+            local,
+            context.layer,
+            materials,
+            side,
+            options.dfiDisplays,
+            options.platformLengthM,
+            ceilingHeightM,
+            definition.signage?.platformNumber,
+            halfWidthM - 1.2
+          );
+        }
+      }
+    }
+
+    if (!underground) {
+      // A trough island is walled close in on both sides, not set back behind a
+      // platform, so the wall follows the deck rather than the default lateral.
+      const retainingWall = definition.environment?.retainingWall;
+      for (const side of [-1, 1]) {
+        if (retainingWall === 'both' || (retainingWall === 'left' && side === -1) || (retainingWall === 'right' && side === 1)) {
+          buildVvsRetainingWall(local, materials, side, halfWidthM + 4.6);
+        }
+      }
+      if (options.dfiDisplays > 0) {
+        buildVvsDfiBoards(
+          deck,
+          context.layer,
+          materials,
+          1,
+          station,
+          options.dfiDisplays,
+          options.platformLengthM,
+          halfWidthM - 1.4 - 6.4
+        );
+      }
+    }
+
+    buildVvsIslandFittings(deck, context.layer, materials, station, {
+      widthM: definition.platform?.widthM,
+      lengthM: definition.platform?.lengthM,
+      underground,
+      canopyLengthM: options.canopyLengthM,
+      canopyStyle: definition.architecture?.canopy?.style,
+      counts: {
+        benches: furniture.benches ?? 1,
+        ticketMachines: furniture.ticketMachines ?? 1,
+        bins: furniture.bins ?? 1
+      },
+      accent: options.accent,
+      displayName: definition.displayName
+    });
+
+    // A surface island is still marked from the street by its totem; the rest of
+    // the street kit (back railing, parapet) belongs to a platform with a back.
+    if (!underground && definition.signage?.totem !== false) {
+      buildVvsTotem(
+        deck,
+        materials,
+        1,
+        { name: definition.displayName, distanceM: 0 },
+        0,
+        definition.signage?.lines,
+        -18,
+        halfWidthM - 1.1
+      );
+    }
   }
 
   /**

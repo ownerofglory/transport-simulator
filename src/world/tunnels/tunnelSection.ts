@@ -299,6 +299,14 @@ export type TunnelBoreOptions = {
   /** How each end is capped; see {@link TunnelEndCap}. */
   portalStart?: TunnelEndCap;
   portalEnd?: TunnelEndCap;
+  /**
+   * `shell` builds the lining and portals only, dropping the luminaires and
+   * services. For bores the camera passes near but never rides — Live draws one
+   * detailed tunnel around the followed vehicle and shells for the rest.
+   */
+  detail?: 'full' | 'shell';
+  /** Rings per metre of bore; lower is coarser. Defaults to one per 8 m. */
+  ringSpacingM?: number;
 };
 
 /**
@@ -327,14 +335,16 @@ export function buildTunnelBore(options: TunnelBoreOptions): THREE.Group {
   const kind = tunnelSectionKindFor(lengthM);
   const profile = sectionProfile(spec, kind);
   // ~8 m between rings keeps curved bores smooth without exploding vertex count.
-  const rings = THREE.MathUtils.clamp(Math.ceil(lengthM / 8), 12, 900);
+  const rings = THREE.MathUtils.clamp(Math.ceil(lengthM / (options.ringSpacingM ?? 8)), 12, 900);
 
   const lining = new THREE.Mesh(sweepSection(curve, profile, rings, lengthM), materials.lining);
   lining.name = `Tunnel lining (${kind})`;
   group.add(lining);
 
-  buildLuminaires(group, curve, lengthM, spec, kind, materials);
-  buildServices(group, curve, lengthM, spec, materials);
+  if (options.detail !== 'shell') {
+    buildLuminaires(group, curve, lengthM, spec, kind, materials);
+    buildServices(group, curve, lengthM, spec, materials);
+  }
 
   const lateral = new THREE.Vector3();
   const up = new THREE.Vector3();

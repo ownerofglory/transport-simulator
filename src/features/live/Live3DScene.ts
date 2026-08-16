@@ -270,6 +270,13 @@ export class Live3DScene {
     return this.distance * Math.cos(this.polar);
   }
 
+  /** Alignment of the followed vehicle, so its tunnel is the detailed one. */
+  private followedRouteId(): string | null {
+    if (!this.followRunId) return null;
+    const vehicle = this.opts.store.get(this.followRunId);
+    return vehicle ? this.tunnelIndex.routeFor(vehicle)?.id ?? null : null;
+  }
+
   /** Drives sun/sky/fog from the real local hour (concept §2.5). */
   private applyDaylight(): void {
     const now = new Date();
@@ -349,7 +356,11 @@ export class Live3DScene {
     const vehicles = this.opts.store.list();
     // Snap matched rail vehicles onto their route before anything reads positions.
     this.trackMotion.tick(vehicles, dt);
-    this.tunnels.update(vehicles, this.terrain.revision);
+    this.tunnels.update(vehicles, this.terrain.revision, {
+      altitudeM: this.altitudeM,
+      focus: this.target,
+      followRouteId: this.followedRouteId()
+    });
     this.tracks.update(vehicles, this.altitudeM, this.terrain.revision);
     // Near vehicles get full models; the rest fall back to instanced blocks.
     const modeled = this.models.update(

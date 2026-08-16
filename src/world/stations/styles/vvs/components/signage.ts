@@ -53,7 +53,8 @@ export function buildVvsSuspendedDfi(
   count: number,
   lengthM: number,
   ceilingHeightM: number,
-  platformNumber?: string
+  platformNumber?: string,
+  lateralM = 6.9 // over a side platform; an island hangs them nearer the centre
 ): void {
   const boards = Math.max(0, Math.min(count, 4));
   if (boards === 0) return;
@@ -68,11 +69,11 @@ export function buildVvsSuspendedDfi(
   for (let i = 0; i < boards; i += 1) {
     const z = boards === 1 ? 0 : -usable / 2 + (usable / (boards - 1)) * i;
     const hanger = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.9, 0.08), materials.steel);
-    hanger.position.set(side * 6.9, ceilingHeightM - 0.45, z);
+    hanger.position.set(side * lateralM, ceilingHeightM - 0.45, z);
     local.add(hanger);
 
     const board = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.86, 4.2), materials.dfi);
-    board.position.set(side * 6.9, y, z);
+    board.position.set(side * lateralM, y, z);
     local.add(board);
 
     for (const facing of [-1, 1]) {
@@ -80,7 +81,7 @@ export function buildVvsSuspendedDfi(
         new THREE.PlaneGeometry(3.9, 0.66),
         new THREE.MeshBasicMaterial({ map: face, side: THREE.FrontSide })
       );
-      screen.position.set(side * 6.9 + facing * 0.11, y, z);
+      screen.position.set(side * lateralM + facing * 0.11, y, z);
       screen.rotation.y = (facing * Math.PI) / 2;
       local.add(screen);
     }

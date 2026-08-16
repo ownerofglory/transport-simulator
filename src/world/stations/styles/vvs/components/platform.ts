@@ -33,7 +33,7 @@ export function sidePlatformOffset(widthM = DEFAULT_WIDTH_M): number {
  * windings so the face is solid from the track and from behind without needing
  * a double-sided material.
  */
-function makeFasciaGeometry(
+export function makeFasciaGeometry(
   layer: WorldLayerContext,
   offsetM: number,
   startT: number,

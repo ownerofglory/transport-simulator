@@ -10,16 +10,21 @@ import type { VvsStationMaterials } from '../VvsStationMaterials';
  * the station's immediate length — enough to give sloped stops a recognizable
  * edge without re-deriving route curvature.
  */
-export function buildVvsRetainingWall(local: THREE.Group, materials: VvsStationMaterials, side: number): void {
+export function buildVvsRetainingWall(
+  local: THREE.Group,
+  materials: VvsStationMaterials,
+  side: number,
+  lateralM = 13 // behind a side platform; an island's trough wall stands closer
+): void {
   const wall = new THREE.Mesh(new THREE.BoxGeometry(0.6, 5.2, 82), materials.concrete);
-  wall.position.set(side * 13, 2.0, 0);
+  wall.position.set(side * lateralM, 2.0, 0);
   wall.receiveShadow = true;
   wall.castShadow = true;
   local.add(wall);
 
   // Coping along the top edge of the wall.
   const coping = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.3, 82), materials.ssbBlue);
-  coping.position.set(side * 13, 4.65, 0);
+  coping.position.set(side * lateralM, 4.65, 0);
   local.add(coping);
 }
 

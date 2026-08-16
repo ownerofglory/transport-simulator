@@ -46,7 +46,12 @@ export class GuidewayLayer {
       this.root.add(ballast);
 
       for (const railOffset of [-this.ctx.railGaugeM / 2, this.ctx.railGaugeM / 2]) {
-        const points = this.ctx.offsetCurvePoints(trackOffset + railOffset, trackSegments, 0.22);
+        // Lane-aware so both rails follow the track out around an island stop.
+        const points = this.ctx.offsetCurvePointsAt(
+          (t) => this.ctx.laneOffsetAtT(t, trackOffset) + railOffset,
+          trackSegments,
+          0.22
+        );
         const railCurve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
         const rail = new THREE.Mesh(new THREE.TubeGeometry(railCurve, trackSegments, 0.08, 8), railMaterial);
         rail.castShadow = true;
@@ -62,7 +67,9 @@ export class GuidewayLayer {
       const rotation = new THREE.Quaternion();
       for (let i = 0; i < sleeperCount; i++) {
         const t = i / Math.max(1, sleeperCount - 1);
-        const p = this.ctx.curve.getPointAt(t).add(this.ctx.normalAt(t).multiplyScalar(trackOffset));
+        const p = this.ctx.curve
+          .getPointAt(t)
+          .add(this.ctx.normalAt(t).multiplyScalar(this.ctx.laneOffsetAtT(t, trackOffset)));
         const tangent = this.ctx.curve.getTangentAt(t).normalize();
         const yaw = Math.atan2(tangent.x, tangent.z);
         rotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw + Math.PI / 2);
@@ -348,10 +355,18 @@ export class GuidewayLayer {
     // mouth at the platform end.
     const spans: Array<[number, number]> = [];
     const stops = this.ctx.route.stations
-      .map((station) => ({
-        t: station.distanceM / routeLengthM,
-        halfT: (undergroundHallHalfLengthM(this.ctx.guidewayKind, station.name) - 3) / routeLengthM
-      }))
+      .map((station) => {
+        const t = station.distanceM / routeLengthM;
+        // An island box is longer than a side one, because its tracks are still
+        // swinging together past the platform. That only applies where a box is
+        // actually built: a stop the route keeps on the surface, even one just
+        // outside the bore mouth, takes the plain extent.
+        const styleId = this.ctx.stationIsUnderground(t) ? this.ctx.stationStyleId : undefined;
+        return {
+          t,
+          halfT: (undergroundHallHalfLengthM(this.ctx.guidewayKind, station.name, styleId) - 3) / routeLengthM
+        };
+      })
       .filter((stop) => stop.t > startT - stop.halfT && stop.t < endT + stop.halfT)
       .sort((a, b) => a.t - b.t);
 

@@ -17,6 +17,8 @@ import { RouteLayer } from './world/layers/RouteLayer';
 import { GuidewayLayer } from './world/layers/GuidewayLayer';
 import { StationLayer } from './world/layers/StationLayer';
 import { OpposingTrafficLayer } from './world/layers/OpposingTrafficLayer';
+import { TrackSpreadProfile } from './world/trackSpread';
+import { islandSpreadZones } from './world/stations/trackLayout';
 type GeoPoint = { lat: number; lon: number };
 
 const EARTH_M_PER_DEG_LAT = 111_320;
@@ -47,6 +49,9 @@ export class TransitWorld {
   // Stable reference so the per-frame camera input does not allocate a closure.
   private readonly routePointAtDistanceBound = (distanceM: number, laneOffsetM = 0) =>
     this.routePointAtDistance(distanceM, laneOffsetM);
+  // Where the two tracks pull apart for an island platform. Flat on most
+  // routes; every track-following system reads it so they stay together.
+  private trackSpread = TrackSpreadProfile.none;
   private currentSeason: Season = 'summer';
   // Cinematic (photo) presentation: enter/exit, preset cycling, camera math.
   private readonly photoSystem = new PhotoSystem();
@@ -102,6 +107,17 @@ export class TransitWorld {
     const startTangent = this.curve.getTangentAt(0).normalize();
     this.cameraSystem.placeAtStart(startPoint, startTangent);
     this.lightingSystem.initialize();
+
+    // Island stops move the running tracks, so the profile has to exist before
+    // any track geometry, vehicle placement, or camera anchor is built.
+    this.trackSpread = new TrackSpreadProfile(
+      islandSpreadZones(
+        this.route.stations,
+        this.guidewayKind,
+        this.oppositeLaneOffsetM,
+        this.modeDefinition?.stationStyleId
+      )
+    );
 
     // Scene layers build their meshes from shared route geometry; TransitWorld
     // coordinates them and owns the vehicle, scenery streaming, and frame loop.
@@ -352,7 +368,9 @@ export class TransitWorld {
       stationMarkers: this.stationMarkers,
       stationIsUnderground: (t) => this.stationIsUnderground(t),
       normalAt: (t) => this.normalAt(t),
+      laneOffsetAtT: (t, baseOffsetM) => this.laneOffsetAtT(t, baseOffsetM),
       offsetCurvePoints: (offsetM, segments, heightM) => this.offsetCurvePoints(offsetM, segments, heightM),
+      offsetCurvePointsAt: (offsetAt, segments, heightM) => this.offsetCurvePointsAt(offsetAt, segments, heightM),
       surfaceHeightAt: (t) => this.surfaceHeightAt(t),
       makeRouteStrip: (offsetM, widthM, startT, endT, segments, heightM) =>
         this.makeRouteStrip(offsetM, widthM, startT, endT, segments, heightM),
@@ -368,7 +386,10 @@ export class TransitWorld {
 
   private routePointAtDistance(distanceM: number, laneOffsetM = 0): THREE.Vector3 {
     const t = THREE.MathUtils.clamp(distanceM / this.route.routeLengthM, 0, 1);
-    return this.curve.getPointAt(t).add(this.normalAt(t).multiplyScalar(laneOffsetM));
+    // Lane-aware: the chase camera anchors on this, so it has to swing out with
+    // the train where the tracks part for an island platform.
+    const offsetM = this.trackSpread.laneOffsetAt(distanceM, laneOffsetM);
+    return this.curve.getPointAt(t).add(this.normalAt(t).multiplyScalar(offsetM));
   }
 
   private routeTangentAtDistance(distanceM: number): THREE.Vector3 {
@@ -449,9 +470,18 @@ export class TransitWorld {
     if (distanceM > this.route.routeLengthM) {
       position.add(routeTangent.clone().multiplyScalar(distanceM - this.route.routeLengthM));
     }
+    const laneOffsetM = this.trackSpread.laneOffsetAt(clampedDistance, trackOffsetM);
     position
-      .add(this.normalAt(t).multiplyScalar(trackOffsetM))
+      .add(this.normalAt(t).multiplyScalar(laneOffsetM))
       .add(new THREE.Vector3(0, 0.2, 0));
+
+    // Through a spread the lane runs at an angle to the alignment. Without the
+    // correction the cars keep pointing straight down the route and crab
+    // sideways into the platform as the tracks part.
+    if (!this.trackSpread.isFlat) {
+      const aheadM = this.trackSpread.laneOffsetAt(clampedDistance + 2, trackOffsetM);
+      routeTangent.add(this.normalAt(t).multiplyScalar((aheadM - laneOffsetM) / 2)).normalize();
+    }
     const tangent = routeTangent.multiplyScalar(direction);
     // Build a level track frame instead of using the shortest rotation from
     // forward to the tangent. The latter can introduce visible roll whenever
@@ -518,10 +548,24 @@ export class TransitWorld {
   }
 
   private offsetCurvePoints(offsetM: number, segments: number, heightM: number): THREE.Vector3[] {
+    return this.offsetCurvePointsAt(() => offsetM, segments, heightM);
+  }
+
+  /** As `offsetCurvePoints`, for offsets that vary along the route (spread tracks). */
+  private offsetCurvePointsAt(
+    offsetAt: (t: number) => number,
+    segments: number,
+    heightM: number
+  ): THREE.Vector3[] {
     return this.curve.getSpacedPoints(segments).map((p, i, arr) => {
       const t = i / Math.max(arr.length - 1, 1);
-      return p.clone().add(this.normalAt(t).multiplyScalar(offsetM)).add(new THREE.Vector3(0, heightM, 0));
+      return p.clone().add(this.normalAt(t).multiplyScalar(offsetAt(t))).add(new THREE.Vector3(0, heightM, 0));
     });
+  }
+
+  /** A track's lateral offset at route parameter t, including any island spread. */
+  private laneOffsetAtT(t: number, baseOffsetM: number): number {
+    return this.trackSpread.laneOffsetAt(t * this.route.routeLengthM, baseOffsetM);
   }
 
   private surfaceHeightAt(t: number): number {
@@ -540,12 +584,23 @@ export class TransitWorld {
     segments: number,
     heightM: number
   ): THREE.BufferGeometry {
+    return this.makeStrip(() => offsetM, widthM, startT, endT, segments, heightM);
+  }
+
+  private makeStrip(
+    offsetAt: (t: number) => number,
+    widthM: number,
+    startT: number,
+    endT: number,
+    segments: number,
+    heightM: number
+  ): THREE.BufferGeometry {
     const vertices: number[] = [];
     const uvs: number[] = [];
     const indices: number[] = [];
     for (let i = 0; i <= segments; i++) {
       const t = THREE.MathUtils.lerp(startT, endT, i / segments);
-      const center = this.curve.getPointAt(t).add(this.normalAt(t).multiplyScalar(offsetM)).add(new THREE.Vector3(0, heightM, 0));
+      const center = this.curve.getPointAt(t).add(this.normalAt(t).multiplyScalar(offsetAt(t))).add(new THREE.Vector3(0, heightM, 0));
       const halfWidth = this.normalAt(t).multiplyScalar(widthM / 2);
       const left = center.clone().sub(halfWidth);
       const right = center.clone().add(halfWidth);
@@ -564,8 +619,9 @@ export class TransitWorld {
     return geometry;
   }
 
+  /** Ballast/running-surface strip. Lane-aware, so it follows a spread track. */
   private makeTrackStrip(offsetM: number, widthM: number, segments: number): THREE.BufferGeometry {
-    return this.makeRouteStrip(offsetM, widthM, 0, 1, segments, 0.035);
+    return this.makeStrip((t) => this.laneOffsetAtT(t, offsetM), widthM, 0, 1, segments, 0.035);
   }
 
   private maskRanges(mask: boolean[]): [number, number][] {
