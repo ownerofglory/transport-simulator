@@ -39,6 +39,7 @@ export type VvsUndergroundHallOptions = {
   wallColor?: string;
   plinthColor?: string;
   bandColor?: string;
+  nameColor?: string;
   mural?: StationWallMural;
   stationName?: string;
   nameBandRepeatM?: number;
@@ -205,7 +206,7 @@ function buildNameFrieze(
     width: 1024,
     height: 128,
     bg: options.bandColor ?? options.wallColor ?? '#c8c8c3',
-    fg: '#1c1c1c'
+    fg: options.nameColor ?? '#1c1c1c'
   });
   const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.FrontSide });
   const geometry = new THREE.PlaneGeometry(7.2, 0.9);
@@ -374,6 +375,57 @@ function buildTrussedVault(
   }
 }
 
+/**
+ * A field of fluorescent tubes hung from the soffit on thin drop rods at
+ * varied heights and angles. Deterministic: the scatter comes from the tube
+ * index, not a random source, so a station looks the same every session.
+ */
+function buildSuspendedTubes(
+  local: THREE.Group,
+  materials: VvsStationMaterials,
+  xM: number,
+  lengthM: number,
+  heightM: number,
+  lampMaterial: THREE.Material
+): void {
+  const spacingM = 2.6;
+  const count = Math.max(2, Math.floor((lengthM - 6) / spacingM));
+  const first = -((count - 1) * spacingM) / 2;
+
+  const tubes = new THREE.InstancedMesh(new THREE.BoxGeometry(0.09, 0.09, 2.4), lampMaterial, count);
+  const rods = new THREE.InstancedMesh(new THREE.BoxGeometry(0.03, 1, 0.03), materials.steel, count);
+  const dummy = new THREE.Object3D();
+
+  for (let i = 0; i < count; i += 1) {
+    const scatter = pseudoRandom(i);
+    const lateral = xM + (scatter - 0.5) * 3.4;
+    const drop = 0.35 + pseudoRandom(i + 97) * 0.9;
+    const z = first + i * spacingM + (scatter - 0.5) * 0.8;
+
+    dummy.rotation.set(0, (pseudoRandom(i + 13) - 0.5) * 0.9, (pseudoRandom(i + 41) - 0.5) * 0.35);
+    dummy.position.set(lateral, heightM - drop, z);
+    dummy.updateMatrix();
+    tubes.setMatrixAt(i, dummy.matrix);
+
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.set(1, drop, 1);
+    dummy.position.set(lateral, heightM - drop / 2, z);
+    dummy.updateMatrix();
+    rods.setMatrixAt(i, dummy.matrix);
+    dummy.scale.set(1, 1, 1);
+  }
+
+  tubes.instanceMatrix.needsUpdate = true;
+  rods.instanceMatrix.needsUpdate = true;
+  local.add(tubes, rods);
+}
+
+/** Stable [0,1) scatter from an integer, so the field never changes between runs. */
+function pseudoRandom(index: number): number {
+  const value = Math.sin(index * 12.9898) * 43758.5453;
+  return value - Math.floor(value);
+}
+
 export type VvsUndergroundSideOptions = {
   lengthM?: number;
   heightM?: number;
@@ -485,6 +537,11 @@ function buildPlatformLighting(
     const strip = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.12, lengthM - 2), material);
     strip.position.set(xM, y, 0);
     local.add(strip);
+    return;
+  }
+
+  if (style === 'suspended-tubes') {
+    buildSuspendedTubes(local, materials, xM, lengthM, heightM, material);
     return;
   }
 

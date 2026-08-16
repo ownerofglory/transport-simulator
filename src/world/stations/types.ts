@@ -67,7 +67,13 @@ export type StationColumnStyle = 'none' | 'square' | 'round';
 
 // Platform lighting: short segments (legacy), one continuous strip per side, or
 // recessed rows set into the ceiling.
-export type StationLightingStyle = 'strip-segments' | 'strip-continuous' | 'recessed-rows';
+export type StationLightingStyle =
+  | 'strip-segments'
+  | 'strip-continuous'
+  | 'recessed-rows'
+  // Karlsruhe's Kombilösung: a dense field of tubes hung at varied heights and
+  // angles, which is what makes those boxes recognisable rather than the walls.
+  | 'suspended-tubes';
 
 // Underground box shell. Length is not configurable here: it has to agree with
 // the tunnel cut, so it comes from `undergroundHallHalfLengthM`.
@@ -91,6 +97,7 @@ export type StationWallsDefinition = {
   color?: string; // station identity colour of the cladding field
   plinthColor?: string;
   bandColor?: string; // frieze band the station name sits in
+  nameColor?: string; // lettering of the repeated station name
   mural?: StationWallMural;
 };
 

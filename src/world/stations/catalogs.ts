@@ -1,6 +1,7 @@
 import { VvsStationCatalog } from './styles/vvs/VvsStationCatalog';
 import vvsStadtbahnStations from './styles/vvs/configs/vvs-stadtbahn-stations.json';
 import dbSBahnStations from './styles/db/configs/db-sbahn-stations.json';
+import kvvStadtbahnStations from './styles/kvv/configs/kvv-stadtbahn-stations.json';
 
 /**
  * The bundled station catalogs, keyed by style id.
@@ -13,7 +14,8 @@ import dbSBahnStations from './styles/db/configs/db-sbahn-stations.json';
 
 const CATALOGS = new Map<string, VvsStationCatalog>([
   ['vvs-stadtbahn', new VvsStationCatalog(vvsStadtbahnStations as never)],
-  ['db-sbahn', new VvsStationCatalog(dbSBahnStations as never)]
+  ['db-sbahn', new VvsStationCatalog(dbSBahnStations as never)],
+  ['kvv-stadtbahn', new VvsStationCatalog(kvvStadtbahnStations as never)]
 ]);
 
 export function catalogFor(stationStyleId: string | undefined): VvsStationCatalog | undefined {

@@ -210,6 +210,56 @@ describe('island platforms', () => {
   });
 });
 
+describe('Karlsruhe Kombilösung', () => {
+  const style = 'kvv-stadtbahn';
+  const stops = [
+    'KA Europaplatz (U)',
+    'KA Marktplatz (Kaiserstraße U)',
+    'KA Marktplatz (Pyramide U)',
+    'Karlsruhe Kronenplatz (U)',
+    'KA Durlacher Tor/KIT-Campus Süd (U)',
+    'KA Ettlinger Tor/Staatstheater (U)',
+    'Karlsruhe Kongresszentrum (U)'
+  ];
+
+  it('builds the tunnel stops as one architecture on low tram platforms', () => {
+    const provider = createStationStyleRegistry().resolveOptional(style)!;
+    for (const name of stops) {
+      const station: RouteStation = { name, distanceM: 500 };
+      const resolved = provider.resolve(station, {
+        layer: { stationStyleId: style } as never,
+        placement: placementAt(station, true)
+      });
+      expect(resolved.platform.layout).toBe('side');
+      expect(resolved.platform.heightM).toBe(0.34); // low-floor tram, not Stuttgart's 0.8
+      expect(resolved.architecture?.lighting?.style).toBe('suspended-tubes');
+      expect(resolved.architecture?.columns?.style).toBe('none');
+      expect(resolved.architecture?.walls?.nameColor).toBe('#9c1c38');
+      expect(resolved.displayName).not.toContain('(U)');
+    }
+  });
+
+  it('keeps Karlsruhe and Stuttgart stops of the same name apart', () => {
+    const registry = createStationStyleRegistry();
+    // Karlsruhe's surface Europaplatz is not in its catalog, and Stuttgart's is
+    // in a different one: neither can pick up the other's design.
+    const surface: RouteStation = { name: 'Karlsruhe Europaplatz', distanceM: 100 };
+    const karlsruhe = registry.resolveOptional(style)!.resolve(surface, {
+      layer: { stationStyleId: style } as never,
+      placement: placementAt(surface, false)
+    });
+    expect(karlsruhe.architecture).toBeUndefined();
+
+    const stuttgart: RouteStation = { name: 'Europaplatz', distanceM: 100 };
+    const vvs = registry.resolveOptional('vvs-stadtbahn')!.resolve(stuttgart, {
+      layer: { stationStyleId: 'vvs-stadtbahn' } as never,
+      placement: placementAt(stuttgart, false)
+    });
+    expect(vvs.platform.heightM).toBe(0.8);
+    expect(vvs.platform.layout).toBe('island');
+  });
+});
+
 describe('S-Bahn Stammstrecke islands', () => {
   const style = 'db-sbahn';
   const hbf: RouteStation = { name: 'Stuttgart Hauptbahnhof (tief)', distanceM: 4000 };

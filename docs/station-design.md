@@ -18,6 +18,7 @@ route stop ──▶ provider.resolve() ──▶ StationVisualDefinition ──
 |---|---|---|
 | `vvs-stadtbahn` | `styles/vvs/configs/vvs-stadtbahn-stations.json` | Stuttgart Stadtbahn, and as the fallback for every other `stadtbahn` city |
 | `db-sbahn` | `styles/db/configs/db-sbahn-stations.json` | Stuttgart S-Bahn |
+| `kvv-stadtbahn` | `styles/kvv/configs/kvv-stadtbahn-stations.json` | Karlsruhe trams and AVG tram-trains |
 
 Both run the **same component kit** under `styles/vvs/components/`. A style is
 an id, a boarding height, and whether the stops carry SSB street furniture
@@ -59,9 +60,11 @@ layout, dimensions, height and accessibility are authored or not present.
                  "color": "#c8102e",     // identity colour of the cladding field
                  "plinthColor": "…",
                  "bandColor": "…",     // band the repeated name sits in
+                 "nameColor": "…",     // lettering of that name
                  "mural": "film-strip" },// artwork, independent of the finish
     "columns": { "style": "none | square | round", "color": "…", "spacingM": 18 },
-    "lighting":{ "style": "strip-segments | strip-continuous | recessed-rows" },
+    "lighting":{ "style": "strip-segments | strip-continuous
+                         | recessed-rows | suspended-tubes" },
     "canopy":  { "style": "flat-slab | butterfly | curved-shell",
                  "fasciaColor": "…", "postColor": "…", "nameOnFascia": true },
     "roof": "none | short-canopy | full-canopy | hall",
@@ -167,7 +170,10 @@ the kit rather than approximating — Killesberg's Kodak filmstrip became
 `walls.mural` (three instanced runs, so a long wall stays three draw calls),
 and the airport station's clad soffit became the `metal-vault` ceiling.
 
-Two stops can share a name across networks: `Flughafen/Messe` is a surface
-Stadtbahn terminus and an underground S-Bahn vault. They stay distinct because
-each style reads its own catalog — never add one network's stop to the other's
-file.
+Two stops can share a name across networks and across cities: `Flughafen/Messe`
+is a surface Stadtbahn terminus and an underground S-Bahn vault, and both
+Stuttgart and Karlsruhe have a Europaplatz and a Marktplatz. They stay distinct
+because each style reads its own catalog — **never add one network's stop to
+another's file**, and give a city its own style rather than borrowing one. A
+style also carries the boarding height, so Karlsruhe's 34 cm tram platforms
+cannot raise Stuttgart's 80 cm ones.

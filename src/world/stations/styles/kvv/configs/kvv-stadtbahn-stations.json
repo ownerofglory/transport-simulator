@@ -1,0 +1,496 @@
+{
+  "schemaVersion": 2,
+  "style": "kvv-stadtbahn",
+  "stations": {
+    "KA Durlacher Tor/KIT-Campus Süd (U)": {
+      "displayName": "Durlacher Tor",
+      "archetype": "underground-side",
+      "platform": {
+        "layout": "side",
+        "lengthM": 76,
+        "widthM": 8,
+        "heightM": 0.34,
+        "curved": true
+      },
+      "architecture": {
+        "family": "kombiloesung",
+        "roof": "hall",
+        "hall": {
+          "widthM": 22,
+          "heightM": 4.6,
+          "ceiling": "flat-slab",
+          "ceilingColor": "#e6e4df"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#efeeea",
+          "plinthColor": "#cfcdc6",
+          "bandColor": "#f2f1ed",
+          "nameColor": "#9c1c38"
+        },
+        "columns": {
+          "style": "none"
+        },
+        "lighting": {
+          "style": "suspended-tubes",
+          "color": "#f6f8ff"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -26,
+          "direction": "Durlacher Tor"
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 24,
+          "direction": "KIT-Campus Süd"
+        },
+        {
+          "type": "lift",
+          "side": "left",
+          "offsetM": 14
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Durlacher Tor",
+          "KIT-Campus Süd"
+        ],
+        "platformNumber": "1",
+        "nameBandRepeatM": 24,
+        "totem": false
+      },
+      "furniture": {
+        "benches": 2,
+        "bins": 2,
+        "ticketMachines": 1,
+        "dfiDisplays": 2,
+        "adVitrines": 2
+      }
+    },
+    "KA Ettlinger Tor/Staatstheater (U)": {
+      "displayName": "Ettlinger Tor",
+      "archetype": "underground-side",
+      "platform": {
+        "layout": "side",
+        "lengthM": 76,
+        "widthM": 8,
+        "heightM": 0.34,
+        "curved": true
+      },
+      "architecture": {
+        "family": "kombiloesung",
+        "roof": "hall",
+        "hall": {
+          "widthM": 22,
+          "heightM": 4.6,
+          "ceiling": "flat-slab",
+          "ceilingColor": "#e6e4df"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#efeeea",
+          "plinthColor": "#cfcdc6",
+          "bandColor": "#f2f1ed",
+          "nameColor": "#9c1c38"
+        },
+        "columns": {
+          "style": "none"
+        },
+        "lighting": {
+          "style": "suspended-tubes",
+          "color": "#f6f8ff"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -26,
+          "direction": "Ettlinger Tor"
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 24,
+          "direction": "Staatstheater"
+        },
+        {
+          "type": "lift",
+          "side": "left",
+          "offsetM": 14
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Ettlinger Tor",
+          "Staatstheater"
+        ],
+        "platformNumber": "1",
+        "nameBandRepeatM": 24,
+        "totem": false
+      },
+      "furniture": {
+        "benches": 2,
+        "bins": 2,
+        "ticketMachines": 1,
+        "dfiDisplays": 2,
+        "adVitrines": 2
+      }
+    },
+    "KA Europaplatz (U)": {
+      "displayName": "Europaplatz",
+      "archetype": "underground-side",
+      "platform": {
+        "layout": "side",
+        "lengthM": 76,
+        "widthM": 8,
+        "heightM": 0.34,
+        "curved": true
+      },
+      "architecture": {
+        "family": "kombiloesung",
+        "roof": "hall",
+        "hall": {
+          "widthM": 22,
+          "heightM": 4.6,
+          "ceiling": "flat-slab",
+          "ceilingColor": "#e6e4df"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#efeeea",
+          "plinthColor": "#cfcdc6",
+          "bandColor": "#f2f1ed",
+          "nameColor": "#9c1c38"
+        },
+        "columns": {
+          "style": "none"
+        },
+        "lighting": {
+          "style": "suspended-tubes",
+          "color": "#f6f8ff"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -26,
+          "direction": "Kaiserstraße"
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 24,
+          "direction": "Karlstraße"
+        },
+        {
+          "type": "lift",
+          "side": "left",
+          "offsetM": 14
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Kaiserstraße",
+          "Karlstraße"
+        ],
+        "platformNumber": "1",
+        "nameBandRepeatM": 24,
+        "totem": false
+      },
+      "furniture": {
+        "benches": 2,
+        "bins": 2,
+        "ticketMachines": 1,
+        "dfiDisplays": 2,
+        "adVitrines": 2
+      }
+    },
+    "KA Marktplatz (Kaiserstraße U)": {
+      "displayName": "Marktplatz",
+      "archetype": "underground-side",
+      "platform": {
+        "layout": "side",
+        "lengthM": 76,
+        "widthM": 8,
+        "heightM": 0.34,
+        "curved": true
+      },
+      "architecture": {
+        "family": "kombiloesung",
+        "roof": "hall",
+        "hall": {
+          "widthM": 22,
+          "heightM": 4.6,
+          "ceiling": "flat-slab",
+          "ceilingColor": "#e6e4df"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#efeeea",
+          "plinthColor": "#cfcdc6",
+          "bandColor": "#f2f1ed",
+          "nameColor": "#9c1c38"
+        },
+        "columns": {
+          "style": "none"
+        },
+        "lighting": {
+          "style": "suspended-tubes",
+          "color": "#f6f8ff"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -26,
+          "direction": "Marktplatz"
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 24,
+          "direction": "Kaiserstraße"
+        },
+        {
+          "type": "lift",
+          "side": "left",
+          "offsetM": 14
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Marktplatz",
+          "Kaiserstraße"
+        ],
+        "platformNumber": "1",
+        "nameBandRepeatM": 24,
+        "totem": false
+      },
+      "furniture": {
+        "benches": 2,
+        "bins": 2,
+        "ticketMachines": 1,
+        "dfiDisplays": 2,
+        "adVitrines": 2
+      }
+    },
+    "KA Marktplatz (Pyramide U)": {
+      "displayName": "Marktplatz (Pyramide)",
+      "archetype": "underground-side",
+      "platform": {
+        "layout": "side",
+        "lengthM": 76,
+        "widthM": 8,
+        "heightM": 0.34,
+        "curved": true
+      },
+      "architecture": {
+        "family": "kombiloesung",
+        "roof": "hall",
+        "hall": {
+          "widthM": 22,
+          "heightM": 4.6,
+          "ceiling": "flat-slab",
+          "ceilingColor": "#e6e4df"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#efeeea",
+          "plinthColor": "#cfcdc6",
+          "bandColor": "#f2f1ed",
+          "nameColor": "#9c1c38"
+        },
+        "columns": {
+          "style": "none"
+        },
+        "lighting": {
+          "style": "suspended-tubes",
+          "color": "#f6f8ff"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -26,
+          "direction": "Marktplatz"
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 24,
+          "direction": "Pyramide"
+        },
+        {
+          "type": "lift",
+          "side": "left",
+          "offsetM": 14
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Marktplatz",
+          "Pyramide"
+        ],
+        "platformNumber": "2",
+        "nameBandRepeatM": 24,
+        "totem": false
+      },
+      "furniture": {
+        "benches": 2,
+        "bins": 2,
+        "ticketMachines": 1,
+        "dfiDisplays": 2,
+        "adVitrines": 2
+      }
+    },
+    "Karlsruhe Kongresszentrum (U)": {
+      "displayName": "Kongresszentrum",
+      "archetype": "underground-side",
+      "platform": {
+        "layout": "side",
+        "lengthM": 76,
+        "widthM": 8,
+        "heightM": 0.34,
+        "curved": true
+      },
+      "architecture": {
+        "family": "kombiloesung",
+        "roof": "hall",
+        "hall": {
+          "widthM": 22,
+          "heightM": 4.6,
+          "ceiling": "flat-slab",
+          "ceilingColor": "#e6e4df"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#efeeea",
+          "plinthColor": "#cfcdc6",
+          "bandColor": "#f2f1ed",
+          "nameColor": "#9c1c38"
+        },
+        "columns": {
+          "style": "none"
+        },
+        "lighting": {
+          "style": "suspended-tubes",
+          "color": "#f6f8ff"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -26,
+          "direction": "Kongresszentrum"
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 24,
+          "direction": "Festplatz"
+        },
+        {
+          "type": "lift",
+          "side": "left",
+          "offsetM": 14
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Kongresszentrum",
+          "Festplatz"
+        ],
+        "platformNumber": "1",
+        "nameBandRepeatM": 24,
+        "totem": false
+      },
+      "furniture": {
+        "benches": 2,
+        "bins": 2,
+        "ticketMachines": 1,
+        "dfiDisplays": 2,
+        "adVitrines": 2
+      }
+    },
+    "Karlsruhe Kronenplatz (U)": {
+      "displayName": "Kronenplatz",
+      "archetype": "underground-side",
+      "platform": {
+        "layout": "side",
+        "lengthM": 76,
+        "widthM": 8,
+        "heightM": 0.34,
+        "curved": true
+      },
+      "architecture": {
+        "family": "kombiloesung",
+        "roof": "hall",
+        "hall": {
+          "widthM": 22,
+          "heightM": 4.6,
+          "ceiling": "flat-slab",
+          "ceilingColor": "#e6e4df"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#efeeea",
+          "plinthColor": "#cfcdc6",
+          "bandColor": "#f2f1ed",
+          "nameColor": "#9c1c38"
+        },
+        "columns": {
+          "style": "none"
+        },
+        "lighting": {
+          "style": "suspended-tubes",
+          "color": "#f6f8ff"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -26,
+          "direction": "Kronenplatz"
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 24,
+          "direction": "Fritz-Erler-Straße"
+        },
+        {
+          "type": "lift",
+          "side": "left",
+          "offsetM": 14
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Kronenplatz",
+          "Fritz-Erler-Straße"
+        ],
+        "platformNumber": "1",
+        "nameBandRepeatM": 24,
+        "totem": false
+      },
+      "furniture": {
+        "benches": 2,
+        "bins": 2,
+        "ticketMachines": 1,
+        "dfiDisplays": 2,
+        "adVitrines": 2
+      }
+    }
+  }
+}
