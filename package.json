@@ -13,6 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:visual": "node scripts/visual-smoke.mjs",
+    "test:visual:live": "node scripts/visual-smoke.mjs --live",
+    "test:visual:video": "node scripts/visual-smoke.mjs --video",
     "wasm:build": "bash scripts/build-wasm.sh"
   },
   "dependencies": {

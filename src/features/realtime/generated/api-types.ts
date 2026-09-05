@@ -35,6 +35,17 @@ export interface GeoPoint {
   lon?: number;
 }
 
+export interface HandlersPointRequest {
+  lat?: number;
+  lon?: number;
+}
+
+export interface HandlersRouteRequest {
+  destination?: HandlersPointRequest;
+  origin?: HandlersPointRequest;
+  profile?: string;
+}
+
 export interface Journey {
   arrivalTime?: string;
   departureTime?: string;
@@ -151,6 +162,15 @@ export interface RespondErrorBody {
 
 export interface RespondErrorEnvelope {
   error?: RespondErrorBody;
+}
+
+export interface RoutingPoint {
+  lat?: number;
+  lon?: number;
+}
+
+export interface RoutingRoute {
+  points?: RoutingPoint[];
 }
 
 export interface SearchJourneyRequest {
