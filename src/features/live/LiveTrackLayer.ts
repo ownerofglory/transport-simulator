@@ -14,6 +14,8 @@ import { TrackOccupancy } from './liveOccupancy';
 // Below this altitude rails are worth drawing; above it they are sub-pixel and we
 // skip the geometry entirely.
 const BUILD_ALTITUDE_M = 1600;
+const BUILD_RADIUS_M = 1900;
+const FOCUS_REBUILD_M = 900;
 const GAUGE_M = 1.5;
 const RAIL_RADIUS_M = 0.12;
 const BALLAST_HALF_WIDTH_M = 1.5;
@@ -38,6 +40,11 @@ export class LiveTrackLayer {
   // Stretches already laid with rails, so a shared alignment is drawn once.
   private readonly occupancy = new TrackOccupancy(DEDUP);
   private terrainRevision = -1;
+  private vehicleSignature = -1;
+  private queuedIndexVersion = -1;
+  private pending: Route[] = [];
+  private pendingIndex = 0;
+  private builtFocus: THREE.Vector3 | null = null;
   private readonly railMaterial = new THREE.MeshStandardMaterial({ color: 0x8a9095, metalness: 0.7, roughness: 0.3 });
   private readonly ballastMaterial = new THREE.MeshStandardMaterial({ color: 0x5c5a54, roughness: 0.96 });
 
@@ -49,7 +56,12 @@ export class LiveTrackLayer {
     this.group.name = 'Live overground rails';
   }
 
-  update(vehicles: TrackedVehicle[], altitudeM: number, terrainRevision: number): void {
+  update(
+    vehicles: TrackedVehicle[],
+    altitudeM: number,
+    terrainRevision: number,
+    focus?: THREE.Vector3
+  ): void {
     if (altitudeM > BUILD_ALTITUDE_M) return;
     // Rails bake in ground height, so skip the flat placeholder and rebuild once
     // the terrain resolves or recenters.
@@ -58,10 +70,31 @@ export class LiveTrackLayer {
       this.terrainRevision = terrainRevision;
       this.clear();
     }
-    for (const vehicle of vehicles) {
-      const route = this.index.routeFor(vehicle) as Route | null;
-      if (!route?.geoPoints || route.geoPoints.length < 2 || this.built.has(route.id)) continue;
-      this.buildRoute(route);
+    if (focus && this.builtFocus && horizontalDistance(this.builtFocus, focus) >= FOCUS_REBUILD_M) {
+      this.clear();
+    }
+    if (focus) this.builtFocus ??= focus.clone();
+
+    const signature = hashRunIds(vehicles);
+    if (signature !== this.vehicleSignature || this.index.version !== this.queuedIndexVersion) {
+      const routes = new Map<string, Route>();
+      for (const vehicle of vehicles) {
+        const route = this.index.routeFor(vehicle) as Route | null;
+        if (route?.geoPoints && route.geoPoints.length >= 2 && !this.built.has(route.id)) {
+          routes.set(route.id, route);
+        }
+      }
+      this.pending = [...routes.values()];
+      this.pendingIndex = 0;
+      this.vehicleSignature = signature;
+      this.queuedIndexVersion = this.index.version;
+    }
+
+    // Route construction creates several TubeGeometries. Limit it to one route
+    // per frame so a newly loaded feed cannot monopolise the render loop.
+    const route = this.pending[this.pendingIndex++];
+    if (route && !this.built.has(route.id)) {
+      this.buildRoute(route, focus);
       this.built.add(route.id);
     }
   }
@@ -76,7 +109,7 @@ export class LiveTrackLayer {
     this.group.removeFromParent();
   }
 
-  private buildRoute(route: Route): void {
+  private buildRoute(route: Route, focus?: THREE.Vector3): void {
     const geo = route.geoPoints!;
     const mask = route.tunnelMask ?? [];
     // Project + smooth the whole route once. Smoothing preserves the point count,
@@ -84,14 +117,17 @@ export class LiveTrackLayer {
     const smoothed = smoothTrackXZ(geo.map(([lat, lon]) => this.projection.project(lat, lon)));
     for (const [start, end] of overgroundRanges(mask, geo.length)) {
       if (end - start < 1) continue;
-      // Resample this overground stretch to a smooth, denser centerline matching the
-      // motion path, then bake rail height from the terrain per resampled point.
-      const centers = resampleTrackXZ(smoothed.slice(start, end + 1));
-      if (centers.length < 2) continue;
-      for (const c of centers) c.y = this.groundHeightAt(c.x, c.z) + 0.12;
-      // Drop stretches another route already laid rails on, then draw what's left
-      // as contiguous runs.
-      for (const run of this.occupancy.claimRuns(centers)) this.buildRun(run);
+      const spans = focus
+        ? nearFocusSpans(smoothed, start, end, focus, BUILD_RADIUS_M)
+        : [[start, end] as [number, number]];
+      for (const [spanStart, spanEnd] of spans) {
+        // Resample this visible stretch to a smooth, denser centerline matching
+        // the motion path, then bake rail height from the terrain.
+        const centers = resampleTrackXZ(smoothed.slice(spanStart, spanEnd + 1));
+        if (centers.length < 2) continue;
+        for (const c of centers) c.y = this.groundHeightAt(c.x, c.z) + 0.12;
+        for (const run of this.occupancy.claimRuns(centers)) this.buildRun(run);
+      }
     }
   }
 
@@ -104,6 +140,11 @@ export class LiveTrackLayer {
     this.group.clear();
     this.built.clear();
     this.occupancy.clear();
+    this.vehicleSignature = -1;
+    this.queuedIndexVersion = -1;
+    this.pending = [];
+    this.pendingIndex = 0;
+    this.builtFocus = null;
   }
 
   /** Rails + ballast for one contiguous stretch of centerline points. */
@@ -122,6 +163,46 @@ export class LiveTrackLayer {
     this.group.add(new THREE.Mesh(ribbonGeometry(centers, laterals, BALLAST_HALF_WIDTH_M, -0.06), this.ballastMaterial));
   }
 
+}
+
+function horizontalDistance(a: THREE.Vector3, b: THREE.Vector3): number {
+  return Math.hypot(a.x - b.x, a.z - b.z);
+}
+
+/** Visible contiguous spans with one neighbour point retained at each edge. */
+function nearFocusSpans(
+  points: THREE.Vector3[],
+  start: number,
+  end: number,
+  focus: THREE.Vector3,
+  radiusM: number
+): Array<[number, number]> {
+  const result: Array<[number, number]> = [];
+  const radius2 = radiusM * radiusM;
+  let spanStart = -1;
+  for (let i = start; i <= end; i++) {
+    const dx = points[i].x - focus.x;
+    const dz = points[i].z - focus.z;
+    const near = dx * dx + dz * dz <= radius2;
+    if (near && spanStart < 0) spanStart = Math.max(start, i - 1);
+    if (!near && spanStart >= 0) {
+      result.push([spanStart, Math.min(end, i)]);
+      spanStart = -1;
+    }
+  }
+  if (spanStart >= 0) result.push([spanStart, end]);
+  return result;
+}
+
+function hashRunIds(vehicles: TrackedVehicle[]): number {
+  let hash = 2166136261;
+  for (const vehicle of vehicles) {
+    for (let i = 0; i < vehicle.runId.length; i++) {
+      hash ^= vehicle.runId.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+  }
+  return hash ^ vehicles.length;
 }
 
 // Index ranges [start, end] where the route is NOT in a tunnel. With no mask the

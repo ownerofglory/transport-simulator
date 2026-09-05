@@ -43,12 +43,29 @@ canvas {
 }
 
 .menu-toggle {
-  display: none;
+  display: grid;
+  place-items: center;
   width: 38px;
   min-width: 38px;
   padding: 7px;
   font-size: 18px;
   line-height: 1;
+}
+
+.hud.collapsed {
+  width: auto;
+  max-width: calc(100vw - 32px);
+  background: rgba(8, 12, 18, 0.5);
+}
+
+.hud.collapsed .hud-content,
+.hud.collapsed .hud-header .label {
+  display: none;
+}
+
+.hud.collapsed h1 {
+  margin: 7px 0 5px;
+  white-space: nowrap;
 }
 
 .hud h1 {
@@ -198,6 +215,13 @@ select {
 button:hover,
 select:hover {
   background: rgba(255, 255, 255, 0.18);
+}
+
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 3px solid rgba(255, 223, 0, 0.9);
+  outline-offset: 2px;
 }
 
 .right-rail {

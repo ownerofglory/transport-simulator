@@ -9,8 +9,11 @@ type CachedMatch = {
   lon: number;
   checkedAt: number;
   route: TunnelRoute | null;
+  routePointIndex: number;
   inTunnel: boolean;
 };
+
+type RouteHit = { route: TunnelRoute; pointIndex: number; distanceM: number };
 
 // Once a run is matched to an alignment we keep it: rematching every refresh lets
 // the "closest" route flip between parallel/overlapping tracks (shared central
@@ -19,6 +22,9 @@ type CachedMatch = {
 // than this from its locked route for several consecutive checks.
 const ROUTE_LOCK_M = 80;
 const ROUTE_UNLOCK_MISSES = 3;
+const MATCH_CACHE_MS = 1000;
+const MATCH_CACHE_MOVE_M = 45;
+const LOCAL_SEARCH_POINTS = 96;
 
 type RouteLock = { route: TunnelRoute; shapeId?: string; consecutiveFar: number };
 
@@ -36,6 +42,9 @@ const RAIL_FILES = {
  */
 export class LiveTunnelIndex {
   private readonly routes: TunnelRoute[] = [];
+  private readonly routesByShapeId = new Map<string, TunnelRoute[]>();
+  private readonly routesByRouteId = new Map<string, TunnelRoute[]>();
+  private readonly routesByLine = new Map<string, TunnelRoute[]>();
   private readonly loading = new Map<string, Promise<void>>();
   private readonly matches = new Map<string, CachedMatch>();
   private readonly locks = new Map<string, RouteLock>();
@@ -54,19 +63,21 @@ export class LiveTunnelIndex {
     const cached = this.matches.get(vehicle.runId);
     if (
       cached &&
-      now - cached.checkedAt < 500 &&
-      haversineM(cached, vehicle.render) < 25
+      now - cached.checkedAt < MATCH_CACHE_MS &&
+      haversineM(cached, vehicle.render) < MATCH_CACHE_MOVE_M
     ) {
       return cached.inTunnel;
     }
 
-    const route = this.matchRoute(vehicle);
-    const inTunnel = route ? this.pointIsInTunnel(route, vehicle.render) : false;
+    const hit = this.matchRoute(vehicle, cached);
+    const route = hit?.route ?? null;
+    const inTunnel = hit ? this.pointIsInTunnel(hit.route, hit.pointIndex) : false;
     this.matches.set(vehicle.runId, {
       lat: vehicle.render.lat,
       lon: vehicle.render.lon,
       checkedAt: now,
       route,
+      routePointIndex: hit?.pointIndex ?? -1,
       inTunnel
     });
     return inTunnel;
@@ -86,7 +97,15 @@ export class LiveTunnelIndex {
           const feed = (await response.json()) as GtfsRouteFeed;
           // Keep every rail alignment with geometry (not only tunnelled ones): the
           // same index feeds the overground track layer and the tunnel layer.
-          this.routes.push(...(feed.routes ?? []).filter((route) => route.geoPoints?.length));
+          for (const route of (feed.routes ?? []).filter((candidate) => candidate.geoPoints?.length)) {
+            this.routes.push(route);
+            this.addRoute(this.routesByShapeId, route.shapeId, route);
+            this.addRoute(this.routesByRouteId, route.routeId, route);
+            this.addRoute(this.routesByLine, route.line, route);
+          }
+          // Runs checked while the lazy request was in flight cached "no route";
+          // invalidate those misses so the newly available index is used at once.
+          this.matches.clear();
           this.revision++;
         })
         .catch((error) => console.warn('Live 3D: could not load tunnel route data.', error));
@@ -95,7 +114,7 @@ export class LiveTunnelIndex {
     await load;
   }
 
-  private matchRoute(vehicle: TrackedVehicle): TunnelRoute | null {
+  private matchRoute(vehicle: TrackedVehicle, cached?: CachedMatch): RouteHit | null {
     const v = vehicle.data;
 
     // Keep a previously locked alignment unless the shapeId changed or the run has
@@ -103,20 +122,25 @@ export class LiveTunnelIndex {
     // route can flip between parallel tracks and fling a followed vehicle away.
     const lock = this.locks.get(vehicle.runId);
     if (lock && lock.shapeId === v.shapeId) {
-      if (this.routeDistanceM(lock.route, vehicle.render) <= ROUTE_LOCK_M) {
+      const hit = this.nearestPoint(
+        lock.route,
+        vehicle.render,
+        cached?.route === lock.route ? cached.routePointIndex : undefined
+      );
+      if (hit.distanceM <= ROUTE_LOCK_M) {
         lock.consecutiveFar = 0;
-        return lock.route;
+        return hit;
       }
-      if (++lock.consecutiveFar < ROUTE_UNLOCK_MISSES) return lock.route;
+      if (++lock.consecutiveFar < ROUTE_UNLOCK_MISSES) return hit;
     }
 
     // Cascade shapeId → routeId → line: the live TRIAS feed's shapeIds usually
     // don't match the GTFS route packages, so most vehicles fall through to a
     // line match. The closest-alignment pick below then resolves direction.
     let candidates: TunnelRoute[] = [];
-    if (v.shapeId) candidates = this.routes.filter((route) => route.shapeId === v.shapeId);
-    if (!candidates.length && v.routeId) candidates = this.routes.filter((route) => route.routeId === v.routeId);
-    if (!candidates.length && v.line) candidates = this.routes.filter((route) => route.line === v.line);
+    if (v.shapeId) candidates = this.routesByShapeId.get(v.shapeId) ?? [];
+    if (!candidates.length && v.routeId) candidates = this.routesByRouteId.get(v.routeId) ?? [];
+    if (!candidates.length && v.line) candidates = this.routesByLine.get(v.line) ?? [];
     if (!candidates.length) {
       this.locks.delete(vehicle.runId);
       return null;
@@ -124,33 +148,66 @@ export class LiveTunnelIndex {
 
     // A route id/line can have both directions. Pick the alignment closest to
     // the live fix, which also handles feeds whose shapeId is not exposed.
-    const best = candidates.reduce((closest, route) =>
-      this.routeDistanceM(route, vehicle.render) < this.routeDistanceM(closest, vehicle.render) ? route : closest
-    );
-    this.locks.set(vehicle.runId, { route: best, shapeId: v.shapeId, consecutiveFar: 0 });
+    let best: RouteHit | null = null;
+    for (const route of candidates) {
+      const hit = this.nearestPoint(route, vehicle.render);
+      if (!best || hit.distanceM < best.distanceM) best = hit;
+    }
+    if (!best) return null;
+    this.locks.set(vehicle.runId, { route: best.route, shapeId: v.shapeId, consecutiveFar: 0 });
     return best;
   }
 
-  private pointIsInTunnel(route: TunnelRoute, point: { lat: number; lon: number }): boolean {
-    const points = route.geoPoints;
+  private pointIsInTunnel(route: TunnelRoute, nearest: number): boolean {
     const mask = route.tunnelMask;
-    if (!points?.length || !mask?.length) return false;
-    let nearest = 0;
-    let distance = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < points.length; i++) {
-      const d = haversineM({ lat: points[i][0], lon: points[i][1] }, point);
-      if (d < distance) {
-        distance = d;
-        nearest = i;
-      }
-    }
+    if (nearest < 0 || !mask?.length) return false;
     return Boolean(mask[nearest] || mask[nearest - 1] || mask[nearest + 1]);
   }
 
-  private routeDistanceM(route: TunnelRoute, point: { lat: number; lon: number }): number {
+  private nearestPoint(
+    route: TunnelRoute,
+    point: { lat: number; lon: number },
+    hint?: number
+  ): RouteHit {
     const points = route.geoPoints ?? [];
-    let nearest = Number.POSITIVE_INFINITY;
-    for (const [lat, lon] of points) nearest = Math.min(nearest, haversineM({ lat, lon }, point));
-    return nearest;
+    if (!points.length) return { route, pointIndex: -1, distanceM: Number.POSITIVE_INFINITY };
+
+    const scan = (start: number, end: number): RouteHit => {
+      let pointIndex = start;
+      let distanceM = Number.POSITIVE_INFINITY;
+      for (let i = start; i < end; i++) {
+        const [lat, lon] = points[i];
+        const distance = haversineM({ lat, lon }, point);
+        if (distance < distanceM) {
+          distanceM = distance;
+          pointIndex = i;
+        }
+      }
+      return { route, pointIndex, distanceM };
+    };
+
+    if (hint !== undefined && hint >= 0 && points.length > LOCAL_SEARCH_POINTS * 2) {
+      const start = Math.max(0, hint - LOCAL_SEARCH_POINTS);
+      const end = Math.min(points.length, hint + LOCAL_SEARCH_POINTS + 1);
+      const local = scan(start, end);
+      // Normal motion stays near the previous shape index. A distant result or
+      // one pinned to the local window edge means a jump/rematch and earns one
+      // full scan, rather than making every regular refresh scan the whole route.
+      if (
+        local.distanceM <= ROUTE_LOCK_M * 1.5 &&
+        local.pointIndex > start &&
+        local.pointIndex < end - 1
+      ) {
+        return local;
+      }
+    }
+    return scan(0, points.length);
+  }
+
+  private addRoute(index: Map<string, TunnelRoute[]>, key: string | undefined, route: TunnelRoute): void {
+    if (!key) return;
+    const routes = index.get(key);
+    if (routes) routes.push(route);
+    else index.set(key, [route]);
   }
 }

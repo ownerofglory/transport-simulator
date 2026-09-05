@@ -142,8 +142,24 @@ export function Live3DView({
             View: {CAMERA_MODE_LABEL[cameraMode]}
           </button>
         )}
+        <button
+          className="lv-bar-btn lv-bar-icon"
+          onClick={() => sceneRef.current?.zoomBy(1.2)}
+          aria-label="Zoom out"
+          title="Zoom out (−)"
+        >
+          −
+        </button>
+        <button
+          className="lv-bar-btn lv-bar-icon"
+          onClick={() => sceneRef.current?.zoomBy(1 / 1.2)}
+          aria-label="Zoom in"
+          title="Zoom in (+)"
+        >
+          +
+        </button>
         <span className="lv-bar-hint">
-          {following ? 'C to switch view · drag to leave follow' : 'drag to pan · scroll to zoom · right-drag to rotate'}
+          {following ? 'C to switch view · drag to leave follow' : 'drag to pan · scroll or pinch to zoom · right-drag to rotate'}
         </span>
       </div>
       {selectedVehicle && (

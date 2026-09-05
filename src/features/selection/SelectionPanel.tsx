@@ -7,6 +7,7 @@ export function SelectionPanel({ catalog }: { catalog: BootstrapResult }) {
   const { state, dispatch } = useAppState();
   const route = catalog.routes.find((entry) => entry.id === state.selectedRouteId);
   const stations = route?.stations.slice(0, Math.max(1, route.stations.length - 1)) ?? [];
+  const routeLabels = routeOptionLabels(catalog.routes);
 
   return (
     <>
@@ -36,7 +37,7 @@ export function SelectionPanel({ catalog }: { catalog: BootstrapResult }) {
           onChange={(e) => dispatch({ type: 'route-selected', routeId: e.target.value })}
         >
           {catalog.routes.map((item) => (
-            <option key={item.id} value={item.id}>{item.line} to {item.destination}</option>
+            <option key={item.id} value={item.id}>{routeLabels.get(item.id)}</option>
           ))}
         </select>
         <select
@@ -69,4 +70,18 @@ export function SelectionPanel({ catalog }: { catalog: BootstrapResult }) {
       </div>
     </>
   );
+}
+
+/** Adds the route description only where line + destination would be ambiguous. */
+function routeOptionLabels(routes: BootstrapResult['routes']): Map<string, string> {
+  const counts = new Map<string, number>();
+  for (const route of routes) {
+    const key = `${route.line}\u0000${route.destination}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return new Map(routes.map((route) => {
+    const base = `${route.line} to ${route.destination}`;
+    const key = `${route.line}\u0000${route.destination}`;
+    return [route.id, counts.get(key)! > 1 ? `${base} · ${route.description}` : base];
+  }));
 }

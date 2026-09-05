@@ -156,6 +156,8 @@ export class Live3DScene {
   private dragButton = -1;
   private lastPointer = { x: 0, y: 0 };
   private pointerStart = { x: 0, y: 0 };
+  private readonly touchPointers = new Map<number, { x: number; y: number }>();
+  private pinchDistance = 0;
 
   constructor(
     private readonly container: HTMLElement,
@@ -165,7 +167,7 @@ export class Live3DScene {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(this.pixelRatio());
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.08; // slightly brighter, matching Explore
     container.appendChild(this.renderer.domElement);
@@ -361,7 +363,7 @@ export class Live3DScene {
       focus: this.target,
       followRouteId: this.followedRouteId()
     });
-    this.tracks.update(vehicles, this.altitudeM, this.terrain.revision);
+    this.tracks.update(vehicles, this.altitudeM, this.terrain.revision, this.target);
     // Near vehicles get full models; the rest fall back to instanced blocks.
     const modeled = this.models.update(
       this.opts.store,
@@ -518,23 +520,49 @@ export class Live3DScene {
     if (isTypingTarget(e.target)) return;
     if (e.key === 'c' || e.key === 'C') {
       if (this.followRunId) this.cycleCameraMode();
+    } else if (e.key === '+' || e.key === '=') {
+      this.zoomBy(1 / 1.2);
+    } else if (e.key === '-' || e.key === '_') {
+      this.zoomBy(1.2);
     }
   };
 
   private readonly onPointerDown = (e: PointerEvent) => {
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    if (e.pointerType === 'touch') {
+      this.touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.touchPointers.size === 2) {
+        this.pinchDistance = this.currentPinchDistance();
+        this.dragButton = -1;
+        return;
+      }
+    }
     this.dragButton = e.button;
     this.lastPointer = { x: e.clientX, y: e.clientY };
     this.pointerStart = this.lastPointer;
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   };
 
   private readonly onPointerUp = (e: PointerEvent) => {
+    const wasPinching = this.pinchDistance > 0;
+    if (e.pointerType === 'touch') {
+      this.touchPointers.delete(e.pointerId);
+      if (this.touchPointers.size < 2) this.pinchDistance = 0;
+    }
     const moved = Math.hypot(e.clientX - this.pointerStart.x, e.clientY - this.pointerStart.y);
-    if (this.dragButton === 0 && moved < 5) this.pick(e);
+    if (this.dragButton === 0 && moved < 5 && !wasPinching) this.pick(e);
     this.dragButton = -1;
   };
 
   private readonly onPointerMove = (e: PointerEvent) => {
+    if (e.pointerType === 'touch' && this.touchPointers.has(e.pointerId)) {
+      this.touchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.touchPointers.size >= 2) {
+        const nextDistance = this.currentPinchDistance();
+        if (this.pinchDistance > 0 && nextDistance > 0) this.zoomBy(this.pinchDistance / nextDistance);
+        this.pinchDistance = nextDistance;
+        return;
+      }
+    }
     if (this.dragButton < 0) return;
     const dx = e.clientX - this.lastPointer.x;
     const dy = e.clientY - this.lastPointer.y;
@@ -564,13 +592,22 @@ export class Live3DScene {
 
   private readonly onWheel = (e: WheelEvent) => {
     e.preventDefault();
+    this.zoomBy(e.deltaY > 0 ? 1.12 : 1 / 1.12);
+  };
+
+  /** Zooms the free camera; used by wheel, pinch, keyboard and visible controls. */
+  zoomBy(factor: number): void {
     this.cancelStationFlight();
     if (this.followRunId) this.opts.onStopFollow();
-    const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
     this.distance = THREE.MathUtils.clamp(this.distance * factor, MIN_DISTANCE_M, MAX_DISTANCE_M);
     this.cameraDirty = true;
     this.updateCamera();
-  };
+  }
+
+  private currentPinchDistance(): number {
+    const [a, b] = [...this.touchPointers.values()];
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+  }
 
   /**
    * Flies the free-orbit camera to a searched station and marks it on the ground.
@@ -801,5 +838,10 @@ export class Live3DScene {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setPixelRatio(this.pixelRatio());
   };
+
+  private pixelRatio(): number {
+    return Math.min(window.devicePixelRatio, window.innerWidth <= 760 ? 1.5 : 1.75);
+  }
 }

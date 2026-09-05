@@ -41,6 +41,12 @@ export function LiveModePanel({
   // Start folded on phones, where the panel would otherwise cover the map.
   const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 760px)').matches);
   useEffect(() => {
+    const media = window.matchMedia('(max-width: 760px)');
+    const onChange = (event: MediaQueryListEvent) => setCollapsed(event.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+  useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
@@ -92,6 +98,7 @@ export function LiveModePanel({
               className={`lv-chip ${on ? 'on' : 'off'} ${tierHidden ? 'tier-hidden' : ''}`}
               style={{ '--c': modeColor(mode) } as React.CSSProperties}
               title={tierHidden ? 'Zoom in to see this mode' : undefined}
+              aria-pressed={on}
               onClick={() => onToggleMode(mode)}
             >
               {modeLabel(mode)}
