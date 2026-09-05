@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { searchStations } from '../realtime/api';
 import type { RealtimeStation } from '../realtime/types';
 import type { LatLon } from './liveProjection';
@@ -39,6 +39,7 @@ export function LiveStationSearch({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [highlight, setHighlight] = useState(0);
+  const listboxId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   // Picking a station writes its name into the box; that must not re-open the
   // list with a fresh search for the name we just resolved.
@@ -140,6 +141,11 @@ export function LiveStationSearch({
         value={query}
         placeholder="Find a station…"
         aria-label="Find a station"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={showList}
+        aria-controls={listboxId}
+        aria-activedescendant={showList && results[highlight] ? `${listboxId}-option-${highlight}` : undefined}
         autoComplete="off"
         onChange={(e) => {
           pickedRef.current = null;
@@ -150,7 +156,7 @@ export function LiveStationSearch({
       />
       {loading && <span className="lv-search-spin" aria-hidden="true" />}
       {showList && (
-        <ul className="lv-search-list" role="listbox">
+        <ul id={listboxId} className="lv-search-list" role="listbox" aria-label="Station results">
           {error && !results.length ? (
             <li className="lv-search-empty">{error}</li>
           ) : (
@@ -158,6 +164,7 @@ export function LiveStationSearch({
               <li key={station.id}>
                 <button
                   type="button"
+                  id={`${listboxId}-option-${i}`}
                   role="option"
                   aria-selected={i === highlight}
                   className={`lv-search-item ${i === highlight ? 'on' : ''}`}

@@ -231,26 +231,27 @@ function concreteTexture(): THREE.CanvasTexture {
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d');
+  const random = seededRandom(0x51a7b0e);
   if (ctx) {
     ctx.fillStyle = '#8e8b85';
     ctx.fillRect(0, 0, size, size);
     // Vertical water/dirt streaks, the dominant feature of an old concrete lining.
     for (let i = 0; i < 90; i++) {
-      const x = Math.random() * size;
-      const width = 1 + Math.random() * 6;
-      const shade = 118 + Math.random() * 42;
-      ctx.fillStyle = `rgba(${shade}, ${shade - 3}, ${shade - 8}, ${0.12 + Math.random() * 0.3})`;
-      ctx.fillRect(x, Math.random() * size * 0.4, width, size);
+      const x = random() * size;
+      const width = 1 + random() * 6;
+      const shade = 118 + random() * 42;
+      ctx.fillStyle = `rgba(${shade}, ${shade - 3}, ${shade - 8}, ${0.12 + random() * 0.3})`;
+      ctx.fillRect(x, random() * size * 0.4, width, size);
     }
     // Formwork/segment joints across the bore.
     ctx.fillStyle = 'rgba(72, 70, 66, 0.55)';
     for (const y of [0, size / 2]) ctx.fillRect(0, y, size, 2);
     // Patchy staining.
     for (let i = 0; i < 40; i++) {
-      const shade = 96 + Math.random() * 60;
+      const shade = 96 + random() * 60;
       ctx.fillStyle = `rgba(${shade}, ${shade}, ${shade - 6}, 0.16)`;
       ctx.beginPath();
-      ctx.ellipse(Math.random() * size, Math.random() * size, 6 + Math.random() * 26, 10 + Math.random() * 40, 0, 0, Math.PI * 2);
+      ctx.ellipse(random() * size, random() * size, 6 + random() * 26, 10 + random() * 40, 0, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -260,16 +261,35 @@ function concreteTexture(): THREE.CanvasTexture {
   return texture;
 }
 
+/** Repeatable texture noise keeps screenshots and visual regressions stable. */
+function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = Math.imul(state ^ (state >>> 15), 1 | state);
+    state ^= state + Math.imul(state ^ (state >>> 7), 61 | state);
+    return ((state ^ (state >>> 14)) >>> 0) / 4_294_967_296;
+  };
+}
+
 export function createTunnelMaterials(): TunnelMaterials {
   const map = concreteTexture();
   const lining = new THREE.MeshStandardMaterial({
     map,
     color: 0x8a8781,
+    emissive: 0x181715,
+    emissiveIntensity: 0.28,
     roughness: 0.97,
     metalness: 0
     // Front side: the swept shell already has its normals facing inward.
   });
-  const portal = new THREE.MeshStandardMaterial({ map, color: 0x7d7a75, roughness: 0.96, side: THREE.DoubleSide });
+  const portal = new THREE.MeshStandardMaterial({
+    map,
+    color: 0x7d7a75,
+    emissive: 0x12110f,
+    emissiveIntensity: 0.2,
+    roughness: 0.96,
+    side: THREE.DoubleSide
+  });
   const luminaire = new THREE.MeshBasicMaterial({ color: 0xfff0cf });
   const fitting = new THREE.MeshStandardMaterial({ color: 0x2f3134, roughness: 0.7, metalness: 0.3 });
   const wire = new THREE.MeshStandardMaterial({ color: 0x6a6257, roughness: 0.5, metalness: 0.6 });

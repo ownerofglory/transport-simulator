@@ -38,6 +38,9 @@ const TUNNEL_DEPTH_M = 5;
 const BUILD_ALTITUDE_M = 900;
 // Ranges further than this from the camera focus are not worth their geometry.
 const BUILD_RADIUS_M = 1500;
+// Keep some geometry beyond the visible selection radius so a moving follow
+// camera does not expose a freshly clipped edge before the next recenter.
+const GEOMETRY_RADIUS_M = BUILD_RADIUS_M + 800;
 // Shared corridors collapse to one bore. The radius is wider than the track
 // layer's (which preserves genuinely parallel tracks) because two lines running
 // side by side underground share one physical tunnel.
@@ -50,8 +53,21 @@ const DEDUP = {
 };
 // Coarser rings for bores the camera only passes by.
 const SHELL_RING_SPACING_M = 18;
+// Reconsider which ranges are near after a meaningful pan, but never rebuild a
+// candidate list for the tiny focus changes caused by camera smoothing.
+const QUEUE_FOCUS_STEP_M = 300;
+// Geometry construction is synchronous. One range per frame spreads route-load
+// work across frames instead of turning the first low-altitude frame into a stall.
+const RANGE_BUILD_BUDGET = 1;
 
 type Route = { id: string; geoPoints?: [number, number][]; tunnelMask?: boolean[] };
+type TunnelTask = {
+  route: Route;
+  start: number;
+  end: number;
+  detail: 'full' | 'shell';
+  key: string;
+};
 
 export type LiveTunnelView = {
   /** Camera height above ground; the overview gate. */
@@ -72,6 +88,11 @@ export class LiveTunnelLayer {
   // Where the current set of bores was built around, so panning across the city
   // cannot accumulate every tunnel it ever passed.
   private builtFocus: THREE.Vector3 | null = null;
+  private queuedFocus: THREE.Vector3 | null = null;
+  private queuedIndexVersion = -1;
+  private vehicleSignature = -1;
+  private pending: TunnelTask[] = [];
+  private pendingIndex = 0;
   // One material/texture set shared by every bore, kept across rebuilds.
   private materials: TunnelMaterials | null = null;
 
@@ -106,17 +127,46 @@ export class LiveTunnelLayer {
     if (view.altitudeM > BUILD_ALTITUDE_M) return;
     this.builtFocus ??= view.focus.clone();
 
-    // The followed route builds first so it claims its corridor at full detail
-    // before any neighbour shells it.
+    const vehicleSignature = hashRunIds(vehicles);
+    const needsQueue =
+      vehicleSignature !== this.vehicleSignature ||
+      this.index.version !== this.queuedIndexVersion ||
+      !this.queuedFocus ||
+      horizontalDistance(this.queuedFocus, view.focus) >= QUEUE_FOCUS_STEP_M;
+    if (needsQueue) this.queueRoutes(vehicles, view, vehicleSignature);
+
+    for (let i = 0; i < RANGE_BUILD_BUDGET && this.pendingIndex < this.pending.length; i++) {
+      this.buildTask(this.pending[this.pendingIndex++], view);
+    }
+  }
+
+  /** Resolves routes only when the fleet/index/focus meaningfully changes. */
+  private queueRoutes(vehicles: TrackedVehicle[], view: LiveTunnelView, vehicleSignature: number): void {
     const routes = new Map<string, Route>();
     for (const vehicle of vehicles) {
       const route = this.index.routeFor(vehicle) as Route | null;
       if (route?.geoPoints?.length) routes.set(route.id, route);
     }
+    // The followed route builds first so it claims its corridor at full detail
+    // before any neighbour shells it.
     const ordered = [...routes.values()].sort((a, b) =>
       Number(b.id === view.followRouteId) - Number(a.id === view.followRouteId)
     );
-    for (const route of ordered) this.buildRoute(route, view);
+    const pending: TunnelTask[] = [];
+    for (const route of ordered) {
+      const mask = route.tunnelMask ?? [];
+      if (!mask.some(Boolean)) continue;
+      const detail = route.id === view.followRouteId ? 'full' : 'shell';
+      for (const [start, end] of ranges(mask)) {
+        const key = `${route.id}:${start}`;
+        if (end - start >= 1 && !this.built.has(key)) pending.push({ route, start, end, detail, key });
+      }
+    }
+    this.pending = pending;
+    this.pendingIndex = 0;
+    this.vehicleSignature = vehicleSignature;
+    this.queuedIndexVersion = this.index.version;
+    this.queuedFocus = view.focus.clone();
   }
 
   /** Drops all built linings so they can be rebuilt at corrected heights. */
@@ -129,6 +179,11 @@ export class LiveTunnelLayer {
     this.built.clear();
     this.occupancy.clear();
     this.builtFocus = null;
+    this.queuedFocus = null;
+    this.queuedIndexVersion = -1;
+    this.vehicleSignature = -1;
+    this.pending = [];
+    this.pendingIndex = 0;
   }
 
   dispose(): void {
@@ -142,35 +197,26 @@ export class LiveTunnelLayer {
     this.group.removeFromParent();
   }
 
-  private buildRoute(route: Route, view: LiveTunnelView): void {
+  private buildTask(task: TunnelTask, view: LiveTunnelView): void {
+    const { route, start, end, detail, key } = task;
+    if (this.built.has(key)) return;
     const points = route.geoPoints ?? [];
-    const mask = route.tunnelMask ?? [];
-    if (points.length < 2 || !mask.some(Boolean)) return;
-
-    const detail = route.id === view.followRouteId ? 'full' : 'shell';
-
-    for (const [start, end] of ranges(mask)) {
-      if (end - start < 1) continue;
-      // A change of follow target clears everything, so a range's detail never
-      // has to be revised in place: built is built.
-      const key = `${route.id}:${start}`;
-      if (this.built.has(key)) continue;
-
-      const routePoints = points.slice(Math.max(0, start - 1), Math.min(points.length, end + 2));
-      // Smooth the bore centerline the same way as the overground rails and the
-      // motion path, so a followed vehicle stays centered in the tunnel on curves.
-      const curvePoints = smoothTrackXZ(
-        routePoints.map(([lat, lon]) => this.projection.project(lat, lon))
-      );
-      if (curvePoints.length < 2) continue;
-      if (!nearFocus(curvePoints, view.focus, BUILD_RADIUS_M)) continue;
-      for (const p of curvePoints) p.y = this.groundHeightAt(p.x, p.z) - TUNNEL_DEPTH_M;
-
-      for (const run of this.occupancy.claimRuns(curvePoints)) {
-        this.buildBore(run, detail);
-      }
-      this.built.add(key);
+    const routePoints = points.slice(Math.max(0, start - 1), Math.min(points.length, end + 2));
+    // Smooth the bore centerline the same way as the overground rails and the
+    // motion path, so a followed vehicle stays centered in the tunnel on curves.
+    const curvePoints = smoothTrackXZ(
+      routePoints.map(([lat, lon]) => this.projection.project(lat, lon))
+    );
+    if (curvePoints.length < 2 || !nearFocus(curvePoints, view.focus, BUILD_RADIUS_M)) return;
+    // A GTFS tunnel range can span kilometres. Clip geometry to the camera's
+    // neighbourhood before creating the expensive lining/services meshes.
+    for (const local of nearFocusRuns(curvePoints, view.focus, GEOMETRY_RADIUS_M)) {
+      for (const point of local) point.y = this.groundHeightAt(point.x, point.z) - TUNNEL_DEPTH_M;
+      for (const run of this.occupancy.claimRuns(local)) this.buildBore(run, detail);
     }
+    // A change of follow target clears everything, so a range's detail never
+    // has to be revised in place: built is built.
+    this.built.add(key);
   }
 
   private buildBore(curvePoints: THREE.Vector3[], detail: 'full' | 'shell'): void {
@@ -195,6 +241,18 @@ function horizontalDistance(a: THREE.Vector3, b: THREE.Vector3): number {
   return Math.hypot(a.x - b.x, a.z - b.z);
 }
 
+/** Stable, allocation-free fingerprint for the currently visible run set. */
+function hashRunIds(vehicles: TrackedVehicle[]): number {
+  let hash = 2166136261;
+  for (const vehicle of vehicles) {
+    for (let i = 0; i < vehicle.runId.length; i++) {
+      hash ^= vehicle.runId.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+  }
+  return hash ^ vehicles.length;
+}
+
 /** True when any sampled point of the centerline is within radius of the focus. */
 function nearFocus(points: THREE.Vector3[], focus: THREE.Vector3, radiusM: number): boolean {
   const squared = radiusM * radiusM;
@@ -206,6 +264,25 @@ function nearFocus(points: THREE.Vector3[], focus: THREE.Vector3, radiusM: numbe
     if (dx * dx + dz * dz <= squared) return true;
   }
   return false;
+}
+
+/** Contiguous pieces inside a radius, retaining one point beyond each edge. */
+function nearFocusRuns(points: THREE.Vector3[], focus: THREE.Vector3, radiusM: number): THREE.Vector3[][] {
+  const result: THREE.Vector3[][] = [];
+  const squared = radiusM * radiusM;
+  let start = -1;
+  for (let i = 0; i < points.length; i++) {
+    const dx = points[i].x - focus.x;
+    const dz = points[i].z - focus.z;
+    const near = dx * dx + dz * dz <= squared;
+    if (near && start < 0) start = Math.max(0, i - 1);
+    if (!near && start >= 0) {
+      result.push(points.slice(start, Math.min(points.length, i + 1)));
+      start = -1;
+    }
+  }
+  if (start >= 0) result.push(points.slice(start));
+  return result.filter((run) => run.length >= 2);
 }
 
 function ranges(mask: boolean[]): Array<[number, number]> {

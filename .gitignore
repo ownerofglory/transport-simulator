@@ -6,6 +6,8 @@ dist/
 .env.local
 .env.*.local
 .idea/
+.DS_Store
+*.bak
 
 # Visual smoke-test screenshots
 visual-smoke-output/

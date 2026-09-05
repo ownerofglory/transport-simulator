@@ -44,6 +44,13 @@ export function AppShell() {
   // Photo activation is owned by the runtime; the shell only mirrors it for the overlay.
   const [photoActive, setPhotoActive] = useState(false);
 
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 760px)');
+    const onChange = (event: MediaQueryListEvent) => setCollapsed(event.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+
   const onRuntime = useCallback((next: SimulatorRuntime | null) => setRuntime(next), []);
   const catalogRoute = catalog.routes.find((entry) => entry.id === state.selectedRouteId);
   // Realtime routes are Stuttgart-referenced, so simulate them against the Stuttgart city context.

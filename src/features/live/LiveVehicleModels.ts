@@ -20,7 +20,7 @@ const DEG = Math.PI / 180;
 // Below this camera altitude, nearby vehicles upgrade to full models.
 const MODEL_ALT_M = 900;
 const MODEL_RADIUS_M = 1400;
-const MODEL_CAP = 45;
+const MODEL_CAP = 32;
 // Labels fade in a bit higher than models and cover a wider ring.
 const LABEL_ALT_M = 2400;
 const LABEL_RADIUS_M = 2600;
@@ -258,6 +258,7 @@ export class LiveVehicleModels {
         makeInteriorDisplayMaterial: () => new THREE.MeshBasicMaterial({ color: 0x0b0f14 })
       });
       root = instance.root;
+      prepareOverviewVehicle(root);
       root.visible = false; // template stays hidden; only clones are shown
       // Tag cars so clones can recover the ordered car list (used for articulation).
       instance.cars.forEach((car, index) => {
@@ -292,4 +293,20 @@ export class LiveVehicleModels {
     }
     return sprite;
   }
+}
+
+/**
+ * Overview vehicles reuse the complete registered mesh, but never its real
+ * lights. Every cloned PointLight/SpotLight consumes shader uniforms even when
+ * switched off; a few dozen vehicles can otherwise make the whole Live scene
+ * fail to compile on common GPUs. The dedicated followed vehicle is built
+ * separately and keeps the complete lighting and interior presentation.
+ */
+export function prepareOverviewVehicle(root: THREE.Object3D): void {
+  const lights: THREE.Light[] = [];
+  root.traverse((object) => {
+    if (object instanceof THREE.Light) lights.push(object);
+    if (object instanceof THREE.Mesh) object.castShadow = false;
+  });
+  for (const light of lights) light.removeFromParent();
 }
