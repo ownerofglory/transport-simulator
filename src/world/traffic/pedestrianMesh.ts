@@ -10,10 +10,15 @@ export type PedestrianRig = {
   root: THREE.Object3D;
   /** Bobs vertically; everything visible hangs off it. */
   body: THREE.Object3D;
+  head: THREE.Object3D;
   legs: [THREE.Object3D, THREE.Object3D];
   arms: [THREE.Object3D, THREE.Object3D];
   /** Height scale, so a crowd isn't all one size. */
   scale: number;
+  /** Per-person gait offsets keep a crowd from walking in lockstep. */
+  phaseOffset: number;
+  strideScale: number;
+  swayScale: number;
 };
 
 // Geometry/materials are module singletons, shared by every spawned/pooled
@@ -103,7 +108,17 @@ export function buildPedestrian(): PedestrianRig {
 
   const scale = 0.9 + Math.random() * 0.18;
   root.scale.setScalar(scale);
-  return { root, body, legs, arms, scale };
+  return {
+    root,
+    body,
+    head,
+    legs,
+    arms,
+    scale,
+    phaseOffset: Math.random() * Math.PI * 2,
+    strideScale: 0.9 + Math.random() * 0.2,
+    swayScale: 0.75 + Math.random() * 0.5
+  };
 }
 
 // One full stride (both legs) per this much ground covered. Tied to distance
@@ -112,7 +127,7 @@ const STRIDE_M = 0.78;
 
 /** Swings a pedestrian's limbs for the distance they have walked. */
 export function animatePedestrian(rig: PedestrianRig, distanceM: number): void {
-  const phase = (distanceM / (STRIDE_M * rig.scale)) * Math.PI;
+  const phase = (distanceM / (STRIDE_M * rig.scale * rig.strideScale)) * Math.PI + rig.phaseOffset;
   const swing = Math.sin(phase);
   rig.legs[0].rotation.x = swing * 0.52;
   rig.legs[1].rotation.x = -swing * 0.52;
@@ -121,4 +136,6 @@ export function animatePedestrian(rig: PedestrianRig, distanceM: number): void {
   rig.arms[1].rotation.x = swing * 0.34;
   // The body rises on each footfall — twice per stride.
   rig.body.position.y = Math.abs(Math.cos(phase)) * 0.022;
+  rig.body.rotation.z = Math.sin(phase * 0.5) * 0.018 * rig.swayScale;
+  rig.head.rotation.y = Math.sin(phase * 0.25 + rig.phaseOffset) * 0.12;
 }

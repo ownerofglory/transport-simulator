@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPathGeometry, poseAtDistance, lerpAt, pickHeightAnchors } from './trafficPath';
+import { buildPathGeometry, dampAngle, poseAtDistance, lerpAt, pickHeightAnchors, shortestAngleDelta } from './trafficPath';
 
 describe('buildPathGeometry', () => {
   it('accumulates straight-line distance and reports the total', () => {
@@ -47,6 +47,21 @@ describe('poseAtDistance', () => {
   it('clamps beyond either end instead of extrapolating', () => {
     expect(poseAtDistance(path, -5)).toMatchObject({ x: 0, z: 0 });
     expect(poseAtDistance(path, 999)).toMatchObject({ x: 10, z: 10 });
+  });
+});
+
+describe('angle smoothing', () => {
+  it('turns across the wrap boundary by the shortest path', () => {
+    expect(shortestAngleDelta(Math.PI - 0.1, -Math.PI + 0.1)).toBeCloseTo(0.2, 6);
+    expect(shortestAngleDelta(-Math.PI + 0.1, Math.PI - 0.1)).toBeCloseTo(-0.2, 6);
+  });
+
+  it('converges without overshooting and is independent of frame subdivision', () => {
+    const oneStep = dampAngle(0, Math.PI / 2, 6, 1 / 30);
+    const twoSteps = dampAngle(dampAngle(0, Math.PI / 2, 6, 1 / 60), Math.PI / 2, 6, 1 / 60);
+    expect(oneStep).toBeGreaterThan(0);
+    expect(oneStep).toBeLessThan(Math.PI / 2);
+    expect(twoSteps).toBeCloseTo(oneStep, 6);
   });
 });
 

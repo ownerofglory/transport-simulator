@@ -26,6 +26,17 @@ export function buildPathGeometry(points: XZ[]): PathGeometry {
 
 export type PathPose = { x: number; z: number; headingRad: number };
 
+/** Signed shortest turn from one yaw to another, including across the -PI/PI seam. */
+export function shortestAngleDelta(fromRad: number, toRad: number): number {
+  return Math.atan2(Math.sin(toRad - fromRad), Math.cos(toRad - fromRad));
+}
+
+/** Frame-rate-independent angular smoothing for routed actors. */
+export function dampAngle(currentRad: number, targetRad: number, response: number, dtSec: number): number {
+  const blend = 1 - Math.exp(-response * Math.max(0, dtSec));
+  return currentRad + shortestAngleDelta(currentRad, targetRad) * blend;
+}
+
 /** Position + direction of travel at `distM` along a path, clamped to its ends. */
 export function poseAtDistance(path: PathGeometry, distM: number): PathPose {
   const { xs, zs, cum } = path;

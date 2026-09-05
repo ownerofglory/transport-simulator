@@ -50,6 +50,7 @@ export function setTrafficLampsOn(on: boolean): void {
 // a few centimetres past the raw profile, so a shallow lamp sitting on the
 // profile edge ends up buried inside it.
 const lampGeometry = new THREE.BoxGeometry(0.3, 0.13, 0.16);
+const carDetailGeometry = new THREE.BoxGeometry(1, 1, 1);
 
 // ---------------------------------------------------------------------------
 // Car — four body variants sharing one builder, so traffic isn't the same
@@ -251,6 +252,37 @@ function buildCar(): TrafficRig {
   const skirt = new THREE.Mesh(variant.skirtGeometry, trimMaterial);
   skirt.position.y = variant.skirt.yM;
   root.add(body, glass, skirt);
+
+  // Mirrors, number-plate holders and glazing pillars share one unit cube and
+  // one instanced draw call. They sharpen the silhouette without multiplying
+  // the per-car mesh count.
+  const details = new THREE.InstancedMesh(carDetailGeometry, trimMaterial, 6);
+  const matrix = new THREE.Matrix4();
+  const quaternion = new THREE.Quaternion();
+  const position = new THREE.Vector3();
+  const scale = new THREE.Vector3();
+  let detailIndex = 0;
+  for (const side of [-1, 1]) {
+    position.set(side * (variant.widthM / 2 + 0.07), 1.12, 0.52);
+    scale.set(0.13, 0.1, 0.24);
+    matrix.compose(position, quaternion, scale);
+    details.setMatrixAt(detailIndex++, matrix);
+  }
+  for (const z of [variant.headlamp[2] + 0.02, variant.taillamp[2] - 0.02]) {
+    position.set(0, 0.66, z);
+    scale.set(0.52, 0.12, 0.035);
+    matrix.compose(position, quaternion, scale);
+    details.setMatrixAt(detailIndex++, matrix);
+  }
+  for (const z of [0.55, -0.72]) {
+    position.set(0, 1.24, z);
+    scale.set(0.035, 0.46, 0.055);
+    matrix.compose(position, quaternion, scale);
+    details.setMatrixAt(detailIndex++, matrix);
+  }
+  details.name = 'Traffic car mirrors, plates and window pillars';
+  details.instanceMatrix.needsUpdate = true;
+  root.add(details);
 
   for (const [[x, y, z], material] of [
     [variant.headlamp, headlampMaterial],

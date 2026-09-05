@@ -1,5 +1,13 @@
 import * as THREE from 'three';
-import { buildPathGeometry, lerpAt, pickHeightAnchors, poseAtDistance, type PathGeometry } from './trafficPath';
+import {
+  buildPathGeometry,
+  dampAngle,
+  lerpAt,
+  pickHeightAnchors,
+  poseAtDistance,
+  shortestAngleDelta,
+  type PathGeometry
+} from './trafficPath';
 import { flatDistanceM, randomGeoPointNear, type LatLon } from './trafficGeo';
 import { fetchRoadRoute } from './roadRoutingClient';
 import { animateTrafficRig, pickWeightedKind, setTrafficLampsOn, type TrafficKind, type TrafficKindSpec, type TrafficRig } from './trafficVehicleKinds';
@@ -17,6 +25,9 @@ export type RoadTrafficContext = {
 // with route length.
 const TARGET_VEHICLE_COUNT = 28;
 const ACTIVE_RADIUS_M = 1200; // vehicles beyond this from the player despawn
+const RENDER_RADIUS_M = 950; // retain routed actors just outside the visible street scene
+const FULL_ANIMATION_RADIUS_M = 280;
+const FAR_ANIMATION_INTERVAL = 4;
 const SPAWN_RADIUS_M = 900; // random origin/destination are sampled within this
 const MIN_TRIP_SEPARATION_M = 250; // avoid degenerate near-zero-length trips
 const MAX_CONCURRENT_REQUESTS = 3;
@@ -32,6 +43,8 @@ type TrafficVehicle = {
   heightAnchorM: Float64Array;
   distanceM: number;
   speedMps: number;
+  cruiseSpeedMps: number;
+  headingRad: number;
 };
 
 /**
@@ -48,6 +61,7 @@ export class RoadTrafficSystem {
   private readonly abortControllers = new Set<AbortController>();
   private pendingRequests = 0;
   private spawnCooldownS = 0;
+  private frameIndex = 0;
   private disposed = false;
   private readonly centerWorld = new THREE.Vector2(0, 0);
 
@@ -58,11 +72,13 @@ export class RoadTrafficSystem {
   /** Advances every vehicle and (rate-limited) tries to keep the population near target. */
   update(centerWorld: THREE.Vector3, centerGeo: LatLon | undefined, dtSec: number): void {
     if (!centerGeo) return;
+    this.frameIndex++;
     this.centerWorld.set(centerWorld.x, centerWorld.z);
+    const stepSec = Math.min(Math.max(dtSec, 0), 0.2);
 
     for (let i = this.active.length - 1; i >= 0; i--) {
       const vehicle = this.active[i];
-      vehicle.distanceM += vehicle.speedMps * dtSec;
+      vehicle.distanceM += vehicle.speedMps * stepSec;
       const pose = poseAtDistance(vehicle.path, vehicle.distanceM);
       const dx = pose.x - this.centerWorld.x;
       const dz = pose.z - this.centerWorld.y;
@@ -72,10 +88,29 @@ export class RoadTrafficSystem {
         this.despawn(i);
         continue;
       }
+
+      const distanceSq = dx * dx + dz * dz;
+      const visible = distanceSq <= RENDER_RADIUS_M * RENDER_RADIUS_M;
+      vehicle.rig.root.visible = visible;
+
+      // Look a little ahead so a car eases into a bend instead of snapping at
+      // a polyline vertex. Sharp bends and the end of a route also trim speed.
+      const lookAheadM = Math.min(6, Math.max(2, vehicle.speedMps * 0.45));
+      const targetHeading = poseAtDistance(vehicle.path, vehicle.distanceM + lookAheadM).headingRad;
+      const turnRad = Math.abs(shortestAngleDelta(vehicle.headingRad, targetHeading));
+      const turnScale = 1 - Math.min(turnRad / (Math.PI / 2), 1) * 0.38;
+      const remainingM = vehicle.path.total - vehicle.distanceM;
+      const arrivalScale = THREE.MathUtils.clamp(remainingM / 28, 0.28, 1);
+      const targetSpeedMps = vehicle.cruiseSpeedMps * Math.min(turnScale, arrivalScale);
+      vehicle.speedMps += (targetSpeedMps - vehicle.speedMps) * (1 - Math.exp(-2.4 * stepSec));
+      vehicle.headingRad = dampAngle(vehicle.headingRad, targetHeading, 7.5, stepSec);
+
       const y = lerpAt(vehicle.heightAnchorAtM, vehicle.heightAnchorM, vehicle.distanceM);
       vehicle.rig.root.position.set(pose.x, y, pose.z);
-      vehicle.rig.root.rotation.y = pose.headingRad;
-      animateTrafficRig(vehicle.rig, vehicle.distanceM);
+      vehicle.rig.root.rotation.y = vehicle.headingRad;
+      if (visible && (distanceSq <= FULL_ANIMATION_RADIUS_M * FULL_ANIMATION_RADIUS_M || this.frameIndex % FAR_ANIMATION_INTERVAL === 0)) {
+        animateTrafficRig(vehicle.rig, vehicle.distanceM);
+      }
     }
 
     this.spawnCooldownS -= dtSec;
@@ -140,7 +175,8 @@ export class RoadTrafficSystem {
     if (this.disposed) return;
 
     const rig = this.acquireRig(spec);
-    const speedMps = THREE.MathUtils.lerp(spec.minSpeedMps, spec.maxSpeedMps, Math.random());
+    const cruiseSpeedMps = THREE.MathUtils.lerp(spec.minSpeedMps, spec.maxSpeedMps, Math.random());
+    const headingRad = poseAtDistance(path, 0).headingRad;
     this.root.add(rig.root);
     this.active.push({
       spec,
@@ -149,7 +185,9 @@ export class RoadTrafficSystem {
       heightAnchorAtM: Float64Array.from(anchors.map((a) => a.atM)),
       heightAnchorM: Float64Array.from(heights),
       distanceM: 0,
-      speedMps
+      speedMps: cruiseSpeedMps,
+      cruiseSpeedMps,
+      headingRad
     });
   }
 

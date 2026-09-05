@@ -3155,14 +3155,44 @@ class ProceduralTransitVehicleFactory {
     const interiorFloorMat = new THREE.MeshStandardMaterial({ color: 0x686d6d, roughness: 0.94 });
     const rubberMat = new THREE.MeshStandardMaterial({ color: 0x11151b, roughness: 0.8 });
     const metalMat = new THREE.MeshStandardMaterial({ color: 0x8a8f91, roughness: 0.4, metalness: 0.65 });
+    const doorButtonMat = new THREE.MeshStandardMaterial({
+      color: 0x5b7754,
+      emissive: 0x84c66b,
+      emissiveIntensity: 0.32,
+      roughness: 0.42
+    });
     const interiorDisplayMat = this.context.makeInteriorDisplayMaterial();
+    const destinationMaterial = new THREE.MeshBasicMaterial({
+      map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 512, height: 128, bg: '#111', fg: '#ffd900' }),
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4
+    });
 
     const doubleFormation = isStadtbahnDoubleFormation(this.context.route.line);
     const carCenters = doubleFormation ? [-29.85, -9.95, 9.95, 29.85] : [-9.95, 9.95];
     const cabDirections: (-1 | 1)[] = doubleFormation ? [-1, 1, -1, 1] : [-1, 1];
     this.trainHalfLengthM = doubleFormation ? 40.05 : 20.15;
     carCenters.forEach((center, index) => {
-      this.cars.push(this.addTangoCar(center, cabDirections[index], bodyMat, glassMat, doorMat, blackMat, roofMat, interiorWallMat, interiorFloorMat, metalMat, interiorDisplayMat));
+      this.cars.push(
+        this.addTangoCar(
+          center,
+          cabDirections[index],
+          bodyMat,
+          glassMat,
+          doorMat,
+          blackMat,
+          roofMat,
+          interiorWallMat,
+          interiorFloorMat,
+          metalMat,
+          doorButtonMat,
+          interiorDisplayMat,
+          destinationMaterial
+        )
+      );
     });
 
     for (const z of doubleFormation ? [-19.9, 19.9] : [0]) {
@@ -3190,14 +3220,6 @@ class ProceduralTransitVehicleFactory {
     couplerRear.rotation.y = Math.PI;
     this.root.add(couplerRear);
 
-    const destinationMaterial = new THREE.MeshBasicMaterial({
-      map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 512, height: 128, bg: '#111', fg: '#ffd900' }),
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      polygonOffset: true,
-      polygonOffsetFactor: -4,
-      polygonOffsetUnits: -4
-    });
     // The route display sits in the black mask band above the raked windscreen, so the
     // assembly is yawed to face outward and tilted to match the nose rake.
     const noseTilt = 0.258;
@@ -3278,7 +3300,9 @@ class ProceduralTransitVehicleFactory {
     interiorWallMat: THREE.Material,
     interiorFloorMat: THREE.Material,
     metalMat: THREE.Material,
-    interiorDisplayMat: THREE.Material
+    doorButtonMat: THREE.Material,
+    interiorDisplayMat: THREE.Material,
+    destinationMaterial: THREE.Material
   ): THREE.Group {
     const car = new THREE.Group();
     car.name = `Articulated car ${centerZ}`;
@@ -3326,11 +3350,27 @@ class ProceduralTransitVehicleFactory {
     windscreen.rotation.x = faceTilt;
     car.add(windscreen);
 
-    const wiper = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.8, 0.03), blackMat);
-    wiper.position.set(-0.3, 1.78, cabDirection * 10.0);
-    wiper.rotation.set(faceTilt, 0, cabDirection * 0.5);
-    car.add(wiper);
-    this.cabShells.push(wiper);
+    const windshieldTrim = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), blackMat, 3);
+    windshieldTrim.name = 'SSB windshield divider and dual wipers';
+    const windshieldMatrix = new THREE.Matrix4();
+    const windshieldPosition = new THREE.Vector3();
+    const windshieldRotation = new THREE.Quaternion();
+    const windshieldScale = new THREE.Vector3();
+    for (const [index, x] of [-0.34, 0.34].entries()) {
+      windshieldPosition.set(x, 1.78, cabDirection * 10.0);
+      windshieldRotation.setFromEuler(new THREE.Euler(faceTilt, 0, (index === 0 ? 1 : -1) * cabDirection * 0.48));
+      windshieldScale.set(0.035, 0.82, 0.03);
+      windshieldMatrix.compose(windshieldPosition, windshieldRotation, windshieldScale);
+      windshieldTrim.setMatrixAt(index, windshieldMatrix);
+    }
+    windshieldPosition.set(0, 2.18, cabDirection * 10.0);
+    windshieldRotation.setFromEuler(new THREE.Euler(faceTilt, 0, 0));
+    windshieldScale.set(0.032, 0.96, 0.028);
+    windshieldMatrix.compose(windshieldPosition, windshieldRotation, windshieldScale);
+    windshieldTrim.setMatrixAt(2, windshieldMatrix);
+    windshieldTrim.instanceMatrix.needsUpdate = true;
+    car.add(windshieldTrim);
+    this.cabShells.push(windshieldTrim);
 
     const bumper = new THREE.Mesh(new THREE.BoxGeometry(2.24, 0.24, 0.14), blackMat);
     bumper.position.set(0, 0.5, cabDirection * 10.06);
@@ -3468,6 +3508,35 @@ class ProceduralTransitVehicleFactory {
       car.add(sideGroup);
     }
 
+    const sideDisplays = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.54, 0.29), destinationMaterial, 2);
+    const sideDisplayMatrix = new THREE.Matrix4();
+    const sideDisplayPosition = new THREE.Vector3();
+    const sideDisplayRotation = new THREE.Quaternion();
+    for (const [index, side] of [-1, 1].entries()) {
+      sideDisplayPosition.set(side * 1.408, 2.5, -0.75);
+      sideDisplayRotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), side > 0 ? Math.PI / 2 : -Math.PI / 2);
+      sideDisplayMatrix.compose(sideDisplayPosition, sideDisplayRotation, new THREE.Vector3(1, 1, 1));
+      sideDisplays.setMatrixAt(index, sideDisplayMatrix);
+    }
+    sideDisplays.name = 'SSB exterior side destination displays';
+    sideDisplays.renderOrder = 20;
+    sideDisplays.instanceMatrix.needsUpdate = true;
+    car.add(sideDisplays);
+
+    const doorButtons = new THREE.InstancedMesh(new THREE.SphereGeometry(0.065, 10, 8), doorButtonMat, 4);
+    const doorButtonMatrix = new THREE.Matrix4();
+    let buttonIndex = 0;
+    for (const side of [-1, 1]) {
+      for (const z of [-5.55, 3.15]) {
+        doorButtonMatrix.makeTranslation(side * 1.425, 1.64, z + 0.62);
+        doorButtons.setMatrixAt(buttonIndex++, doorButtonMatrix);
+      }
+    }
+    doorButtons.name = 'SSB illuminated exterior door buttons';
+    doorButtons.userData.liveOverviewOmit = true;
+    doorButtons.instanceMatrix.needsUpdate = true;
+    car.add(doorButtons);
+
     const floor = new THREE.Mesh(new THREE.BoxGeometry(2.28, 0.08, 16.6), interiorFloorMat);
     floor.position.y = 1.02;
     car.add(floor);
@@ -3475,30 +3544,68 @@ class ProceduralTransitVehicleFactory {
     this.addPassengerSeating(car, cabDirection, metalMat, doorMat);
     this.addInteriorDisplays(car, cabDirection, interiorDisplayMat, blackMat);
 
-    for (const z of [-5.1, 0, 5.1]) {
-      const hvac = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.24, 2.25), roofMat);
-      hvac.position.set(0, 3.57, z);
-      car.add(hvac);
+    const hvacCenters = [-5.1, 0, 5.1];
+    const hvacUnits = new THREE.InstancedMesh(new THREE.BoxGeometry(1.72, 0.24, 2.25), roofMat, hvacCenters.length);
+    const hvacMatrix = new THREE.Matrix4();
+    hvacCenters.forEach((z, index) => {
+      hvacMatrix.makeTranslation(0, 3.57, z);
+      hvacUnits.setMatrixAt(index, hvacMatrix);
+    });
+    hvacUnits.name = 'SSB roof HVAC units';
+    hvacUnits.instanceMatrix.needsUpdate = true;
+    car.add(hvacUnits);
+
+    const hvacVents = new THREE.InstancedMesh(new THREE.BoxGeometry(1.42, 0.03, 0.07), blackMat, hvacCenters.length * 5);
+    let ventIndex = 0;
+    for (const z of hvacCenters) {
       for (let vent = -2; vent <= 2; vent++) {
-        const slat = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.03, 0.07), blackMat);
-        slat.position.set(0, 3.7, z + vent * 0.28);
-        car.add(slat);
+        hvacMatrix.makeTranslation(0, 3.7, z + vent * 0.28);
+        hvacVents.setMatrixAt(ventIndex++, hvacMatrix);
       }
     }
+    hvacVents.name = 'SSB roof HVAC vent slats';
+    hvacVents.instanceMatrix.needsUpdate = true;
+    car.add(hvacVents);
 
-    for (const z of [-5.8, 5.8]) {
-      const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.38, 1.85), blackMat);
-      bogie.position.set(0, 0.43, z);
-      car.add(bogie);
+    const roofInsulators = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.07, 0.1, 0.2, 8), doorMat, 6);
+    const roofMatrix = new THREE.Matrix4();
+    let insulatorIndex = 0;
+    for (const x of [-0.65, 0.65]) {
+      for (const z of [-3.55, 0, 3.55]) {
+        roofMatrix.makeTranslation(x, 3.62, z);
+        roofInsulators.setMatrixAt(insulatorIndex++, roofMatrix);
+      }
+    }
+    roofInsulators.name = 'SSB roof electrical insulators';
+    roofInsulators.userData.liveOverviewOmit = true;
+    roofInsulators.instanceMatrix.needsUpdate = true;
+    car.add(roofInsulators);
+
+    const bogieCenters = [-5.8, 5.8];
+    const bogies = new THREE.InstancedMesh(new THREE.BoxGeometry(2.25, 0.38, 1.85), blackMat, bogieCenters.length);
+    const runningGearMatrix = new THREE.Matrix4();
+    bogieCenters.forEach((z, index) => {
+      runningGearMatrix.makeTranslation(0, 0.43, z);
+      bogies.setMatrixAt(index, runningGearMatrix);
+    });
+    bogies.name = 'SSB bogie frames';
+    bogies.instanceMatrix.needsUpdate = true;
+    car.add(bogies);
+
+    const wheels = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.36, 0.36, 0.2, 24), blackMat, 8);
+    const wheelRotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+    let wheelIndex = 0;
+    for (const z of bogieCenters) {
       for (const x of [-0.92, 0.92]) {
         for (const wheelZ of [z - 0.58, z + 0.58]) {
-          const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.2, 24), blackMat);
-          wheel.rotation.z = Math.PI / 2;
-          wheel.position.set(x, 0.37, wheelZ);
-          car.add(wheel);
+          runningGearMatrix.compose(new THREE.Vector3(x, 0.37, wheelZ), wheelRotation, new THREE.Vector3(1, 1, 1));
+          wheels.setMatrixAt(wheelIndex++, runningGearMatrix);
         }
       }
     }
+    wheels.name = 'SSB steel wheels';
+    wheels.instanceMatrix.needsUpdate = true;
+    car.add(wheels);
 
     this.root.add(car);
     return car;
@@ -3691,6 +3798,24 @@ class ProceduralTransitVehicleFactory {
       overheadRail.rotation.x = Math.PI / 2;
       car.add(overheadRail);
     }
+    const grabLoopPositions = [-6.65, -3.25, -1.45, 0.45, 4.25, 6.15];
+    const grabLoops = new THREE.InstancedMesh(
+      new THREE.TorusGeometry(0.09, 0.018, 6, 10),
+      metalMaterial,
+      grabLoopPositions.length * 2
+    );
+    let grabLoopIndex = 0;
+    for (const x of [-0.72, 0.72]) {
+      for (const z of grabLoopPositions) {
+        matrix.makeTranslation(x, 2.67, z);
+        grabLoops.setMatrixAt(grabLoopIndex++, matrix);
+      }
+    }
+    grabLoops.name = 'SSB interior hanging grab loops';
+    grabLoops.userData.liveOverviewOmit = true;
+    grabLoops.instanceMatrix.needsUpdate = true;
+    car.add(grabLoops);
+
     const polePositions = [-6.42, -4.68, 2.28, 4.02];
     for (const z of polePositions) {
       for (const x of [-1.08, 1.08]) {

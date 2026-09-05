@@ -24,4 +24,18 @@ describe('prepareOverviewVehicle', () => {
     expect(body.castShadow).toBe(false);
     expect((body.material as THREE.MeshStandardMaterial).emissive.getHex()).toBe(0xffaa22);
   });
+
+  it('hides follow-only close-up details on pooled overview models', () => {
+    const root = new THREE.Group();
+    const exterior = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+    const closeUp = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+    closeUp.userData.liveOverviewOmit = true;
+    root.add(exterior, closeUp);
+
+    prepareOverviewVehicle(root);
+
+    expect(exterior.parent).toBe(root);
+    expect(closeUp.parent).toBe(root);
+    expect(closeUp.visible).toBe(false);
+  });
 });

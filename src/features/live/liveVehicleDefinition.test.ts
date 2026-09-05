@@ -65,4 +65,37 @@ describe('followed-vehicle capabilities', () => {
     // Double formation => four Tango sections.
     expect(instance.cars.length).toBe(4);
   });
+
+  it('keeps the added Tango detail batched for simulator and live-follow', () => {
+    const definition = resolveLiveVehicleDefinition(u12Live, stuttgartCity);
+    const instance = buildTransitVehicle({
+      definition,
+      makeInteriorDisplayMaterial: () => new THREE.MeshBasicMaterial()
+    });
+    const named = new Map<string, THREE.Object3D[]>();
+    instance.root.traverse((object) => {
+      if (!object.name) return;
+      const matches = named.get(object.name) ?? [];
+      matches.push(object);
+      named.set(object.name, matches);
+    });
+
+    for (const name of [
+      'SSB windshield divider and dual wipers',
+      'SSB exterior side destination displays',
+      'SSB illuminated exterior door buttons',
+      'SSB interior hanging grab loops',
+      'SSB roof HVAC vent slats',
+      'SSB bogie frames',
+      'SSB steel wheels'
+    ]) {
+      expect(named.get(name)).toHaveLength(4);
+      expect(named.get(name)?.every((object) => object instanceof THREE.InstancedMesh)).toBe(true);
+    }
+
+    expect((named.get('SSB exterior side destination displays')?.[0] as THREE.InstancedMesh).count).toBe(2);
+    expect((named.get('SSB interior hanging grab loops')?.[0] as THREE.InstancedMesh).count).toBe(12);
+    expect((named.get('SSB roof HVAC vent slats')?.[0] as THREE.InstancedMesh).count).toBe(15);
+    expect((named.get('SSB steel wheels')?.[0] as THREE.InstancedMesh).count).toBe(8);
+  });
 });

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildPathGeometry, lerpAt, pickHeightAnchors, poseAtDistance, type PathGeometry } from './trafficPath';
+import { buildPathGeometry, dampAngle, lerpAt, pickHeightAnchors, poseAtDistance, type PathGeometry } from './trafficPath';
 import { flatDistanceM, randomGeoPointNear, type LatLon } from './trafficGeo';
 import { fetchWalkingRoute } from './pedestrianRoutingClient';
 import { animatePedestrian, buildPedestrian, type PedestrianRig } from './pedestrianMesh';
@@ -30,6 +30,9 @@ const MAX_TOTAL_PEDESTRIANS = 45;
 const TRICKLE_INTERVAL_S = 3; // while a station is active, try to add one more walker this often
 const MAX_CONCURRENT_REQUESTS = 3;
 const ACTIVE_RADIUS_M = 500; // pedestrians beyond this from the vehicle despawn
+const RENDER_RADIUS_M = 430;
+const FULL_ANIMATION_RADIUS_M = 170;
+const FAR_ANIMATION_INTERVAL = 3;
 const WALK_MIN_MPS = 1.05;
 const WALK_MAX_MPS = 1.65;
 const LATERAL_JITTER_M = 0.6; // sidewalk-width spread perpendicular to the route
@@ -62,6 +65,7 @@ type Pedestrian = {
   speedMps: number;
   lateralOffsetM: number;
   spawnDelayS: number;
+  headingRad: number;
   rig: PedestrianRig;
 };
 
@@ -83,6 +87,7 @@ export class PedestrianSystem {
   private pendingRequests = 0;
   private disposed = false;
   private simClockS = 0;
+  private frameIndex = 0;
   private readonly centerWorld = new THREE.Vector2(0, 0);
 
   constructor(private readonly ctx: PedestrianContext) {
@@ -92,7 +97,9 @@ export class PedestrianSystem {
   /** Advances every pedestrian and manages which stations are being tracked. */
   update(vehicleDistanceM: number, stations: StationInfo[], centerWorld: THREE.Vector3, dtSec: number): void {
     this.simClockS += dtSec;
+    this.frameIndex++;
     this.centerWorld.set(centerWorld.x, centerWorld.z);
+    const stepSec = Math.min(Math.max(dtSec, 0), 0.2);
 
     for (let i = 0; i < stations.length; i++) {
       const aheadM = stations[i].distanceM - vehicleDistanceM;
@@ -112,8 +119,7 @@ export class PedestrianSystem {
         ped.spawnDelayS -= dtSec;
         continue;
       }
-      if (!ped.rig.root.visible) ped.rig.root.visible = true;
-      ped.distanceM += ped.speedMps * dtSec;
+      ped.distanceM += ped.speedMps * stepSec;
       const pose = poseAtDistance(ped.route.path, ped.distanceM);
       const dx = pose.x - this.centerWorld.x;
       const dz = pose.z - this.centerWorld.y;
@@ -123,7 +129,15 @@ export class PedestrianSystem {
         this.despawn(i);
         continue;
       }
-      this.placePedestrian(ped, pose);
+      const distanceSq = dx * dx + dz * dz;
+      const visible = distanceSq <= RENDER_RADIUS_M * RENDER_RADIUS_M;
+      ped.rig.root.visible = visible;
+      ped.headingRad = dampAngle(ped.headingRad, pose.headingRad, 9, stepSec);
+      this.placePedestrian(
+        ped,
+        pose,
+        visible && (distanceSq <= FULL_ANIMATION_RADIUS_M * FULL_ANIMATION_RADIUS_M || this.frameIndex % FAR_ANIMATION_INTERVAL === 0)
+      );
     }
 
     for (const state of this.stationStates.values()) {
@@ -238,15 +252,17 @@ export class PedestrianSystem {
     const rig = this.acquireRig();
     this.root.add(rig.root);
 
+    const distanceM = Math.random() * route.path.total * 0.6;
     const ped: Pedestrian = {
       station: state,
       route,
       // Some pedestrians start already mid-walk so a freshly loaded street
       // reads as ongoing activity rather than everyone leaving from the curb.
-      distanceM: Math.random() * route.path.total * 0.6,
+      distanceM,
       speedMps: THREE.MathUtils.lerp(WALK_MIN_MPS, WALK_MAX_MPS, Math.random()),
       lateralOffsetM: (Math.random() - 0.5) * LATERAL_JITTER_M,
       spawnDelayS,
+      headingRad: poseAtDistance(route.path, distanceM).headingRad,
       rig
     };
     // Placed immediately so a pooled mesh never renders one frame at its old
@@ -257,15 +273,15 @@ export class PedestrianSystem {
     state.activeCount++;
   }
 
-  private placePedestrian(ped: Pedestrian, pose = poseAtDistance(ped.route.path, ped.distanceM)): void {
+  private placePedestrian(ped: Pedestrian, pose = poseAtDistance(ped.route.path, ped.distanceM), animate = true): void {
     const forwardX = Math.sin(pose.headingRad);
     const forwardZ = Math.cos(pose.headingRad);
     const rightX = forwardZ;
     const rightZ = -forwardX;
     const y = lerpAt(ped.route.heightAnchorAtM, ped.route.heightAnchorM, ped.distanceM);
     ped.rig.root.position.set(pose.x + rightX * ped.lateralOffsetM, y, pose.z + rightZ * ped.lateralOffsetM);
-    ped.rig.root.rotation.y = pose.headingRad;
-    animatePedestrian(ped.rig, ped.distanceM);
+    ped.rig.root.rotation.y = ped.headingRad;
+    if (animate) animatePedestrian(ped.rig, ped.distanceM);
   }
 
   private acquireRig(): PedestrianRig {
