@@ -19,6 +19,8 @@ import { RouteLayer } from './world/layers/RouteLayer';
 import { GuidewayLayer } from './world/layers/GuidewayLayer';
 import { StationLayer } from './world/layers/StationLayer';
 import { OpposingTrafficLayer } from './world/layers/OpposingTrafficLayer';
+import { RoadTrafficSystem } from './world/traffic/RoadTrafficSystem';
+import { PedestrianSystem } from './world/traffic/PedestrianSystem';
 import { TrackSpreadProfile } from './world/trackSpread';
 import { islandSpreadZones } from './world/stations/trackLayout';
 type GeoPoint = { lat: number; lon: number };
@@ -38,6 +40,10 @@ export class TransitWorld {
   private readonly seasonalObjects = new THREE.Group();
   // Oncoming services rendered on the opposite track lane.
   private opposingLayer: OpposingTrafficLayer | null = null;
+  // Ambient background road traffic (cars/trucks/cyclists) near the player.
+  private roadTraffic: RoadTrafficSystem | null = null;
+  // Station-aware pedestrian traffic near upcoming/just-departed stops.
+  private pedestrians: PedestrianSystem | null = null;
   // The active vehicle (placement, doors, interior display, visibility, lamps).
   private activeVehicle!: ActiveVehicleSystem;
   // Terrain sampling, curated landmarks, OSM streaming, and scenery visibility.
@@ -154,6 +160,29 @@ export class TransitWorld {
     this.environment.buildScenery(layerContext, ground, this.geoPointAt(0));
     this.scene.add(this.seasonalObjects);
 
+    // Ferries have no roads; every other mode has real streets nearby, but
+    // only when the route carries geo points to project traffic against.
+    if (this.guidewayKind !== 'ferry' && this.routeGeo.length >= 2) {
+      this.roadTraffic = new RoadTrafficSystem({
+        projectGeo: (lat, lon) => this.projectGeo(lat, lon),
+        terrainHeightAt: (lat, lon) => this.environment.terrainHeightAt(lat, lon)
+      });
+      this.scene.add(this.roadTraffic.root);
+      // Lamp materials are shared module state, so a world built at night (or
+      // after one that was) has to be told the current state once up front —
+      // updateVehicleLighting only pushes on a change.
+      this.roadTraffic.setLampsOn(this.vehicleLightsOn ?? false);
+      this.pedestrians = new PedestrianSystem({
+        projectGeo: (lat, lon) => this.projectGeo(lat, lon),
+        terrainHeightAt: (lat, lon) => this.environment.terrainHeightAt(lat, lon),
+        stationGeoAt: (index) => {
+          const station = this.route.stations[index];
+          return station ? this.geoPointAt(station.distanceM / this.route.routeLengthM) : undefined;
+        }
+      });
+      this.scene.add(this.pedestrians.root);
+    }
+
     window.addEventListener('resize', this.onRendererResizeBound);
   }
 
@@ -241,6 +270,10 @@ export class TransitWorld {
 
     this.environment.updateStreaming(this.geoPointAt(t));
     this.environment.setUnderground(underground);
+    this.roadTraffic?.update(position, this.geoPointAt(t), deltaSeconds);
+    this.roadTraffic?.setVisible(!underground);
+    this.pedestrians?.update(distanceM, this.route.stations, position, deltaSeconds);
+    this.pedestrians?.setVisible(!underground);
     this.lightingSystem.updateUnderground(underground, position, tangent, deltaSeconds);
     this.updateVehicleLighting();
     this.activeVehicle.updateDoors(doorsOpen, deltaSeconds);
@@ -291,6 +324,10 @@ export class TransitWorld {
     this.photoSystem.dispose();
     this.environment.dispose();
     this.activeVehicle.dispose();
+    this.roadTraffic?.dispose();
+    this.roadTraffic = null;
+    this.pedestrians?.dispose();
+    this.pedestrians = null;
     // Free geometries/materials/textures built by the scene layers so switching
     // routes does not leak GPU resources.
     this.disposeSceneGraph();
@@ -363,6 +400,7 @@ export class TransitWorld {
     if (lightsOn === this.vehicleLightsOn) return;
     this.vehicleLightsOn = lightsOn;
     this.activeVehicle.updateExteriorLights(lightsOn ? 0 : 1);
+    this.roadTraffic?.setLampsOn(lightsOn);
   }
 
   /** True when the route is in tunnel/underground at normalized progress t. */

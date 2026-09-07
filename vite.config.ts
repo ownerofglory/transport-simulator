@@ -23,7 +23,20 @@ export default defineConfig(({ mode }) => {
         : undefined
     },
     build: {
-      target: 'es2022'
+      target: 'es2022',
+      rolldownOptions: {
+        output: {
+          // Keep large, stable rendering and mapping dependencies cacheable
+          // across application-only releases.
+          codeSplitting: {
+            groups: [
+              { name: 'three', test: /node_modules\/three\//, maxSize: 450 * 1024 },
+              { name: 'maps', test: /node_modules\/(leaflet|@mapbox|pbf)\// },
+              { name: 'react', test: /node_modules\/(react|react-dom)\// }
+            ]
+          }
+        }
+      }
     }
   };
 });

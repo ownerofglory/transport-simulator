@@ -71,7 +71,7 @@ export async function fetchVehicle(runId: string, options: { at?: string } = {},
  * Subscribes to the backend's incremental vehicle stream and returns a disposer.
  *
  * The backend emits an initial `snapshot` (the whole network) and then
- * `vehicle-upsert` events carrying one {@link LiveVehicle} each. Both are exposed
+ * batched `delta` events (plus legacy `vehicle-upsert` events). Both are exposed
  * raw — this module does not decide what to merge, because the stream is *not*
  * viewport- or mode-filtered and the caller owns that policy.
  *
@@ -101,14 +101,24 @@ export function openVehicleStream(handlers: {
       // Ignore: the poll loop still supplies full snapshots.
     }
   };
+  const onDelta = (event: MessageEvent<string>) => {
+    try {
+      const payload = JSON.parse(event.data) as { upserts?: LiveVehicle[] };
+      for (const vehicle of payload.upserts ?? []) handlers.onVehicle(vehicle);
+    } catch {
+      // A malformed event must not kill the subscription.
+    }
+  };
   const onError = (event: Event) => handlers.onError?.(event);
 
   source.addEventListener('vehicle-upsert', onUpsert as EventListener);
+  source.addEventListener('delta', onDelta as EventListener);
   source.addEventListener('snapshot', onSnapshot as EventListener);
   source.addEventListener('error', onError);
 
   return () => {
     source.removeEventListener('vehicle-upsert', onUpsert as EventListener);
+    source.removeEventListener('delta', onDelta as EventListener);
     source.removeEventListener('snapshot', onSnapshot as EventListener);
     source.removeEventListener('error', onError);
     source.close();

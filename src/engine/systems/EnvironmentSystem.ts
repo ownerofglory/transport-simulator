@@ -79,6 +79,11 @@ export class EnvironmentSystem implements EngineSystem {
     this.osmScene?.update(geoPoint);
   }
 
+  /** Raw terrain height (world y) at a lat/lon; 0 where the route has no elevation datum. */
+  terrainHeightAt(lat: number, lon: number): Promise<number> {
+    return this.terrain?.sample(lat, lon) ?? Promise.resolve(0);
+  }
+
   /** Hides ground/scenery/landmarks while the route is in a tunnel. */
   setUnderground(underground: boolean): void {
     if (this.ground) this.ground.visible = !underground;

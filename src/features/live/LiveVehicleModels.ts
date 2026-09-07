@@ -306,6 +306,9 @@ export function prepareOverviewVehicle(root: THREE.Object3D): void {
   const lights: THREE.Light[] = [];
   root.traverse((object) => {
     if (object instanceof THREE.Light) lights.push(object);
+    // Keep close-up geometry owned by the template so normal world disposal
+    // still reaches it, but clones inherit `visible = false` and never draw it.
+    if (object.userData.liveOverviewOmit === true) object.visible = false;
     if (object instanceof THREE.Mesh) object.castShadow = false;
   });
   for (const light of lights) light.removeFromParent();
