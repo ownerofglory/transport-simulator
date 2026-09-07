@@ -12,6 +12,7 @@ import { MiniMapPanel } from '../features/minimap/MiniMapPanel';
 import { RouteDiagramPanel } from '../features/route-diagram/RouteDiagramPanel';
 import { PhotoModeOverlay } from '../features/photo/PhotoModeOverlay';
 import { LiveEntryButton } from '../features/live/LiveEntryButton';
+import { CityWeatherForecast } from '../features/weather/CityWeatherForecast';
 import { LoadingOverlay } from './LoadingOverlay';
 import { useAppBootstrap } from './useAppBootstrap';
 import { useAppState } from './useAppState';
@@ -129,7 +130,7 @@ export function AppShell() {
   }, [runtime]);
 
   const notice = route && catalog.currentCity
-    ? `${catalog.currentCity.shortLabel} · ${transportModeLabel(routeMode(route), catalog.currentCity.transportModes)} · ${route.agency ?? catalog.currentCity.noticeNetworkName} · ${route.description} ${catalog.currentCity.freeRideNotice} Source: ${route.source ?? 'demo route'}. ${catalog.attribution} Vector 3D scenery: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. Relief: Mapzen Terrain Tiles on AWS Open Data.`
+    ? `${catalog.currentCity.shortLabel} · ${transportModeLabel(routeMode(route), catalog.currentCity.transportModes)} · ${route.agency ?? catalog.currentCity.noticeNetworkName} · ${route.description} ${catalog.currentCity.freeRideNotice} Source: ${route.source ?? 'demo route'}. ${catalog.attribution} Vector 3D scenery: OpenFreeMap, © OpenMapTiles, © OpenStreetMap contributors. Relief: Mapzen Terrain Tiles on AWS Open Data. Current weather: Open-Meteo.`
     : '';
 
   return (
@@ -175,6 +176,7 @@ export function AppShell() {
           ) : (
             <>
               <SelectionPanel catalog={catalog} />
+              <CityWeatherForecast city={catalog.currentCity} route={route} />
               <SimulatorHud snapshot={snapshot} />
               <div className="controls">
                 <button onClick={() => dispatch({ type: 'pause-changed', paused: !state.paused })}>{state.paused ? 'Resume' : 'Pause'}</button>

@@ -9,9 +9,9 @@
     "floorHeightM": 1.0
   },
   "materials": {
-    "body": { "color": "#ffdf00", "roughness": 0.52, "metalness": 0.05 },
-    "accent": { "color": "#f6c900", "roughness": 0.48 },
-    "glass": { "color": "#91c7dd", "opacity": 0.58, "transparent": true, "roughness": 0.08 },
+    "body": { "color": "#ffdf00", "roughness": 0.36, "metalness": 0.1, "clearcoat": 0.38, "clearcoatRoughness": 0.14 },
+    "accent": { "color": "#f6c900", "roughness": 0.32, "clearcoat": 0.3 },
+    "glass": { "color": "#91c7dd", "opacity": 0.58, "transparent": true, "roughness": 0.05, "clearcoat": 0.48, "envMapIntensity": 1.35 },
     "dark": { "color": "#20242b", "roughness": 0.38 },
     "roof": { "color": "#d7d0bf", "roughness": 0.72, "metalness": 0.05 },
     "interior": { "color": "#d9d5ca", "roughness": 0.88 },

@@ -35,9 +35,9 @@ export class GuidewayLayer {
   }
 
   private buildRailTrack(): void {
-    const railMaterial = new THREE.MeshStandardMaterial({ color: 0x7f858a, metalness: 0.7, roughness: 0.28 });
+    const railMaterial = new THREE.MeshPhysicalMaterial({ color: 0x7f858a, metalness: 0.86, roughness: 0.22, clearcoat: 0.12, clearcoatRoughness: 0.08, envMapIntensity: 1.05 });
     const sleeperMaterial = new THREE.MeshStandardMaterial({ color: 0x453429, roughness: 0.85 });
-    const ballastMaterial = new THREE.MeshStandardMaterial({ color: 0x6d6a63, roughness: 0.95 });
+    const ballastMaterial = createBallastMaterial(this.ctx.route.routeLengthM);
     const trackSegments = THREE.MathUtils.clamp(Math.ceil(this.ctx.route.routeLengthM / 10), 480, 5000);
 
     for (const trackOffset of [this.ctx.activeLaneOffsetM, this.ctx.oppositeLaneOffsetM]) {
@@ -185,9 +185,11 @@ export class GuidewayLayer {
   }
 
   private buildBusRouteStreet(): void {
-    const asphaltMaterial = new THREE.MeshStandardMaterial({
+    const asphaltMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x50575c,
-      roughness: 0.94,
+      roughness: 0.88,
+      clearcoat: 0.04,
+      clearcoatRoughness: 0.32,
       polygonOffset: true,
       polygonOffsetFactor: -2,
       polygonOffsetUnits: -2
@@ -380,4 +382,47 @@ export class GuidewayLayer {
     // Drop slivers too short to read as tunnel.
     return spans.filter(([from, to]) => (to - from) * routeLengthM > 12);
   }
+}
+
+/** Deterministic aggregate texture prevents the route bed from reading as a flat grey ribbon. */
+function createBallastMaterial(routeLengthM: number): THREE.MeshStandardMaterial {
+  const size = 128;
+  const colorCanvas = document.createElement('canvas');
+  const roughnessCanvas = document.createElement('canvas');
+  colorCanvas.width = roughnessCanvas.width = size;
+  colorCanvas.height = roughnessCanvas.height = size;
+  const color = colorCanvas.getContext('2d');
+  const roughness = roughnessCanvas.getContext('2d');
+  if (color && roughness) {
+    color.fillStyle = '#65635e';
+    color.fillRect(0, 0, size, size);
+    roughness.fillStyle = '#efefef';
+    roughness.fillRect(0, 0, size, size);
+    let seed = 0x61c88647;
+    const random = () => {
+      seed = Math.imul(seed ^ (seed >>> 16), 0x45d9f3b);
+      return ((seed >>> 0) % 10_000) / 10_000;
+    };
+    for (let index = 0; index < 880; index++) {
+      const shade = 65 + Math.floor(random() * 65);
+      const x = random() * size;
+      const y = random() * size;
+      const radius = 0.45 + random() * 1.7;
+      color.fillStyle = `rgb(${shade}, ${shade}, ${Math.max(0, shade - 5)})`;
+      color.beginPath();
+      color.ellipse(x, y, radius * 1.35, radius, random() * Math.PI, 0, Math.PI * 2);
+      color.fill();
+      const rough = 205 + Math.floor(random() * 45);
+      roughness.fillStyle = `rgb(${rough}, ${rough}, ${rough})`;
+      roughness.fillRect(Math.floor(x), Math.floor(y), Math.max(1, Math.ceil(radius)), Math.max(1, Math.ceil(radius)));
+    }
+  }
+  const map = new THREE.CanvasTexture(colorCanvas);
+  const roughnessMap = new THREE.CanvasTexture(roughnessCanvas);
+  for (const texture of [map, roughnessMap]) {
+    texture.colorSpace = texture === map ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(3.2, Math.max(6, routeLengthM / 2.2));
+  }
+  return new THREE.MeshStandardMaterial({ color: 0x9b9b99, map, roughnessMap, roughness: 0.98 });
 }

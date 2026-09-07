@@ -12,6 +12,9 @@ export type BlueprintStandardMaterialConfig = {
   transparent?: boolean;
   emissive?: string;
   emissiveIntensity?: number;
+  clearcoat?: number;
+  clearcoatRoughness?: number;
+  envMapIntensity?: number;
   doubleSided?: boolean;
 };
 
@@ -24,7 +27,7 @@ export function makeStandardMaterial(config: BlueprintStandardMaterialConfig): T
   if (config.emissive !== undefined) params.emissive = config.emissive;
   if (config.emissiveIntensity !== undefined) params.emissiveIntensity = config.emissiveIntensity;
   if (config.doubleSided) params.side = THREE.DoubleSide;
-  return new THREE.MeshStandardMaterial(params);
+  return new THREE.MeshPhysicalMaterial({ ...params, clearcoat: config.clearcoat ?? 0, clearcoatRoughness: config.clearcoatRoughness ?? 0.18, envMapIntensity: config.envMapIntensity ?? 0.7 });
 }
 
 const CSS_COLOR = /^#[0-9a-fA-F]{3,8}$/;
@@ -42,7 +45,7 @@ export function collectMaterialConfigErrors(raw: unknown, path: string, errors: 
   if (material.emissive !== undefined && (typeof material.emissive !== 'string' || !CSS_COLOR.test(material.emissive))) {
     errors.push(`${path}.emissive must be a hex color string`);
   }
-  for (const key of ['roughness', 'metalness', 'opacity', 'emissiveIntensity'] as const) {
+  for (const key of ['roughness', 'metalness', 'opacity', 'emissiveIntensity', 'clearcoat', 'clearcoatRoughness', 'envMapIntensity'] as const) {
     if (material[key] !== undefined && typeof material[key] !== 'number') {
       errors.push(`${path}.${key} must be a number`);
     }

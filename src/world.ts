@@ -8,6 +8,8 @@ import type { CameraMode } from './world/CameraController';
 import { CameraSystem } from './engine/systems/CameraSystem';
 import { LightingSystem } from './engine/systems/LightingSystem';
 import { PhotoSystem, type CinematicPreset } from './engine/systems/PhotoSystem';
+import { WeatherEffects } from './world/WeatherEffects';
+import { fetchCurrentWeather, weatherLocationFor } from './world/weather';
 
 export type { CinematicPreset };
 import { ActiveVehicleSystem } from './engine/systems/ActiveVehicleSystem';
@@ -44,6 +46,8 @@ export class TransitWorld {
   private readonly routeGeoDistancesM: number[];
   // Sun/ambient/hemisphere lighting, time-of-day, season lighting, sky + fog.
   private readonly lightingSystem = new LightingSystem(this.scene, this.renderer);
+  private readonly weatherEffects = new WeatherEffects(this.scene);
+  private readonly weatherAbort = new AbortController();
   // Last pushed vehicle lamp state, so the per-frame check only writes on a flip.
   private vehicleLightsOn: boolean | null = null;
   // Stable reference so the per-frame camera input does not allocate a closure.
@@ -85,6 +89,8 @@ export class TransitWorld {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.setAnimationLoop(null);
 
@@ -107,6 +113,7 @@ export class TransitWorld {
     const startTangent = this.curve.getTangentAt(0).normalize();
     this.cameraSystem.placeAtStart(startPoint, startTangent);
     this.lightingSystem.initialize();
+    void this.loadCurrentWeather();
 
     // Island stops move the running tracks, so the profile has to exist before
     // any track geometry, vehicle placement, or camera anchor is built.
@@ -268,6 +275,7 @@ export class TransitWorld {
         routeTangentAtDistance: (d) => this.routeTangentAtDistance(d)
       });
     }
+    this.weatherEffects.update(this.camera.position, deltaSeconds, underground);
   }
 
   render(): void {
@@ -276,6 +284,8 @@ export class TransitWorld {
 
   dispose(): void {
     window.removeEventListener('resize', this.onRendererResizeBound);
+    this.weatherAbort.abort();
+    this.weatherEffects.dispose();
     this.cameraSystem.dispose();
     this.lightingSystem.dispose();
     this.photoSystem.dispose();
@@ -287,6 +297,19 @@ export class TransitWorld {
     this.opposingLayer = null;
     this.renderer.domElement.remove();
     this.renderer.dispose();
+  }
+
+  private async loadCurrentWeather(): Promise<void> {
+    const location = weatherLocationFor(this.city, this.route);
+    if (!location) return;
+    try {
+      const weather = await fetchCurrentWeather(location, this.weatherAbort.signal);
+      if (this.weatherAbort.signal.aborted) return;
+      this.lightingSystem.setWeather(weather);
+      this.weatherEffects.setWeather(weather);
+    } catch (error) {
+      if (!this.weatherAbort.signal.aborted) console.warn('Could not load current weather; using the clear-weather presentation.', error);
+    }
   }
 
   /** Recursively disposes geometries and materials of every mesh in the scene. */

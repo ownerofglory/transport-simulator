@@ -23,6 +23,7 @@ export function buildVehicleFromBlueprint(config: VehicleBlueprintConfig, contex
   const cabShells: THREE.Mesh[] = [];
   const passengerShells: THREE.Mesh[] = [];
   const cabDisplays: THREE.Mesh[] = [];
+  const exteriorLampMaterials: { material: THREE.MeshStandardMaterial; nightIntensity: number }[] = [];
 
   const doubleFormation = Boolean(
     config.formation?.doubleFormationLines?.includes(context.route.line) && config.formation?.duplicateSetOffsetM
@@ -60,6 +61,7 @@ export function buildVehicleFromBlueprint(config: VehicleBlueprintConfig, contex
           group.add(display);
           cabDisplays.push(display);
         }
+        exteriorLampMaterials.push(...buildCabLamps(group, section, config, materials));
       }
 
       cars.push(group);
@@ -109,10 +111,22 @@ export function buildVehicleFromBlueprint(config: VehicleBlueprintConfig, contex
   }
 
   for (const bogie of config.bogies ?? []) {
-    const material = resolveMaterial(materials, bogie.material, 'dark');
-    const bogieMesh = new THREE.Mesh(new THREE.BoxGeometry(bogie.widthM ?? 2.0, 0.36, bogie.lengthM ?? 1.5), material);
-    bogieMesh.position.set(0, 0.42, bogie.z);
-    root.add(bogieMesh);
+    root.add(buildBogie(bogie, materials));
+  }
+
+  for (const coupler of config.couplers ?? []) {
+    const material = resolveMaterial(materials, coupler.material, 'metal');
+    const endSection = coupler.end === 'front' ? config.sections.find((section) => section.cab === 'front') : config.sections.find((section) => section.cab === 'rear');
+    if (!endSection) continue;
+    const direction = coupler.end === 'front' ? -1 : 1;
+    const shank = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.62), material);
+    shank.name = `${coupler.end} coupler shank`;
+    shank.position.set(0, 0.46, endSection.center + direction * (endSection.length / 2 + 0.28));
+    const head = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.22, 8), material);
+    head.name = `${coupler.end} coupler head`;
+    head.rotation.x = Math.PI / 2;
+    head.position.set(0, 0.46, endSection.center + direction * (endSection.length / 2 + 0.64));
+    root.add(shank, head);
   }
 
   for (const pantograph of config.pantographs ?? []) {
@@ -137,8 +151,78 @@ export function buildVehicleFromBlueprint(config: VehicleBlueprintConfig, contex
     passengerShells,
     cabDisplays,
     glassMaterial: materials.glass,
-    trainHalfLengthM
+    trainHalfLengthM,
+    setExteriorLightsOn(on: boolean) {
+      for (const { material, nightIntensity } of exteriorLampMaterials) {
+        material.emissiveIntensity = on ? nightIntensity : nightIntensity * 0.12;
+      }
+    }
   };
+}
+
+function buildBogie(
+  bogie: NonNullable<VehicleBlueprintConfig['bogies']>[number],
+  materials: Record<string, THREE.MeshStandardMaterial>
+): THREE.Group {
+  const group = new THREE.Group();
+  group.name = `Detailed bogie ${bogie.z}`;
+  const width = bogie.widthM ?? 2;
+  const length = bogie.lengthM ?? 1.5;
+  const frameMaterial = resolveMaterial(materials, bogie.material, 'dark');
+  const wheelMaterial = resolveMaterial(materials, 'metal', bogie.material ?? 'dark');
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(width, 0.3, length), frameMaterial);
+  frame.position.y = 0.46;
+  group.add(frame);
+
+  for (const axleZ of [-length * 0.31, length * 0.31]) {
+    const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, width * 0.92, 8), wheelMaterial);
+    axle.rotation.z = Math.PI / 2;
+    axle.position.set(0, 0.3, axleZ);
+    group.add(axle);
+    for (const side of [-1, 1]) {
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.115, 12), wheelMaterial);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(side * width * 0.43, 0.3, axleZ);
+      wheel.castShadow = true;
+      group.add(wheel);
+    }
+  }
+  for (const side of [-1, 1]) {
+    const suspension = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.28, 8), frameMaterial);
+    suspension.position.set(side * width * 0.27, 0.73, 0);
+    group.add(suspension);
+  }
+  group.position.z = bogie.z;
+  return group;
+}
+
+function buildCabLamps(
+  group: THREE.Group,
+  section: VehicleSectionConfig,
+  config: VehicleBlueprintConfig,
+  materials: Record<string, THREE.MeshStandardMaterial>
+): { material: THREE.MeshStandardMaterial; nightIntensity: number }[] {
+  if (!section.cab) return [];
+  const direction = section.cab === 'front' ? -1 : 1;
+  const width = section.widthM ?? config.dimensions.widthM;
+  const height = section.heightM ?? config.dimensions.heightM;
+  const material = new THREE.MeshStandardMaterial({
+    color: section.cab === 'front' ? 0xfff5d6 : 0x9b1714,
+    emissive: section.cab === 'front' ? 0xffe0a0 : 0x8c120f,
+    emissiveIntensity: 0.18,
+    roughness: 0.22,
+    metalness: 0.08,
+    envMapIntensity: 0.9
+  });
+  const lamps: { material: THREE.MeshStandardMaterial; nightIntensity: number }[] = [];
+  for (const x of [-width * 0.27, width * 0.27]) {
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.105, 10, 8), material);
+    lamp.name = section.cab === 'front' ? 'Headlamp' : 'Tail lamp';
+    lamp.position.set(x, height * 0.37, direction * (section.length / 2 + 0.17));
+    group.add(lamp);
+  }
+  lamps.push({ material, nightIntensity: section.cab === 'front' ? 2.2 : 1.45 });
+  return lamps;
 }
 
 function resolveDisplayText(text: string | undefined, context: ResolvedVehicleBuildContext): string {

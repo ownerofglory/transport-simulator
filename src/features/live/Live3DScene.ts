@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { SkyEnvironment } from '../../world/SkyEnvironment';
+import { WeatherEffects } from '../../world/WeatherEffects';
+import { WeatherSky } from '../../world/WeatherSky';
+import { DEFAULT_WEATHER, fetchCurrentWeather, type VisualWeather } from '../../world/weather';
 import { OsmSceneStreamer } from '../../osm-scene';
 import { makeProjection, type LatLon, type Projection } from './liveProjection';
 import type { LiveVehicleStore, TrackedVehicle } from './LiveVehicleStore';
@@ -133,6 +137,11 @@ export class Live3DScene {
   // Gated smoothing goal (world XZ) for the followed vehicle, so a single bad frame
   // (a route rematch flipping the snapped position) can't whip the camera.
   private readonly followTarget = new THREE.Vector3();
+  private readonly skyEnvironment = new SkyEnvironment(this.scene);
+  private readonly weatherSky = new WeatherSky(this.scene);
+  private readonly weatherEffects = new WeatherEffects(this.scene);
+  private readonly weatherAbort = new AbortController();
+  private weather: VisualWeather = DEFAULT_WEATHER;
   private followTargetSet = false;
   private followFreezeFrames = 0;
   private followJustStarted = false;
@@ -169,6 +178,9 @@ export class Live3DScene {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(this.pixelRatio());
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMappingExposure = 1.08; // slightly brighter, matching Explore
     container.appendChild(this.renderer.domElement);
 
@@ -184,6 +196,7 @@ export class Live3DScene {
     this.scene.add(this.sun);
     this.scene.add(this.fill);
     this.applyDaylight();
+    void this.loadCurrentWeather();
 
     // Terrain relief around the fixed origin doubles as the base ground (so there
     // is no void before OSM tiles stream in) and the height source for everything
@@ -202,7 +215,7 @@ export class Live3DScene {
     // One instanced block mesh per mode (≤5 draw calls for the whole fleet).
     for (const mode of ALL_LIVE_MODES) {
       const geom = new THREE.BoxGeometry(CAR_W, CAR_H, CAR_LEN);
-      const mat = new THREE.MeshLambertMaterial({ color: new THREE.Color(modeColor(mode)) });
+      const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(modeColor(mode)), roughness: 0.4, metalness: 0.16, envMapIntensity: 0.65 });
       const mesh = new THREE.InstancedMesh(geom, mat, MAX_PER_MODE);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.count = 0;
@@ -241,6 +254,10 @@ export class Live3DScene {
     window.removeEventListener('resize', this.onResize);
     this.detachControls();
     this.disposeFollowVehicle();
+    this.weatherAbort.abort();
+    this.weatherEffects.dispose();
+    this.skyEnvironment.dispose();
+    this.weatherSky.dispose();
     this.models.dispose();
     this.stationMarker.dispose();
     this.tunnels.dispose();
@@ -286,6 +303,8 @@ export class Live3DScene {
     // Lamps come on around dusk (sun below ~5°); full day well above the horizon.
     this.daylightFactor = THREE.MathUtils.clamp(d.elevationDeg / 12, 0, 1);
     this.skyColor.setHex(d.skyColor);
+    this.skyEnvironment.update('summer', now.getHours() + now.getMinutes() / 60, this.underground ? 1 : 0, this.weather);
+    this.weatherSky.update('summer', now.getHours() + now.getMinutes() / 60, this.weather, this.underground);
     this.applyEnvironment();
     this.sun.color.setHex(d.sunColor);
     this.sun.intensity = d.sunIntensity;
@@ -330,6 +349,8 @@ export class Live3DScene {
     this.streamer.group.visible = !underground;
     if (underground === this.underground) return;
     this.underground = underground;
+    this.skyEnvironment.update('summer', new Date().getHours() + new Date().getMinutes() / 60, underground ? 1 : 0, this.weather);
+    this.weatherSky.update('summer', new Date().getHours() + new Date().getMinutes() / 60, this.weather, underground);
     this.applyEnvironment();
   }
 
@@ -379,6 +400,7 @@ export class Live3DScene {
     // Follow after models are placed so interior cameras read fresh car matrices.
     this.updateFollow(dt);
     this.advanceStationFlight(dt);
+    this.weatherEffects.update(this.camera.position, dt, this.underground);
     this.stationMarker.update((x, z) => this.terrain.heightAt(x, z));
     this.syncVehicles(modeled);
 
@@ -392,6 +414,18 @@ export class Live3DScene {
     this.renderer.render(this.scene, this.camera);
     this.raf = requestAnimationFrame(this.frame);
   };
+
+  private async loadCurrentWeather(): Promise<void> {
+    try {
+      const weather = await fetchCurrentWeather(this.opts.origin, this.weatherAbort.signal);
+      if (this.weatherAbort.signal.aborted) return;
+      this.weather = weather;
+      this.weatherEffects.setWeather(weather);
+      this.applyDaylight();
+    } catch (error) {
+      if (!this.weatherAbort.signal.aborted) console.warn('Could not load current live weather; using the clear-weather presentation.', error);
+    }
+  }
 
   private syncVehicles(modeled: Set<string>): void {
     const perMode = new Map<LiveMode, number>();
