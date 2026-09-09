@@ -273,7 +273,7 @@ describe('S-Bahn Stammstrecke islands', () => {
     expect(resolved.platform.layout).toBe('island');
     expect(resolved.platform.heightM).toBe(0.96);
     expect(resolved.platform.lengthM).toBe(210);
-    expect(resolved.displayName).toBe('Stuttgart Hauptbahnhof');
+    expect(resolved.displayName).toBe('Hauptbahnhof');
   });
 
   it('gives each Stammstrecke stop its own wall colour on one design', () => {
@@ -290,7 +290,7 @@ describe('S-Bahn Stammstrecke islands', () => {
       colours.set(name, resolved.architecture?.walls?.color);
     }
     expect(new Set(colours.values()).size).toBe(4);
-    expect(colours.get('Stuttgart Hauptbahnhof (tief)')).toBe('#c8102e');
+    expect(colours.get('Stuttgart Hauptbahnhof (tief)')).toBe('#a73930');
     expect(colours.get('Stadtmitte')).toBe('#009a4d');
     expect(colours.get('Feuersee')).toBe('#1f5fbf');
     expect(colours.get('Schwabstraße')).toBe('#f2b800');

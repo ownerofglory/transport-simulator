@@ -265,7 +265,7 @@
       }
     },
     "Stuttgart Hauptbahnhof (tief)": {
-      "displayName": "Stuttgart Hauptbahnhof",
+      "displayName": "Hauptbahnhof",
       "archetype": "underground-island",
       "platform": {
         "layout": "island",
@@ -275,6 +275,7 @@
         "curved": true
       },
       "architecture": {
+        "customAsset": "stuttgart-hbf-tief",
         "family": "stammstrecke",
         "roof": "hall",
         "hall": {
@@ -285,7 +286,7 @@
         },
         "walls": {
           "finish": "enamel-panel",
-          "color": "#c8102e",
+          "color": "#a73930",
           "plinthColor": "#23262a"
         },
         "columns": {
@@ -322,8 +323,8 @@
           "Klett-Passage",
           "Arnulf-Klett-Platz"
         ],
-        "platformNumber": "101",
-        "nameBandRepeatM": 34,
+        "platformNumber": "101 · 102",
+        "nameBandRepeatM": 0,
         "totem": false
       },
       "furniture": {
