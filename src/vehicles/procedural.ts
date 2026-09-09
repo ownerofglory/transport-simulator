@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { makeLabelTexture } from '../labels';
 import type { VehicleKind } from '../domain/transport';
 import { buildBusVehicle } from './blueprint/bus/buildBusFromBlueprint';
@@ -3328,7 +3330,7 @@ class ProceduralTransitVehicleFactory {
       car.add(roofFairing);
     }
 
-    // Raked Stadler Tango front end: profile-extruded nose, black mask band, tilted windscreen.
+    // Rounded cab shoulders and a raked panoramic screen share the same end geometry.
     const cabZ = cabDirection * 9.38; // interior shell reference (dashboard/cab wall)
     const noseTilt = 0.258; // windscreen rake of the DT8 Tango face
     const faceTilt = -cabDirection * noseTilt;
@@ -3357,7 +3359,7 @@ class ProceduralTransitVehicleFactory {
     const windshieldRotation = new THREE.Quaternion();
     const windshieldScale = new THREE.Vector3();
     for (const [index, x] of [-0.34, 0.34].entries()) {
-      windshieldPosition.set(x, 1.78, cabDirection * 10.0);
+      windshieldPosition.set(x, 1.78, cabDirection * 10.09);
       windshieldRotation.setFromEuler(new THREE.Euler(faceTilt, 0, (index === 0 ? 1 : -1) * cabDirection * 0.48));
       windshieldScale.set(0.035, 0.82, 0.03);
       windshieldMatrix.compose(windshieldPosition, windshieldRotation, windshieldScale);
@@ -3372,10 +3374,21 @@ class ProceduralTransitVehicleFactory {
     car.add(windshieldTrim);
     this.cabShells.push(windshieldTrim);
 
-    const bumper = new THREE.Mesh(new THREE.BoxGeometry(2.24, 0.24, 0.14), blackMat);
-    bumper.position.set(0, 0.5, cabDirection * 10.06);
+    const bumper = new THREE.Mesh(new RoundedBoxGeometry(2.28, 0.48, 0.24, 5, 0.1), bodyMat);
+    bumper.position.set(0, 0.65, cabDirection * 9.94);
     car.add(bumper);
     this.cabShells.push(bumper);
+
+    const couplerRecess = new THREE.Mesh(new RoundedBoxGeometry(0.58, 0.43, 0.035, 4, 0.04), blackMat);
+    couplerRecess.position.set(0, 0.62, cabDirection * 10.073);
+    car.add(couplerRecess);
+    this.cabShells.push(couplerRecess);
+    for (const side of [-1, 1]) {
+      const panelJoint = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.012, 0.018), blackMat);
+      panelJoint.position.set(side * 0.68, 0.92, cabDirection * 10.075);
+      car.add(panelJoint);
+      this.cabShells.push(panelJoint);
+    }
 
     // Corner light clusters: round LED headlamp, indicator and tail lamp, as on the DT8.12.
     const headlightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff4c7, emissiveIntensity: 0.55 });
@@ -3385,21 +3398,21 @@ class ProceduralTransitVehicleFactory {
     this.headLampMaterials.push(headlightMat);
     this.tailLampMaterials.push(tailLampMat);
     for (const x of [-1, 1] as const) {
-      const housing = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.42, 0.08), lampHousingMat);
-      housing.position.set(x * 0.82, 1.0, cabDirection * 10.06);
+      const housing = new THREE.Mesh(new RoundedBoxGeometry(0.52, 0.21, 0.09, 5, 0.07), lampHousingMat);
+      housing.position.set(x * 0.82, 1.12, cabDirection * 10.06);
       car.add(housing);
       this.cabShells.push(housing);
       const headlight = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.06, 18), headlightMat);
       headlight.rotation.x = Math.PI / 2;
-      headlight.position.set(x * 0.72, 1.08, cabDirection * 10.09);
+      headlight.position.set(x * 0.69, 1.12, cabDirection * 10.11);
       car.add(headlight);
       const indicator = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.055, 14), indicatorMat);
       indicator.rotation.x = Math.PI / 2;
-      indicator.position.set(x * 0.95, 1.08, cabDirection * 10.09);
+      indicator.position.set(x * 0.97, 1.12, cabDirection * 10.11);
       car.add(indicator);
       const tailLamp = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.055, 14), tailLampMat);
       tailLamp.rotation.x = Math.PI / 2;
-      tailLamp.position.set(x * 0.84, 0.86, cabDirection * 10.09);
+      tailLamp.position.set(x * 0.85, 1.12, cabDirection * 10.11);
       car.add(tailLamp);
       this.cabShells.push(headlight, indicator, tailLamp);
     }
@@ -3418,7 +3431,7 @@ class ProceduralTransitVehicleFactory {
       new THREE.PlaneGeometry(0.58, 0.22),
       new THREE.MeshBasicMaterial({ map: makeLabelTexture('SSB', { width: 288, height: 96, bg: '#ffdf00', fg: '#ffffff' }), side: THREE.DoubleSide })
     );
-    frontLogo.position.set(-0.55, 1.36, cabDirection * 10.06);
+    frontLogo.position.set(0, 1.27, cabDirection * 10.06);
     if (cabDirection < 0) frontLogo.rotation.y = Math.PI;
     car.add(frontLogo);
     this.cabShells.push(frontLogo);
@@ -3430,7 +3443,7 @@ class ProceduralTransitVehicleFactory {
         side: THREE.DoubleSide
       })
     );
-    cabNumber.position.set(0.62, 1.36, cabDirection * 10.06);
+    cabNumber.position.set(-0.86 * cabDirection, 1.32, cabDirection * 10.06);
     if (cabDirection < 0) cabNumber.rotation.y = Math.PI;
     car.add(cabNumber);
     this.cabShells.push(cabNumber);
@@ -4322,39 +4335,48 @@ class ProceduralTransitVehicleFactory {
     return geometry;
   }
 
-  private makeTangoNose(): THREE.ExtrudeGeometry {
+  private makeTangoNose(): THREE.BufferGeometry {
     // Side profile of the raked Tango front, drawn in (forward, height) and extruded
     // across the car width so the whole cab leans back like the real DT8.12 face.
     const profile = new THREE.Shape();
     profile.moveTo(0, 0.4);
-    profile.lineTo(0.8, 0.4);
-    profile.lineTo(0.94, 0.62);
-    profile.lineTo(0.9, 1.42);
+    profile.lineTo(0.65, 0.4);
+    profile.quadraticCurveTo(0.87, 0.4, 0.9, 0.65);
+    profile.quadraticCurveTo(0.93, 1.02, 0.85, 1.42);
     profile.lineTo(0.52, 2.86);
     profile.quadraticCurveTo(0.42, 3.14, 0.14, 3.22);
     profile.lineTo(0, 3.22);
     profile.closePath();
     const geometry = new THREE.ExtrudeGeometry(profile, {
-      depth: 2.34,
+      depth: 2.18,
       bevelEnabled: true,
-      bevelThickness: 0.09,
-      bevelSize: 0.09,
-      bevelSegments: 3
+      bevelThickness: 0.18,
+      bevelSize: 0.1,
+      bevelSegments: 8,
+      curveSegments: 20
     });
-    geometry.translate(0, 0, -1.17);
+    geometry.translate(0, 0, -1.09);
     // Map the profile's forward axis onto +z and the extrusion depth onto the width.
     geometry.rotateY(-Math.PI / 2);
-    return geometry;
+    // Extrusion duplicates vertices along bevel strips; weld them for continuous highlights.
+    geometry.deleteAttribute('normal');
+    geometry.deleteAttribute('uv');
+    const smooth = mergeVertices(geometry);
+    smooth.computeVertexNormals();
+    geometry.dispose();
+    return smooth;
   }
 
   private makeTangoCabMask(): THREE.ExtrudeGeometry {
     const shape = new THREE.Shape();
-    shape.moveTo(-1.09, -0.8);
-    shape.lineTo(1.09, -0.8);
-    shape.lineTo(0.82, 0.72);
-    shape.quadraticCurveTo(0.72, 0.86, 0.5, 0.88);
-    shape.lineTo(-0.5, 0.88);
-    shape.quadraticCurveTo(-0.72, 0.86, -0.82, 0.72);
+    shape.moveTo(-0.86, -0.8);
+    shape.quadraticCurveTo(-1.08, -0.8, -1.08, -0.59);
+    shape.lineTo(-1.0, 0.69);
+    shape.quadraticCurveTo(-0.98, 0.88, -0.78, 0.88);
+    shape.quadraticCurveTo(0, 0.94, 0.78, 0.88);
+    shape.quadraticCurveTo(0.98, 0.88, 1.0, 0.69);
+    shape.lineTo(1.08, -0.59);
+    shape.quadraticCurveTo(1.08, -0.8, 0.86, -0.8);
     shape.closePath();
     const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 2 });
     geometry.translate(0, 0, -0.03);
@@ -4363,12 +4385,14 @@ class ProceduralTransitVehicleFactory {
 
   private makeTangoWindscreen(): THREE.ExtrudeGeometry {
     const shape = new THREE.Shape();
-    shape.moveTo(-0.99, -0.68);
-    shape.lineTo(0.99, -0.68);
-    shape.lineTo(0.74, 0.6);
-    shape.quadraticCurveTo(0.64, 0.7, 0.46, 0.72);
-    shape.lineTo(-0.46, 0.72);
-    shape.quadraticCurveTo(-0.64, 0.7, -0.74, 0.6);
+    shape.moveTo(-0.81, -0.71);
+    shape.quadraticCurveTo(-0.99, -0.71, -0.99, -0.54);
+    shape.lineTo(-0.92, 0.64);
+    shape.quadraticCurveTo(-0.9, 0.78, -0.73, 0.78);
+    shape.quadraticCurveTo(0, 0.83, 0.73, 0.78);
+    shape.quadraticCurveTo(0.9, 0.78, 0.92, 0.64);
+    shape.lineTo(0.99, -0.54);
+    shape.quadraticCurveTo(0.99, -0.71, 0.81, -0.71);
     shape.closePath();
     const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.015, bevelSegments: 2 });
     geometry.translate(0, 0, -0.025);
