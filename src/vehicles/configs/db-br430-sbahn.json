@@ -2,6 +2,7 @@
   "id": "db-br430-sbahn",
   "kind": "s-bahn",
   "displayName": "DB BR 430 S-Bahn (Stuttgart)",
+  "exteriorDetailStyle": "br430",
   "materials": {
     "shell": { "color": "#dfe1df", "roughness": 0.3, "metalness": 0.14, "clearcoat": 0.32 },
     "accent": { "color": "#d71920", "roughness": 0.3, "clearcoat": 0.34 },

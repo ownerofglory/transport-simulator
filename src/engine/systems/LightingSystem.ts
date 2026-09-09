@@ -105,6 +105,7 @@ export class LightingSystem implements EngineSystem {
    * has actually moved, since applying rebuilds the sky/fog values.
    */
   updateUnderground(underground: boolean, vehiclePosition: THREE.Vector3, tangent: THREE.Vector3, deltaSeconds: number): void {
+    this.weatherSky.advance(deltaSeconds, this.weather, vehiclePosition);
     const target = underground ? 1 : 0;
     // ~0.6 s portal transition, frame-rate independent.
     const step = THREE.MathUtils.clamp(deltaSeconds / 0.6, 0, 1);

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { addTangoExteriorDetails } from './tangoDetails';
+import { makeSsbSurfaceTexture } from './surfaceTextures';
 import { makeLabelTexture } from '../labels';
 import type { VehicleKind } from '../domain/transport';
 import { buildBusVehicle } from './blueprint/bus/buildBusFromBlueprint';
@@ -19,6 +21,11 @@ import {
 import type { ResolvedVehicleBuildContext, VehicleInstance } from './types';
 
 const DOUBLE_FORMATION_LINES = new Set(['U1', 'U6', 'U7', 'U11', 'U12', 'U19']);
+
+// The lower Tango apron bows forward in plan, fading into the flat lamp fascia.
+function tangoApronBow(x: number, y: number): number {
+  return 0.34 * Math.max(0, 1 - (x / 1.27) ** 2) * (1 - THREE.MathUtils.smoothstep(y, 0.75, 1.05));
+}
 
 // Rake of the planar Odessa cab face, in radians. Must stay in sync with the
 // front ring of makeOdessaCabNose (0.25 m of setback over 2.0 m of height);
@@ -3139,7 +3146,8 @@ class ProceduralTransitVehicleFactory {
   }
 
   createStadtbahnVehicle(): VehicleInstance {
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffdf00, roughness: 0.52, metalness: 0.05 });
+    const bodyMat = new THREE.MeshPhysicalMaterial({ color: 0xffdf00, roughness: 0.34, metalness: 0.05, clearcoat: 0.42, clearcoatRoughness: 0.25 });
+    bodyMat.name = 'SSB satin yellow paint';
     const blackMat = new THREE.MeshStandardMaterial({ color: 0x17232b, roughness: 0.38 });
     const glassMat = new THREE.MeshStandardMaterial({
       color: 0x91c7dd,
@@ -3152,9 +3160,11 @@ class ProceduralTransitVehicleFactory {
     });
     this.glassMaterial = glassMat;
     const roofMat = new THREE.MeshStandardMaterial({ color: 0xbfc1bd, roughness: 0.64, metalness: 0.12 });
-    const doorMat = new THREE.MeshStandardMaterial({ color: 0xf6c900, roughness: 0.48 });
+    const doorMat = new THREE.MeshPhysicalMaterial({ color: 0xf6c900, roughness: 0.38, clearcoat: 0.3, clearcoatRoughness: 0.28 });
     const interiorWallMat = new THREE.MeshStandardMaterial({ color: 0xd9d5ca, roughness: 0.88 });
-    const interiorFloorMat = new THREE.MeshStandardMaterial({ color: 0x686d6d, roughness: 0.94 });
+    const interiorFloorMat = new THREE.MeshStandardMaterial({ map: makeSsbSurfaceTexture('floor'), roughness: 0.94 });
+    const seatFabricMat = new THREE.MeshStandardMaterial({ map: makeSsbSurfaceTexture('fabric'), roughness: 0.96 });
+    seatFabricMat.name = 'SSB woven blue upholstery';
     const rubberMat = new THREE.MeshStandardMaterial({ color: 0x11151b, roughness: 0.8 });
     const metalMat = new THREE.MeshStandardMaterial({ color: 0x8a8f91, roughness: 0.4, metalness: 0.65 });
     const doorButtonMat = new THREE.MeshStandardMaterial({
@@ -3163,7 +3173,9 @@ class ProceduralTransitVehicleFactory {
       emissiveIntensity: 0.32,
       roughness: 0.42
     });
-    const interiorDisplayMat = this.context.makeInteriorDisplayMaterial();
+    // Each monitor has its own outward-facing screen; never show mirrored back faces.
+    const interiorDisplayMat = this.context.makeInteriorDisplayMaterial().clone();
+    interiorDisplayMat.side = THREE.FrontSide;
     const destinationMaterial = new THREE.MeshBasicMaterial({
       map: makeLabelTexture(`${this.context.route.line} ${this.context.route.destination}`, { width: 512, height: 128, bg: '#111', fg: '#ffd900' }),
       side: THREE.DoubleSide,
@@ -3189,6 +3201,7 @@ class ProceduralTransitVehicleFactory {
           roofMat,
           interiorWallMat,
           interiorFloorMat,
+          seatFabricMat,
           metalMat,
           doorButtonMat,
           interiorDisplayMat,
@@ -3301,6 +3314,7 @@ class ProceduralTransitVehicleFactory {
     roofMat: THREE.Material,
     interiorWallMat: THREE.Material,
     interiorFloorMat: THREE.Material,
+    seatFabricMat: THREE.Material,
     metalMat: THREE.Material,
     doorButtonMat: THREE.Material,
     interiorDisplayMat: THREE.Material,
@@ -3309,25 +3323,32 @@ class ProceduralTransitVehicleFactory {
     const car = new THREE.Group();
     car.name = `Articulated car ${centerZ}`;
     car.userData.centerOffsetM = centerZ;
+    // Car +Z follows travel; a rear-facing cab in a coupled set must not reverse the view.
+    car.userData.passengerCameraLocal = [0.08, 2.3, -4.8];
+    car.userData.passengerLookAtLocal = [0.05, 2.2, 7.5];
     car.position.z = centerZ;
     const lowerSkirt = new THREE.Mesh(new THREE.BoxGeometry(2.52, 0.24, 17.75), blackMat);
     lowerSkirt.position.y = 0.43;
     lowerSkirt.castShadow = true;
     car.add(lowerSkirt);
+    this.passengerShells.push(lowerSkirt);
     const body = new THREE.Mesh(this.makeTangoBody(), bodyMat);
     body.position.y = 0.52;
     body.castShadow = true;
     car.add(body);
+    this.passengerShells.push(body);
     // The real DT8 roof deck is light grey; only the side fairings stay yellow.
     const roof = new THREE.Mesh(new THREE.BoxGeometry(2.14, 0.24, 16.9), roofMat);
     roof.position.y = 3.34;
     roof.castShadow = true;
     car.add(roof);
+    this.passengerShells.push(roof);
     for (const side of [-1, 1]) {
       const roofFairing = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.36, 16.35), bodyMat);
       roofFairing.position.set(side * 1.12, 3.36, 0);
       roofFairing.castShadow = true;
       car.add(roofFairing);
+      this.passengerShells.push(roofFairing);
     }
 
     // Rounded cab shoulders and a raked panoramic screen share the same end geometry.
@@ -3374,18 +3395,28 @@ class ProceduralTransitVehicleFactory {
     car.add(windshieldTrim);
     this.cabShells.push(windshieldTrim);
 
-    const bumper = new THREE.Mesh(new RoundedBoxGeometry(2.28, 0.48, 0.24, 5, 0.1), bodyMat);
-    bumper.position.set(0, 0.65, cabDirection * 9.94);
+    const bumperGeometry = new RoundedBoxGeometry(2.28, 0.48, 0.32, 8, 0.15);
+    const bumperVertices = bumperGeometry.getAttribute('position');
+    for (let i = 0; i < bumperVertices.count; i++) {
+      bumperVertices.setZ(i, bumperVertices.getZ(i) + tangoApronBow(bumperVertices.getX(i), bumperVertices.getY(i) + 0.65));
+    }
+    bumperGeometry.computeVertexNormals();
+    const bumper = new THREE.Mesh(bumperGeometry, bodyMat);
+    bumper.position.set(0, 0.65, cabDirection * 9.9);
+    if (cabDirection < 0) bumper.rotation.y = Math.PI;
     car.add(bumper);
     this.cabShells.push(bumper);
 
     const couplerRecess = new THREE.Mesh(new RoundedBoxGeometry(0.58, 0.43, 0.035, 4, 0.04), blackMat);
-    couplerRecess.position.set(0, 0.62, cabDirection * 10.073);
+    couplerRecess.position.set(0, 0.62, cabDirection * (10.073 + tangoApronBow(0, 0.62)));
     car.add(couplerRecess);
     this.cabShells.push(couplerRecess);
     for (const side of [-1, 1]) {
-      const panelJoint = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.012, 0.018), blackMat);
-      panelJoint.position.set(side * 0.68, 0.92, cabDirection * 10.075);
+      const points = Array.from({ length: 17 }, (_, index) => {
+        const x = side * (0.305 + index * 0.75 / 16);
+        return new THREE.Vector3(x, 0.92, cabDirection * (10.075 + tangoApronBow(x, 0.92)));
+      });
+      const panelJoint = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 16, 0.006, 4, false), blackMat);
       car.add(panelJoint);
       this.cabShells.push(panelJoint);
     }
@@ -3535,6 +3566,7 @@ class ProceduralTransitVehicleFactory {
     sideDisplays.renderOrder = 20;
     sideDisplays.instanceMatrix.needsUpdate = true;
     car.add(sideDisplays);
+    this.passengerShells.push(sideDisplays);
 
     const doorButtons = new THREE.InstancedMesh(new THREE.SphereGeometry(0.065, 10, 8), doorButtonMat, 4);
     const doorButtonMatrix = new THREE.Matrix4();
@@ -3551,11 +3583,14 @@ class ProceduralTransitVehicleFactory {
     car.add(doorButtons);
 
     const floor = new THREE.Mesh(new THREE.BoxGeometry(2.28, 0.08, 16.6), interiorFloorMat);
+    floor.name = 'SSB speckled saloon floor';
+    floor.receiveShadow = true;
     floor.position.y = 1.02;
     car.add(floor);
     this.addInteriorShell(car, cabZ, cabDirection, interiorWallMat, blackMat, glassMat, doorMat);
-    this.addPassengerSeating(car, cabDirection, metalMat, doorMat);
+    this.addPassengerSeating(car, cabDirection, metalMat, doorMat, seatFabricMat);
     this.addInteriorDisplays(car, cabDirection, interiorDisplayMat, blackMat);
+    addTangoExteriorDetails(car, this.passengerShells, metalMat, blackMat);
 
     const hvacCenters = [-5.1, 0, 5.1];
     const hvacUnits = new THREE.InstancedMesh(new THREE.BoxGeometry(1.72, 0.24, 2.25), roofMat, hvacCenters.length);
@@ -3727,7 +3762,8 @@ class ProceduralTransitVehicleFactory {
     car: THREE.Group,
     cabDirection: -1 | 1,
     metalMaterial: THREE.Material,
-    accentMaterial: THREE.Material
+    accentMaterial: THREE.Material,
+    fabricMaterial: THREE.Material
   ): void {
     const allRows: { z: number; facing: -1 | 1 }[] = [
       { z: -7.7, facing: 1 }, { z: -6.75, facing: -1 },
@@ -3747,16 +3783,18 @@ class ProceduralTransitVehicleFactory {
       }
     });
 
-    const cushionMaterial = new THREE.MeshStandardMaterial({ color: 0x416b80, roughness: 0.9 });
-    const backMaterial = new THREE.MeshStandardMaterial({ color: 0x365f74, roughness: 0.88 });
     const baseMaterial = new THREE.MeshStandardMaterial({ color: 0x343b3e, roughness: 0.75, metalness: 0.18 });
-    const cushions = new THREE.InstancedMesh(new THREE.BoxGeometry(0.38, 0.13, 0.5), cushionMaterial, seats.length);
-    const backrests = new THREE.InstancedMesh(new THREE.BoxGeometry(0.38, 0.66, 0.12), backMaterial, seats.length);
+    const cushions = new THREE.InstancedMesh(new RoundedBoxGeometry(0.38, 0.13, 0.5, 2, 0.035), fabricMaterial, seats.length);
+    const backrests = new THREE.InstancedMesh(new RoundedBoxGeometry(0.38, 0.66, 0.12, 2, 0.035), fabricMaterial, seats.length);
+    const seatShells = new THREE.InstancedMesh(
+      new RoundedBoxGeometry(0.405, 0.7, 0.09, 2, 0.025),
+      new THREE.MeshStandardMaterial({ color: 0xc6c9c7, roughness: 0.58 }), seats.length
+    );
     const pedestals = new THREE.InstancedMesh(new THREE.BoxGeometry(0.16, 0.34, 0.2), baseMaterial, seats.length);
     const matrix = new THREE.Matrix4();
     const rotation = new THREE.Quaternion();
-    const priorityBlue = new THREE.Color(0x557f91);
-    const standardBlue = new THREE.Color(0x416b80);
+    const priorityBlue = new THREE.Color(0xc3dded);
+    const standardBlue = new THREE.Color(0xffffff);
     seats.forEach((seat, index) => {
       matrix.makeTranslation(seat.x, 1.3, seat.z);
       cushions.setMatrixAt(index, matrix);
@@ -3764,19 +3802,23 @@ class ProceduralTransitVehicleFactory {
       rotation.setFromAxisAngle(new THREE.Vector3(1, 0, 0), seat.facing * -0.08);
       matrix.compose(new THREE.Vector3(seat.x, 1.66, seat.z - seat.facing * 0.285), rotation, new THREE.Vector3(1, 1, 1));
       backrests.setMatrixAt(index, matrix);
+      backrests.setColorAt(index, seat.priority ? priorityBlue : standardBlue);
+      matrix.compose(new THREE.Vector3(seat.x, 1.66, seat.z - seat.facing * 0.365), rotation, new THREE.Vector3(1, 1, 1));
+      seatShells.setMatrixAt(index, matrix);
       matrix.makeTranslation(seat.x, 1.15, seat.z - seat.facing * 0.08);
       pedestals.setMatrixAt(index, matrix);
     });
     cushions.name = 'SSB paired seat cushions';
     backrests.name = 'SSB paired seat backrests';
     pedestals.name = 'SSB cantilever seat supports';
+    seatShells.name = 'SSB molded seat shells';
     cushions.castShadow = true;
     backrests.castShadow = true;
-    car.add(cushions, backrests, pedestals);
+    car.add(cushions, backrests, pedestals, seatShells);
 
     const leaningPads = new THREE.InstancedMesh(
       new THREE.BoxGeometry(0.12, 0.7, 0.52),
-      new THREE.MeshStandardMaterial({ color: 0x496e7d, roughness: 0.9 }),
+      fabricMaterial,
       multiPurposeRows.size
     );
     [...multiPurposeRows].forEach((z, index) => {
@@ -3786,9 +3828,8 @@ class ProceduralTransitVehicleFactory {
     leaningPads.name = 'SSB multipurpose-area leaning pads';
     car.add(leaningPads);
 
-    const foldingSeatMaterial = new THREE.MeshStandardMaterial({ color: 0x537b8d, roughness: 0.9 });
     for (const z of [-4.05, -3.48, 3.55, 4.12]) {
-      const foldingSeat = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.42, 0.46), foldingSeatMaterial);
+      const foldingSeat = new THREE.Mesh(new RoundedBoxGeometry(0.12, 0.42, 0.46, 2, 0.03), fabricMaterial);
       foldingSeat.position.set(1.14, 1.38, z);
       foldingSeat.rotation.z = -0.12;
       car.add(foldingSeat);
@@ -3887,7 +3928,8 @@ class ProceduralTransitVehicleFactory {
     car.add(overheadDisplayRear);
     const overheadDisplayFront = overheadDisplayRear.clone();
     overheadDisplayFront.position.z = overheadZ + 0.065;
-    overheadDisplayFront.rotation.y = 0;
+    // Cloning a half-turn can re-express it as X/Z half-turns; reset all Euler axes.
+    overheadDisplayFront.rotation.set(0, 0, 0);
     car.add(overheadDisplayFront);
   }
 
@@ -4344,20 +4386,26 @@ class ProceduralTransitVehicleFactory {
     profile.quadraticCurveTo(0.87, 0.4, 0.9, 0.65);
     profile.quadraticCurveTo(0.93, 1.02, 0.85, 1.42);
     profile.lineTo(0.52, 2.86);
-    profile.quadraticCurveTo(0.42, 3.14, 0.14, 3.22);
+    profile.bezierCurveTo(0.46, 3.1, 0.28, 3.22, 0.08, 3.22);
     profile.lineTo(0, 3.22);
     profile.closePath();
     const geometry = new THREE.ExtrudeGeometry(profile, {
-      depth: 2.18,
+      depth: 1.94,
+      steps: 32,
       bevelEnabled: true,
-      bevelThickness: 0.18,
+      bevelThickness: 0.3,
       bevelSize: 0.1,
-      bevelSegments: 8,
+      bevelSegments: 12,
       curveSegments: 20
     });
-    geometry.translate(0, 0, -1.09);
+    geometry.translate(0, 0, -0.97);
     // Map the profile's forward axis onto +z and the extrusion depth onto the width.
     geometry.rotateY(-Math.PI / 2);
+    const vertices = geometry.getAttribute('position');
+    for (let i = 0; i < vertices.count; i++) {
+      const z = vertices.getZ(i);
+      vertices.setZ(i, z + tangoApronBow(vertices.getX(i), vertices.getY(i)) * THREE.MathUtils.smoothstep(z, 0, 0.65));
+    }
     // Extrusion duplicates vertices along bevel strips; weld them for continuous highlights.
     geometry.deleteAttribute('normal');
     geometry.deleteAttribute('uv');
@@ -4369,14 +4417,14 @@ class ProceduralTransitVehicleFactory {
 
   private makeTangoCabMask(): THREE.ExtrudeGeometry {
     const shape = new THREE.Shape();
-    shape.moveTo(-0.86, -0.8);
-    shape.quadraticCurveTo(-1.08, -0.8, -1.08, -0.59);
-    shape.lineTo(-1.0, 0.69);
-    shape.quadraticCurveTo(-0.98, 0.88, -0.78, 0.88);
-    shape.quadraticCurveTo(0, 0.94, 0.78, 0.88);
-    shape.quadraticCurveTo(0.98, 0.88, 1.0, 0.69);
-    shape.lineTo(1.08, -0.59);
-    shape.quadraticCurveTo(1.08, -0.8, 0.86, -0.8);
+    shape.moveTo(-0.78, -0.8);
+    shape.quadraticCurveTo(-1.08, -0.8, -1.08, -0.5);
+    shape.lineTo(-1.0, 0.6);
+    shape.quadraticCurveTo(-0.98, 0.87, -0.68, 0.9);
+    shape.quadraticCurveTo(0, 0.98, 0.68, 0.9);
+    shape.quadraticCurveTo(0.98, 0.87, 1.0, 0.6);
+    shape.lineTo(1.08, -0.5);
+    shape.quadraticCurveTo(1.08, -0.8, 0.78, -0.8);
     shape.closePath();
     const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 2 });
     geometry.translate(0, 0, -0.03);
@@ -4385,14 +4433,14 @@ class ProceduralTransitVehicleFactory {
 
   private makeTangoWindscreen(): THREE.ExtrudeGeometry {
     const shape = new THREE.Shape();
-    shape.moveTo(-0.81, -0.71);
-    shape.quadraticCurveTo(-0.99, -0.71, -0.99, -0.54);
-    shape.lineTo(-0.92, 0.64);
-    shape.quadraticCurveTo(-0.9, 0.78, -0.73, 0.78);
-    shape.quadraticCurveTo(0, 0.83, 0.73, 0.78);
-    shape.quadraticCurveTo(0.9, 0.78, 0.92, 0.64);
-    shape.lineTo(0.99, -0.54);
-    shape.quadraticCurveTo(0.99, -0.71, 0.81, -0.71);
+    shape.moveTo(-0.73, -0.71);
+    shape.quadraticCurveTo(-0.99, -0.71, -0.99, -0.46);
+    shape.lineTo(-0.92, 0.56);
+    shape.quadraticCurveTo(-0.9, 0.77, -0.63, 0.8);
+    shape.quadraticCurveTo(0, 0.87, 0.63, 0.8);
+    shape.quadraticCurveTo(0.9, 0.77, 0.92, 0.56);
+    shape.lineTo(0.99, -0.46);
+    shape.quadraticCurveTo(0.99, -0.71, 0.73, -0.71);
     shape.closePath();
     const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.015, bevelSegments: 2 });
     geometry.translate(0, 0, -0.025);

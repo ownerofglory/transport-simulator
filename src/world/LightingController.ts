@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Season } from '../app/types';
-import { daylightForHour, DEFAULT_WEATHER, type VisualWeather } from './weather';
+import { daylightForHour, DEFAULT_WEATHER, effectiveCloudCover, solarPositionForHour, type VisualWeather } from './weather';
 
 /** Controls sun, sky, fog, and fill lighting based on season and local time. */
 export class LightingController {
@@ -81,19 +81,18 @@ export class LightingController {
   private apply(): void {
     const hour = this.timeOfDayHour;
 
-    // Daylight rises after 06:00, peaks around noon, and falls by 18:00.
     const daylight = this.daylightFactor();
+    const skyDaylight = daylight > 0.01 ? 0.52 + Math.sqrt(daylight) * 0.48 : 0;
+    const solar = solarPositionForHour(hour, this.weather, this.currentSeason);
+    const dawnDusk = solar.twilight * Math.pow(solar.daylight, 0.35);
 
-    // Warm tint around 06:00 and 18:00, fading over about two hours.
-    const dawnDusk = Math.max(0, 1 - Math.abs(hour - this.weather.sunriseHour) / 2, 1 - Math.abs(hour - this.weather.sunsetHour) / 2);
-
-    // Solar arc: 06:00 horizon, 12:00 high sun, 18:00 horizon.
-    const angle = ((hour - this.weather.sunriseHour) / Math.max(1, this.weather.sunsetHour - this.weather.sunriseHour)) * Math.PI;
-
+    // Open-Meteo supplies the city-local daylight window; seasonal elevation
+    // keeps the directional shadows low in winter and high in summer.
+    const horizontal = Math.cos(solar.elevationRad);
     this.sun.position.set(
-      Math.cos(angle) * 420, // horizontal sun travel radius.
-      Math.max(18, Math.sin(angle) * 420), // keep sun slightly above horizon at night.
-      -180 // fixed north/south offset for consistent shadows.
+      Math.sin(solar.azimuthRad) * horizontal * 520,
+      Math.sin(solar.elevationRad) * 520,
+      Math.cos(solar.azimuthRad) * horizontal * 520
     );
 
     // Underground, daylight must not reach the bore: the sun is cut almost to
@@ -101,8 +100,8 @@ export class LightingController {
     // only real light left is the lamp rig travelling with the vehicle.
     const below = this.undergroundFactor;
 
-    const cloudiness = this.weather.kind === 'fog' ? 0.92 : Math.max(this.weather.cloudCover, this.weather.kind === 'rain' || this.weather.kind === 'thunder' ? 0.82 : 0);
-    this.sun.intensity = (0.38 + daylight * 1.95 + dawnDusk * 0.34) * (1 - cloudiness * 0.72) * (1 - below * 0.97); // cloud cover softens direct light while tunnels still suppress it.
+    const cloudiness = effectiveCloudCover(this.weather);
+    this.sun.intensity = (0.025 + daylight * 2.28 + dawnDusk * 0.28) * (1 - cloudiness * 0.72) * (1 - below * 0.97); // cloud cover softens direct light while tunnels still suppress it.
     this.sun.color.set(dawnDusk > 0.2 ? 0xffbd7a : daylight > 0.2 ? 0xfff7e8 : 0x9bb9e6); // warm dusk, pale day, blue night.
 
     this.hemisphere.intensity = THREE.MathUtils.lerp(0.72 + daylight * 0.58 + dawnDusk * 0.12 + cloudiness * 0.22, 0.05, below); // overcast skies trade direct sun for diffuse ambient light.
@@ -120,7 +119,7 @@ export class LightingController {
     };
 
     const nightSky = new THREE.Color(0x172b46); // deep blue night sky.
-    const sky = nightSky.clone().lerp(seasonSky[this.currentSeason], daylight);
+    const sky = nightSky.clone().lerp(seasonSky[this.currentSeason], skyDaylight);
 
     // Add orange sunrise/sunset warmth without fully replacing the seasonal sky.
     if (dawnDusk > 0.2) sky.lerp(new THREE.Color(0xd98961), dawnDusk * 0.3);

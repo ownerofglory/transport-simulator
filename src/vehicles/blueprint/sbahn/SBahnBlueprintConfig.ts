@@ -32,6 +32,7 @@ export type SBahnBlueprintConfig = {
   id: string;
   kind: 's-bahn';
   displayName: string;
+  exteriorDetailStyle?: 'br430';
   materials: Record<SBahnMaterialRole, BlueprintStandardMaterialConfig> &
     Partial<Record<SBahnOptionalMaterialRole, BlueprintStandardMaterialConfig>>;
   // Vertical LED bars (BR 430) or round clusters (both CDMX cars). Defaults to 'bar'.
@@ -94,6 +95,9 @@ export function parseSBahnBlueprint(raw: unknown): SBahnBlueprintParseResult {
 
   requireString(root, 'id', errors);
   requireString(root, 'displayName', errors);
+  if (root.exteriorDetailStyle !== undefined && root.exteriorDetailStyle !== 'br430') {
+    errors.push('exteriorDetailStyle must be "br430"');
+  }
   if (root.kind !== 's-bahn') errors.push('kind must be "s-bahn"');
 
   const materials = asRecord(root.materials, 'materials', errors);

@@ -21,6 +21,7 @@ import { StationLayer } from './world/layers/StationLayer';
 import { OpposingTrafficLayer } from './world/layers/OpposingTrafficLayer';
 import { RoadTrafficSystem } from './world/traffic/RoadTrafficSystem';
 import { PedestrianSystem } from './world/traffic/PedestrianSystem';
+import { TransitPassengerSystem } from './world/traffic/TransitPassengerSystem';
 import { TrackSpreadProfile } from './world/trackSpread';
 import { islandSpreadZones } from './world/stations/trackLayout';
 type GeoPoint = { lat: number; lon: number };
@@ -44,6 +45,8 @@ export class TransitWorld {
   private roadTraffic: RoadTrafficSystem | null = null;
   // Station-aware pedestrian traffic near upcoming/just-departed stops.
   private pedestrians: PedestrianSystem | null = null;
+  // Scheduled public-transport cohorts for cities covered by the backend graph.
+  private transitPassengers: TransitPassengerSystem | null = null;
   // The active vehicle (placement, doors, interior display, visibility, lamps).
   private activeVehicle!: ActiveVehicleSystem;
   // Terrain sampling, curated landmarks, OSM streaming, and scenery visibility.
@@ -181,6 +184,22 @@ export class TransitWorld {
         }
       });
       this.scene.add(this.pedestrians.root);
+      if (this.city?.passengerTransit?.network === 'vvs' && this.route.stations.length >= 2) {
+        this.transitPassengers = new TransitPassengerSystem({
+          line: this.route.line,
+          stationGeoAt: (index) => {
+            const station = this.route.stations[index];
+            if (!station) return undefined;
+            if (station.lat !== undefined && station.lon !== undefined) return { lat: station.lat, lon: station.lon };
+            return this.geoPointAt(station.distanceM / this.route.routeLengthM);
+          },
+          stationWorldAt: (index) => this.routePointAtDistance(this.route.stations[index].distanceM, this.activeLaneOffsetM),
+          stationTangentAt: (index) => this.routeTangentAtDistance(this.route.stations[index].distanceM),
+          vehicleRoot: this.activeVehicle.root,
+          vehicleCars: this.activeVehicle.cars
+        });
+        this.scene.add(this.transitPassengers.root);
+      }
     }
 
     window.addEventListener('resize', this.onRendererResizeBound);
@@ -274,6 +293,7 @@ export class TransitWorld {
     this.roadTraffic?.setVisible(!underground);
     this.pedestrians?.update(distanceM, this.route.stations, position, deltaSeconds);
     this.pedestrians?.setVisible(!underground);
+    this.transitPassengers?.update(distanceM, this.route.stations, doorsOpen, underground, deltaSeconds);
     this.lightingSystem.updateUnderground(underground, position, tangent, deltaSeconds);
     this.updateVehicleLighting();
     this.activeVehicle.updateDoors(doorsOpen, deltaSeconds);
@@ -328,6 +348,8 @@ export class TransitWorld {
     this.roadTraffic = null;
     this.pedestrians?.dispose();
     this.pedestrians = null;
+    this.transitPassengers?.dispose();
+    this.transitPassengers = null;
     // Free geometries/materials/textures built by the scene layers so switching
     // routes does not leak GPU resources.
     this.disposeSceneGraph();

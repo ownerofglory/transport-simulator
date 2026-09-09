@@ -1,5 +1,6 @@
 import type { CityDefinition } from '../cities';
 import type { DemoRoute } from '../route';
+import type { Season } from '../app/types';
 
 export type WeatherKind = 'clear' | 'cloudy' | 'fog' | 'rain' | 'snow' | 'thunder';
 
@@ -27,6 +28,15 @@ export type WeatherForecastDay = {
 export type WeatherReport = {
   current: VisualWeather;
   forecast: WeatherForecastDay[];
+};
+
+export type SolarPosition = {
+  /** East-to-west position around the horizon, in radians. */
+  azimuthRad: number;
+  /** Signed altitude above the horizon; negative means the sun is below it. */
+  elevationRad: number;
+  daylight: number;
+  twilight: number;
 };
 
 type WeatherApiResponse = {
@@ -153,6 +163,44 @@ export function daylightForHour(hour: number, weather: Pick<VisualWeather, 'sunr
   const progress = Math.min(1, Math.max(0, (hour - weather.sunriseHour) / length));
   return Math.sin(progress * Math.PI);
 }
+
+/** Rendering floor for WMO conditions when a provider's measured percentage is delayed or missing. */
+export function effectiveCloudCover(weather: Pick<VisualWeather, 'kind' | 'cloudCover'>): number {
+  const conditionFloor: Partial<Record<WeatherKind, number>> = {
+    cloudy: 0.68,
+    fog: 0.96,
+    rain: 0.84,
+    snow: 0.76,
+    thunder: 0.94
+  };
+  return clamp01(Math.max(weather.cloudCover, conditionFloor[weather.kind] ?? 0));
+}
+
+/**
+ * A lightweight city-local solar arc. Sunrise and sunset come from Open-Meteo;
+ * season changes the peak elevation so a winter noon stays visibly lower than
+ * a summer one even when the user picks the same clock hour.
+ */
+export function solarPositionForHour(hour: number, weather: Pick<VisualWeather, 'sunriseHour' | 'sunsetHour'>, season: Season): SolarPosition {
+  const dayLength = Math.max(1, weather.sunsetHour - weather.sunriseHour);
+  const phase = (hour - weather.sunriseHour) / dayLength;
+  const arc = Math.sin(phase * Math.PI);
+  const maxElevation: Record<Season, number> = {
+    spring: THREE_QUARTER_PI,
+    summer: 1.12,
+    autumn: 0.62,
+    winter: 0.34
+  };
+  const daylight = Math.max(0, arc);
+  return {
+    azimuthRad: -Math.PI / 2 + phase * Math.PI,
+    elevationRad: arc * maxElevation[season],
+    daylight,
+    twilight: Math.max(0, 1 - Math.abs(hour - weather.sunriseHour) / 1.35, 1 - Math.abs(hour - weather.sunsetHour) / 1.35)
+  };
+}
+
+const THREE_QUARTER_PI = Math.PI * 0.75;
 
 function kindForWmoCode(code: number, precipitationMm: number, snowfallCm: number): WeatherKind {
   if (snowfallCm > 0 || [71, 73, 75, 77, 85, 86].includes(code)) return 'snow';

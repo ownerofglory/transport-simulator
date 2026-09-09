@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Season } from '../app/types';
-import { daylightForHour, DEFAULT_WEATHER, type VisualWeather } from './weather';
+import { DEFAULT_WEATHER, effectiveCloudCover, solarPositionForHour, type VisualWeather } from './weather';
 
 // A small procedural equirectangular map gives physically based materials a
 // believable sky reflection without downloading an HDR asset for every city.
@@ -20,8 +20,10 @@ export class SkyEnvironment {
   }
 
   update(season: Season, hour: number, undergroundFactor: number, weather: VisualWeather = DEFAULT_WEATHER): void {
-    const daylight = THREE.MathUtils.smoothstep(daylightForHour(hour, weather), 0, 1);
-    const dawnDusk = Math.max(0, 1 - Math.abs(hour - weather.sunriseHour) / 2, 1 - Math.abs(hour - weather.sunsetHour) / 2);
+    const solar = solarPositionForHour(hour, weather, season);
+    const daylight = THREE.MathUtils.smoothstep(solar.daylight, 0, 1);
+    const skyDaylight = daylight > 0.01 ? 0.52 + Math.sqrt(daylight) * 0.48 : 0;
+    const dawnDusk = solar.twilight * Math.pow(solar.daylight, 0.35);
     const palettes: Record<Season, [number, number]> = {
       spring: [0x638fb6, 0xd9e9ec],
       summer: [0x4e91c9, 0xdff2ff],
@@ -30,18 +32,18 @@ export class SkyEnvironment {
     };
     const [zenithHex, horizonHex] = palettes[season];
     const night = new THREE.Color(0x111a2b);
-    const zenith = night.clone().lerp(new THREE.Color(zenithHex), daylight);
-    const horizon = night.clone().lerp(new THREE.Color(horizonHex), daylight);
+    const zenith = night.clone().lerp(new THREE.Color(zenithHex), skyDaylight);
+    const horizon = night.clone().lerp(new THREE.Color(horizonHex), skyDaylight);
     const sunset = new THREE.Color(0xf0a069);
     zenith.lerp(sunset, dawnDusk * 0.18);
     horizon.lerp(sunset, dawnDusk * 0.45);
 
-    const cloudiness = weather.kind === 'fog' ? 0.9 : Math.max(weather.cloudCover, weather.kind === 'rain' || weather.kind === 'thunder' ? 0.82 : 0);
+    const cloudiness = effectiveCloudCover(weather);
     const cloudSky = new THREE.Color(weather.kind === 'snow' ? 0xc5d0d7 : 0x6e7880);
     zenith.lerp(cloudSky, cloudiness * 0.72);
     horizon.lerp(cloudSky, cloudiness * 0.52);
-    const sunU = ((hour - weather.sunriseHour) / 24 + 0.5) % 1;
-    const sunV = THREE.MathUtils.lerp(0.52, 0.14, daylight);
+    const sunU = ((solar.azimuthRad / (Math.PI * 2)) + 1) % 1;
+    const sunV = THREE.MathUtils.clamp(0.5 - solar.elevationRad / Math.PI, 0.04, 0.96);
     for (let y = 0; y < this.height; y++) {
       const v = y / (this.height - 1);
       const vertical = Math.pow(1 - Math.abs(v - 0.5) * 2, 0.72);

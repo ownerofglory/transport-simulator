@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { daylightForHour, toVisualWeather } from './weather';
+import { daylightForHour, effectiveCloudCover, solarPositionForHour, toVisualWeather } from './weather';
 
 describe('Open-Meteo weather mapping', () => {
   it('maps clear and cloudy WMO codes into sky states', () => {
@@ -29,5 +29,22 @@ describe('Open-Meteo weather mapping', () => {
     expect(weather.sunsetHour).toBeCloseTo(19 + 49 / 60);
     expect(daylightForHour(5, weather)).toBe(0);
     expect(daylightForHour(13.25, weather)).toBeGreaterThan(0.99);
+  });
+
+  it('keeps the seasonal sun lower in winter while honoring the local solar window', () => {
+    const weather = toVisualWeather({
+      current: { weather_code: 0 },
+      daily: { sunrise: ['2026-09-07T06:41'], sunset: ['2026-09-07T19:49'] }
+    });
+    const summer = solarPositionForHour(13.25, weather, 'summer');
+    const winter = solarPositionForHour(13.25, weather, 'winter');
+    expect(summer.daylight).toBeGreaterThan(0.99);
+    expect(summer.elevationRad).toBeGreaterThan(winter.elevationRad);
+    expect(solarPositionForHour(4, weather, 'summer').elevationRad).toBeLessThan(0);
+  });
+
+  it('keeps a visible cloud layer for a cloudy WMO state even without a fresh percentage', () => {
+    const weather = toVisualWeather({ current: { weather_code: 3, cloud_cover: 0 } });
+    expect(effectiveCloudCover(weather)).toBeGreaterThanOrEqual(0.68);
   });
 });
