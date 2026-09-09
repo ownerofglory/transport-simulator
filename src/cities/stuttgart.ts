@@ -88,6 +88,7 @@ export const stuttgartCity: CityDefinition = {
   noticeNetworkName: 'VVS / SSB',
   freeRideNotice: 'Free non-commercial simulator.',
   liveTraffic: { network: 'vvs' },
+  passengerTransit: { network: 'vvs' },
   transportModes: stuttgartTransportModes,
   routeManifestFallback: fallbackManifest,
   demoRoutesFallback: routePackages,

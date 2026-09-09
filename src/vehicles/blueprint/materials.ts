@@ -6,7 +6,8 @@ export function buildBlueprintMaterials(
 ): Record<string, THREE.MeshStandardMaterial> {
   const materials: Record<string, THREE.MeshStandardMaterial> = {};
   for (const [name, materialConfig] of Object.entries(materialConfigs)) {
-    materials[name] = new THREE.MeshStandardMaterial({
+    const isGlass = name === 'glass' || materialConfig.transmission !== undefined;
+    materials[name] = new THREE.MeshPhysicalMaterial({
       color: materialConfig.color,
       roughness: materialConfig.roughness ?? 0.5,
       metalness: materialConfig.metalness ?? 0.1,
@@ -14,7 +15,13 @@ export function buildBlueprintMaterials(
       transparent: materialConfig.transparent ?? false,
       emissive: materialConfig.emissive,
       emissiveIntensity: materialConfig.emissiveIntensity ?? 1,
-      side: materialConfig.transparent ? THREE.DoubleSide : THREE.FrontSide
+      side: materialConfig.transparent ? THREE.DoubleSide : THREE.FrontSide,
+      clearcoat: materialConfig.clearcoat ?? (isGlass ? 0.35 : name === 'body' || name === 'shell' || name === 'accent' ? 0.22 : 0),
+      clearcoatRoughness: materialConfig.clearcoatRoughness ?? 0.18,
+      envMapIntensity: materialConfig.envMapIntensity ?? (isGlass ? 1.15 : 0.7),
+      transmission: materialConfig.transmission ?? 0,
+      thickness: materialConfig.thickness ?? 0,
+      ior: materialConfig.ior ?? 1.5
     });
   }
   return materials;

@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import type { Season } from '../../app/types';
 import { LightingController } from '../../world/LightingController';
+import { SkyEnvironment } from '../../world/SkyEnvironment';
+import { WeatherSky } from '../../world/WeatherSky';
+import { DEFAULT_WEATHER, type VisualWeather } from '../../world/weather';
 import type { EngineSystem } from '../core/EngineSystem';
 
 /** Per-season sky tint and fog distances. */
@@ -28,6 +31,11 @@ export class LightingSystem implements EngineSystem {
   private readonly sun = new THREE.DirectionalLight();
   private readonly visibilityFill = new THREE.AmbientLight();
   private readonly controller: LightingController;
+  private readonly skyEnvironment: SkyEnvironment;
+  private readonly weatherSky: WeatherSky;
+  private season: Season = 'summer';
+  private hour = 12;
+  private weather: VisualWeather = DEFAULT_WEATHER;
 
   // Pooled tunnel lamps: created once, moved with the vehicle, never per-frame allocated.
   private readonly tunnelLamps: THREE.PointLight[] = [];
@@ -36,12 +44,15 @@ export class LightingSystem implements EngineSystem {
 
   constructor(private readonly scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
     this.controller = new LightingController(scene, renderer, this.hemisphere, this.sun, this.visibilityFill);
+    this.skyEnvironment = new SkyEnvironment(scene);
+    this.weatherSky = new WeatherSky(scene);
   }
 
   /** Adds lights and applies the default sky before a season is chosen. */
   initialize(): void {
     this.applySky('default');
     this.controller.initialize();
+    this.weatherSky.update(this.season, this.hour, this.weather);
     for (const _offset of TUNNEL_LAMP_OFFSETS_M) {
       const lamp = new THREE.PointLight(TUNNEL_LAMP_COLOR, 0, 52, 1.9);
       lamp.name = 'Tunnel lamp';
@@ -51,12 +62,25 @@ export class LightingSystem implements EngineSystem {
   }
 
   setSeason(season: Season): void {
+    this.season = season;
     this.applySky(season);
     this.controller.setSeason(season);
+    this.skyEnvironment.update(this.season, this.hour, this.undergroundFactor, this.weather);
+    this.weatherSky.update(this.season, this.hour, this.weather, this.undergroundFactor > 0.5);
   }
 
   setTimeOfDay(hour: number): void {
-    this.controller.setTimeOfDay(hour);
+    this.hour = ((hour % 24) + 24) % 24;
+    this.controller.setTimeOfDay(this.hour);
+    this.skyEnvironment.update(this.season, this.hour, this.undergroundFactor, this.weather);
+    this.weatherSky.update(this.season, this.hour, this.weather, this.undergroundFactor > 0.5);
+  }
+
+  setWeather(weather: VisualWeather): void {
+    this.weather = weather;
+    this.controller.setWeather(weather);
+    this.skyEnvironment.update(this.season, this.hour, this.undergroundFactor, weather);
+    this.weatherSky.update(this.season, this.hour, weather, this.undergroundFactor > 0.5);
   }
 
   /** 0 (night) … 1 (full day); used to switch vehicle exterior lamps. */
@@ -81,6 +105,7 @@ export class LightingSystem implements EngineSystem {
    * has actually moved, since applying rebuilds the sky/fog values.
    */
   updateUnderground(underground: boolean, vehiclePosition: THREE.Vector3, tangent: THREE.Vector3, deltaSeconds: number): void {
+    this.weatherSky.advance(deltaSeconds, this.weather, vehiclePosition);
     const target = underground ? 1 : 0;
     // ~0.6 s portal transition, frame-rate independent.
     const step = THREE.MathUtils.clamp(deltaSeconds / 0.6, 0, 1);
@@ -90,6 +115,8 @@ export class LightingSystem implements EngineSystem {
     if (Math.abs(this.undergroundFactor - this.appliedUndergroundFactor) > 0.01) {
       this.appliedUndergroundFactor = this.undergroundFactor;
       this.controller.setUndergroundFactor(this.undergroundFactor);
+      this.skyEnvironment.update(this.season, this.hour, this.undergroundFactor, this.weather);
+      this.weatherSky.update(this.season, this.hour, this.weather, this.undergroundFactor > 0.5);
     }
 
     const intensity = this.undergroundFactor * 95;
@@ -108,6 +135,8 @@ export class LightingSystem implements EngineSystem {
   }
 
   dispose(): void {
+    this.skyEnvironment.dispose();
+    this.weatherSky.dispose();
     this.scene.remove(this.hemisphere, this.sun, this.visibilityFill);
     for (const lamp of this.tunnelLamps) {
       this.scene.remove(lamp);

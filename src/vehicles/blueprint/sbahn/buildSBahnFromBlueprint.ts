@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { addBR430ExteriorDetails, makeBR430ExteriorLabels } from './br430Exterior';
 import { makeLabelTexture } from '../../../labels';
 import type { ResolvedVehicleBuildContext, VehicleInstance } from '../../types';
 import {
@@ -41,8 +43,20 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
   const rig: ExteriorLightRig = makeExteriorLightRig();
 
   const m = makeSBahnMaterials(config.materials);
-  const displayMaterial = context.makeInteriorDisplayMaterial();
+  const exteriorLabels = config.exteriorDetailStyle === 'br430'
+    ? makeBR430ExteriorLabels(context.definition.line, context.definition.destination)
+    : null;
+  const sharedDisplayMaterial = context.makeInteriorDisplayMaterial();
+  const displayMaterial = exteriorLabels ? sharedDisplayMaterial.clone() : sharedDisplayMaterial;
+  if (exteriorLabels) displayMaterial.side = THREE.FrontSide;
   const interior = makeSBahnInteriorMaterials(m);
+  const seatGeometry = exteriorLabels ? {
+    cushion: new RoundedBoxGeometry(0.42, 0.14, 0.56, 2, 0.04),
+    back: new RoundedBoxGeometry(0.42, 0.54, 0.12, 2, 0.035),
+    headrest: new RoundedBoxGeometry(0.42, 0.16, 0.14, 2, 0.04),
+    armrest: new RoundedBoxGeometry(0.045, 0.065, 0.42, 2, 0.02),
+    shell: new RoundedBoxGeometry(0.46, 0.64, 0.065, 2, 0.025)
+  } : undefined;
   rig.headLampMaterials.push(m.headlight);
   rig.tailLampMaterials.push(m.tailLamp);
 
@@ -53,6 +67,10 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
     const car = new THREE.Group();
     car.name = `${config.formation.sectionNamePrefix} ${index + 1}`;
     car.userData.centerOffsetM = center;
+    if (exteriorLabels) {
+      car.userData.passengerCameraLocal = [0.2, 2.3, -4.4];
+      car.userData.passengerLookAtLocal = [0.05, 2.25, 7.5];
+    }
     const body = new THREE.Mesh(makeSBahn430Body(16.15), m.shell);
     body.castShadow = true;
     car.add(body);
@@ -60,7 +78,10 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
 
     // The BR 430 roof rolls inward above the window band; a low central HVAC
     // pod leaves the curved shoulders visible instead of reading as a box.
-    const roofPod = new THREE.Mesh(new THREE.BoxGeometry(1.68, 0.18, 4.8), m.metal);
+    const roofPod = new THREE.Mesh(exteriorLabels
+      ? new RoundedBoxGeometry(1.68, 0.18, 4.8, 2, 0.06)
+      : new THREE.BoxGeometry(1.68, 0.18, 4.8), m.metal);
+    roofPod.name = 'S-Bahn roof HVAC pod';
     roofPod.position.set(0, 3.77, index % 2 === 0 ? 0.65 : -0.65);
     roofPod.castShadow = true;
     car.add(roofPod);
@@ -214,7 +235,7 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
     addSBahnLuggageRacks(car, interior);
     seatRowZs.forEach((z, rowIndex) => {
       for (const x of seatXs) {
-        addSBahnSeat(car, x, z, rowIndex % 2 === 0 ? 1 : -1, interior, config.seatOrientation === 'longitudinal');
+        addSBahnSeat(car, x, z, rowIndex % 2 === 0 ? 1 : -1, interior, config.seatOrientation === 'longitudinal', seatGeometry);
       }
     });
     for (const z of poleZs) {
@@ -231,7 +252,14 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
     monitor.position.set(0, 2.96, 0.082);
     monitor.rotation.y = Math.PI;
     monitor.renderOrder = 18;
+    monitor.name = 'S-Bahn next-stop monitor';
     car.add(monitor);
+    if (exteriorLabels) {
+      const reverseMonitor = monitor.clone();
+      reverseMonitor.position.z = 0.218;
+      reverseMonitor.rotation.set(0, 0, 0);
+      car.add(reverseMonitor);
+    }
     const monitorBracket = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.27, 8), m.metal);
     monitorBracket.position.set(0, 3.18, 0.15);
     car.add(monitorBracket);
@@ -239,6 +267,10 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
       const bogie = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.42, 1.8), m.dark);
       bogie.position.set(0, 0.48, z);
       car.add(bogie);
+    }
+    if (exteriorLabels) {
+      addBR430ExteriorDetails(car, config, index === 0 ? -1 : index === carCenters.length - 1 ? 1 : 0,
+        passengerShells, cabShells, { dark: m.dark, metal: m.metal, ...exteriorLabels });
     }
     cars.push(car);
     root.add(car);
@@ -261,7 +293,13 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
     glassMaterial: m.glass,
     trainHalfLengthM,
     setExteriorLightsOn: makeSetExteriorLightsOn(rig),
-    dispose: () => disposeSBahnVehicle(root, displayMaterial)
+    dispose: () => {
+      disposeSBahnVehicle(root, displayMaterial);
+      if (exteriorLabels) {
+        displayMaterial.dispose();
+        for (const material of Object.values(exteriorLabels)) (material as THREE.MeshBasicMaterial).map?.dispose();
+      }
+    }
   };
 }
 
@@ -349,8 +387,9 @@ function makeSBahnSeatFabricTexture(): THREE.DataTexture {
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(5, 7);
-  texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.NearestFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
   texture.needsUpdate = true;
   return texture;
 }
@@ -374,8 +413,9 @@ function makeSBahnFloorTexture(): THREE.DataTexture {
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(8, 28);
-  texture.magFilter = THREE.NearestFilter;
-  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
   texture.needsUpdate = true;
   return texture;
 }
@@ -396,30 +436,40 @@ function addSBahnCeiling(car: THREE.Group, m: SBahnInteriorMaterials): void {
   }
 }
 
+type SBahnSeatGeometry = Record<'cushion' | 'back' | 'headrest' | 'armrest' | 'shell', THREE.BufferGeometry>;
+
 function addSBahnSeat(
   car: THREE.Group,
   x: number,
   z: number,
   facing: -1 | 1,
   m: SBahnInteriorMaterials,
-  longitudinal = false
+  longitudinal = false,
+  geometry?: SBahnSeatGeometry
 ): void {
   const seat = new THREE.Group();
-  const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.56), m.seatFabric);
+  seat.name = 'S-Bahn passenger seat';
+  const cushion = new THREE.Mesh(geometry?.cushion ?? new THREE.BoxGeometry(0.42, 0.14, 0.56), m.seatFabric);
   cushion.position.set(0, 1.39, 0);
   seat.add(cushion);
 
-  const back = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.54, 0.12), m.seatFabric);
+  const back = new THREE.Mesh(geometry?.back ?? new THREE.BoxGeometry(0.42, 0.54, 0.12), m.seatFabric);
   back.position.set(0, 1.7, -facing * 0.23);
   seat.add(back);
-  const headrest = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.14), m.seatHeadrest);
+  const headrest = new THREE.Mesh(geometry?.headrest ?? new THREE.BoxGeometry(0.42, 0.16, 0.14), m.seatHeadrest);
   headrest.position.set(0, 2.04, -facing * 0.25);
   seat.add(headrest);
 
   for (const side of [-1, 1]) {
-    const edge = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.55, 0.58), m.seatTrim);
+    const edge = new THREE.Mesh(geometry?.armrest ?? new THREE.BoxGeometry(0.045, 0.55, 0.58), m.seatTrim);
     edge.position.set(side * 0.22, 1.64, -facing * 0.01);
     seat.add(edge);
+  }
+  if (geometry) {
+    const shell = new THREE.Mesh(geometry.shell, m.seatTrim);
+    shell.name = 'BR430 molded seat back';
+    shell.position.set(0, 1.75, -facing * 0.32);
+    seat.add(shell);
   }
   const base = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.18, 0.47), m.displayHousing);
   base.position.set(0, 1.23, 0);

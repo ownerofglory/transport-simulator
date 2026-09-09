@@ -15,7 +15,10 @@ export class PassengerCameraRig implements CameraRig {
 
   pose(input: CameraRigContext): CameraPose {
     const normal = new THREE.Vector3(input.tangent.z, 0, -input.tangent.x).normalize();
+    const midCar = input.trainCars[2] ?? input.trainCars[Math.floor(input.trainCars.length / 2)] ?? input.trainCars[0];
+    const anchoredRail = input.interiorCameraProfile === 'rail' && !!midCar?.userData.passengerCameraLocal;
     const anchoredInterior =
+      anchoredRail ||
       input.interiorCameraProfile === 'bus' ||
       input.interiorCameraProfile === 's-bahn' ||
       input.interiorCameraProfile === 'tram';
@@ -24,8 +27,7 @@ export class PassengerCameraRig implements CameraRig {
       // Anchor interior cameras to a car mesh so articulated vehicles turn correctly.
       input.train.updateMatrixWorld(true);
 
-      const midCar = input.trainCars[2] ?? input.trainCars[Math.floor(input.trainCars.length / 2)] ?? input.trainCars[0];
-      const passengerCar = input.interiorCameraProfile === 's-bahn'
+      const passengerCar = anchoredRail ? midCar : input.interiorCameraProfile === 's-bahn'
         ? midCar // middle S-Bahn car gives a stable passenger view.
         : input.interiorCameraProfile === 'tram'
           ? midCar // middle tram section avoids front cab obstruction; falls back if fewer than 3 cars.

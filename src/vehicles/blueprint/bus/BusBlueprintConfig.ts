@@ -47,6 +47,7 @@ export type BusBlueprintConfig = {
   id: string;
   kind: 'bus';
   displayName: string;
+  detailStyle?: 'ssb-citaro';
   materials: Record<BusMaterialRole, BusMaterialConfig>;
   destinationDisplay: {
     background: string;
@@ -83,6 +84,7 @@ export function parseBusBlueprint(raw: unknown): BusBlueprintParseResult {
 
   requireString(root, 'id', errors);
   requireString(root, 'displayName', errors);
+  if (root.detailStyle !== undefined && root.detailStyle !== 'ssb-citaro') errors.push('detailStyle must be "ssb-citaro"');
   if (root.kind !== 'bus') errors.push('kind must be "bus"');
 
   const materials = asRecord(root.materials, 'materials', errors);

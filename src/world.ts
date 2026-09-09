@@ -8,6 +8,8 @@ import type { CameraMode } from './world/CameraController';
 import { CameraSystem } from './engine/systems/CameraSystem';
 import { LightingSystem } from './engine/systems/LightingSystem';
 import { PhotoSystem, type CinematicPreset } from './engine/systems/PhotoSystem';
+import { WeatherEffects } from './world/WeatherEffects';
+import { fetchCurrentWeather, weatherLocationFor } from './world/weather';
 
 export type { CinematicPreset };
 import { ActiveVehicleSystem } from './engine/systems/ActiveVehicleSystem';
@@ -17,6 +19,9 @@ import { RouteLayer } from './world/layers/RouteLayer';
 import { GuidewayLayer } from './world/layers/GuidewayLayer';
 import { StationLayer } from './world/layers/StationLayer';
 import { OpposingTrafficLayer } from './world/layers/OpposingTrafficLayer';
+import { RoadTrafficSystem } from './world/traffic/RoadTrafficSystem';
+import { PedestrianSystem } from './world/traffic/PedestrianSystem';
+import { TransitPassengerSystem } from './world/traffic/TransitPassengerSystem';
 import { TrackSpreadProfile } from './world/trackSpread';
 import { islandSpreadZones } from './world/stations/trackLayout';
 type GeoPoint = { lat: number; lon: number };
@@ -36,6 +41,12 @@ export class TransitWorld {
   private readonly seasonalObjects = new THREE.Group();
   // Oncoming services rendered on the opposite track lane.
   private opposingLayer: OpposingTrafficLayer | null = null;
+  // Ambient background road traffic (cars/trucks/cyclists) near the player.
+  private roadTraffic: RoadTrafficSystem | null = null;
+  // Station-aware pedestrian traffic near upcoming/just-departed stops.
+  private pedestrians: PedestrianSystem | null = null;
+  // Scheduled public-transport cohorts for cities covered by the backend graph.
+  private transitPassengers: TransitPassengerSystem | null = null;
   // The active vehicle (placement, doors, interior display, visibility, lamps).
   private activeVehicle!: ActiveVehicleSystem;
   // Terrain sampling, curated landmarks, OSM streaming, and scenery visibility.
@@ -44,6 +55,8 @@ export class TransitWorld {
   private readonly routeGeoDistancesM: number[];
   // Sun/ambient/hemisphere lighting, time-of-day, season lighting, sky + fog.
   private readonly lightingSystem = new LightingSystem(this.scene, this.renderer);
+  private readonly weatherEffects = new WeatherEffects(this.scene);
+  private readonly weatherAbort = new AbortController();
   // Last pushed vehicle lamp state, so the per-frame check only writes on a flip.
   private vehicleLightsOn: boolean | null = null;
   // Stable reference so the per-frame camera input does not allocate a closure.
@@ -85,6 +98,8 @@ export class TransitWorld {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.setAnimationLoop(null);
 
@@ -107,6 +122,7 @@ export class TransitWorld {
     const startTangent = this.curve.getTangentAt(0).normalize();
     this.cameraSystem.placeAtStart(startPoint, startTangent);
     this.lightingSystem.initialize();
+    void this.loadCurrentWeather();
 
     // Island stops move the running tracks, so the profile has to exist before
     // any track geometry, vehicle placement, or camera anchor is built.
@@ -146,6 +162,45 @@ export class TransitWorld {
     this.scene.add(this.opposingLayer.root);
     this.environment.buildScenery(layerContext, ground, this.geoPointAt(0));
     this.scene.add(this.seasonalObjects);
+
+    // Ferries have no roads; every other mode has real streets nearby, but
+    // only when the route carries geo points to project traffic against.
+    if (this.guidewayKind !== 'ferry' && this.routeGeo.length >= 2) {
+      this.roadTraffic = new RoadTrafficSystem({
+        projectGeo: (lat, lon) => this.projectGeo(lat, lon),
+        terrainHeightAt: (lat, lon) => this.environment.terrainHeightAt(lat, lon)
+      });
+      this.scene.add(this.roadTraffic.root);
+      // Lamp materials are shared module state, so a world built at night (or
+      // after one that was) has to be told the current state once up front —
+      // updateVehicleLighting only pushes on a change.
+      this.roadTraffic.setLampsOn(this.vehicleLightsOn ?? false);
+      this.pedestrians = new PedestrianSystem({
+        projectGeo: (lat, lon) => this.projectGeo(lat, lon),
+        terrainHeightAt: (lat, lon) => this.environment.terrainHeightAt(lat, lon),
+        stationGeoAt: (index) => {
+          const station = this.route.stations[index];
+          return station ? this.geoPointAt(station.distanceM / this.route.routeLengthM) : undefined;
+        }
+      });
+      this.scene.add(this.pedestrians.root);
+      if (this.city?.passengerTransit?.network === 'vvs' && this.route.stations.length >= 2) {
+        this.transitPassengers = new TransitPassengerSystem({
+          line: this.route.line,
+          stationGeoAt: (index) => {
+            const station = this.route.stations[index];
+            if (!station) return undefined;
+            if (station.lat !== undefined && station.lon !== undefined) return { lat: station.lat, lon: station.lon };
+            return this.geoPointAt(station.distanceM / this.route.routeLengthM);
+          },
+          stationWorldAt: (index) => this.routePointAtDistance(this.route.stations[index].distanceM, this.activeLaneOffsetM),
+          stationTangentAt: (index) => this.routeTangentAtDistance(this.route.stations[index].distanceM),
+          vehicleRoot: this.activeVehicle.root,
+          vehicleCars: this.activeVehicle.cars
+        });
+        this.scene.add(this.transitPassengers.root);
+      }
+    }
 
     window.addEventListener('resize', this.onRendererResizeBound);
   }
@@ -234,6 +289,11 @@ export class TransitWorld {
 
     this.environment.updateStreaming(this.geoPointAt(t));
     this.environment.setUnderground(underground);
+    this.roadTraffic?.update(position, this.geoPointAt(t), deltaSeconds);
+    this.roadTraffic?.setVisible(!underground);
+    this.pedestrians?.update(distanceM, this.route.stations, position, deltaSeconds);
+    this.pedestrians?.setVisible(!underground);
+    this.transitPassengers?.update(distanceM, this.route.stations, doorsOpen, underground, deltaSeconds);
     this.lightingSystem.updateUnderground(underground, position, tangent, deltaSeconds);
     this.updateVehicleLighting();
     this.activeVehicle.updateDoors(doorsOpen, deltaSeconds);
@@ -268,6 +328,7 @@ export class TransitWorld {
         routeTangentAtDistance: (d) => this.routeTangentAtDistance(d)
       });
     }
+    this.weatherEffects.update(this.camera.position, deltaSeconds, underground);
   }
 
   render(): void {
@@ -276,17 +337,38 @@ export class TransitWorld {
 
   dispose(): void {
     window.removeEventListener('resize', this.onRendererResizeBound);
+    this.weatherAbort.abort();
+    this.weatherEffects.dispose();
     this.cameraSystem.dispose();
     this.lightingSystem.dispose();
     this.photoSystem.dispose();
     this.environment.dispose();
     this.activeVehicle.dispose();
+    this.roadTraffic?.dispose();
+    this.roadTraffic = null;
+    this.pedestrians?.dispose();
+    this.pedestrians = null;
+    this.transitPassengers?.dispose();
+    this.transitPassengers = null;
     // Free geometries/materials/textures built by the scene layers so switching
     // routes does not leak GPU resources.
     this.disposeSceneGraph();
     this.opposingLayer = null;
     this.renderer.domElement.remove();
     this.renderer.dispose();
+  }
+
+  private async loadCurrentWeather(): Promise<void> {
+    const location = weatherLocationFor(this.city, this.route);
+    if (!location) return;
+    try {
+      const weather = await fetchCurrentWeather(location, this.weatherAbort.signal);
+      if (this.weatherAbort.signal.aborted) return;
+      this.lightingSystem.setWeather(weather);
+      this.weatherEffects.setWeather(weather);
+    } catch (error) {
+      if (!this.weatherAbort.signal.aborted) console.warn('Could not load current weather; using the clear-weather presentation.', error);
+    }
   }
 
   /** Recursively disposes geometries and materials of every mesh in the scene. */
@@ -340,6 +422,7 @@ export class TransitWorld {
     if (lightsOn === this.vehicleLightsOn) return;
     this.vehicleLightsOn = lightsOn;
     this.activeVehicle.updateExteriorLights(lightsOn ? 0 : 1);
+    this.roadTraffic?.setLampsOn(lightsOn);
   }
 
   /** True when the route is in tunnel/underground at normalized progress t. */

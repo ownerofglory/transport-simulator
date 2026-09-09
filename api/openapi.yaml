@@ -272,6 +272,22 @@ definitions:
     - LocationTypeAddress
     - LocationTypePOI
     - LocationTypeCoord
+  handlers.pointRequest:
+    properties:
+      lat:
+        type: number
+      lon:
+        type: number
+    type: object
+  handlers.routeRequest:
+    properties:
+      destination:
+        $ref: '#/definitions/handlers.pointRequest'
+      origin:
+        $ref: '#/definitions/handlers.pointRequest'
+      profile:
+        type: string
+    type: object
   livetraffic.Confidence:
     enum:
     - low
@@ -329,6 +345,20 @@ definitions:
         type: string
       message:
         type: string
+    type: object
+  routing.Point:
+    properties:
+      lat:
+        type: number
+      lon:
+        type: number
+    type: object
+  routing.Route:
+    properties:
+      points:
+        items:
+          $ref: '#/definitions/routing.Point'
+        type: array
     type: object
 info:
   contact: {}
@@ -530,6 +560,31 @@ paths:
       summary: Find nearby locations
       tags:
       - locations
+  /api/v1/routes:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Routing request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.routeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/routing.Route'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/respond.ErrorEnvelope'
+      summary: Plan a road or pedestrian route
+      tags:
+      - routing
   /api/v1/stations:
     get:
       parameters:

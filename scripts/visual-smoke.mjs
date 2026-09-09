@@ -3,7 +3,8 @@
 // transport mode, and every camera position, capturing a screenshot of each.
 // For Stuttgart it additionally exercises Photo mode and Drive mode for the
 // Stadtbahn and Bus modes. Meant to be run manually to eyeball that a change
-// didn't visually break anything — it asserts nothing, it just clicks and shoots.
+// didn't visually break anything. Browser exceptions and fatal WebGL shader
+// failures fail the run; screenshots remain the visual review artifact.
 //
 // Usage:
 //   npm run test:visual                # spawns Vite on :5180, opens a real window
@@ -11,6 +12,7 @@
 //   ONLY_CITY=odessa npm run test:visual
 //   BASE_URL=http://localhost:5173 npm run test:visual   # use a server you started
 //   SETTLE_MS=4000 npm run test:visual # wait longer for tiles/WASM per view
+//   npm run test:visual:live           # also exercise production-backed Live 3D
 //
 // Output: ./visual-smoke-output/<NN>__<city>__<mode>__<view>.png plus a run.log
 
@@ -36,6 +38,13 @@ const SETTLE_MS = Number(process.env.SETTLE_MS ?? 3000); // extra wait for terra
 const ONLY_CITY = process.env.ONLY_CITY?.toLowerCase();
 const KEEP_OPEN = process.env.KEEP_OPEN === '1';
 const OUT_DIR = path.resolve('visual-smoke-output');
+
+const RECORD_VIDEO = process.argv.includes('--video');
+const TEST_LIVE = process.argv.includes('--live');
+const VIDEO_MS = Number(process.env.VIDEO_MS ?? 3 * 60 * 1000);
+const VIDEO_PATH = path.join(OUT_DIR, 'visual-smoke.mp4');
+const LIVE_MAX_P95_FRAME_MS = Number(process.env.LIVE_MAX_P95_FRAME_MS ?? 50);
+const LIVE_MAX_JS_HEAP_MB = Number(process.env.LIVE_MAX_JS_HEAP_MB ?? 512);
 
 // Stuttgart-only extra coverage requested: Photo + Drive for these mode labels.
 const STUTTGART_EXTRA_MODES = new Set(['Stadtbahn', 'Bus']);
@@ -118,6 +127,17 @@ async function clickButtonByText(page, text) {
   return clicked;
 }
 
+async function clickButtonContainingText(page, text) {
+  return page.evaluate((label) => {
+    const btn = [...document.querySelectorAll('button')].find(
+      (button) => button.textContent?.includes(label) && !button.disabled
+    );
+    if (!btn) return false;
+    btn.click();
+    return true;
+  }, text);
+}
+
 async function getCityOptions(page) {
   return page.$$eval('select[aria-label="City"] option', (opts) =>
     opts.map((o) => ({ value: o.value, label: o.textContent?.trim() ?? o.value }))
@@ -180,7 +200,57 @@ async function testPhotoMode(page, cityLabel, modeLabel) {
   await sleep(800);
 }
 
+async function testLive3D(page, cityLabel) {
+  log('  LIVE: map + close 3D');
+  const entered = await clickButtonByText(page, 'Live');
+  if (!entered) {
+    log('  ⚠️  Live button unavailable; skipping Live coverage');
+    return;
+  }
+  await page.waitForSelector('.lv-root', { timeout: 30000 });
+  await sleep(Math.max(3000, SETTLE_MS));
+  await shoot(page, cityLabel, 'Live', 'map');
+
+  if (!await clickButtonContainingText(page, '3D view')) throw new Error('Live 3D button not found');
+  await page.waitForSelector('.lv-3d-canvas canvas', { timeout: 30000 });
+  await sleep(Math.max(5000, SETTLE_MS));
+  await shoot(page, cityLabel, 'Live', '3d-close');
+
+  const frameTimes = await page.evaluate(() => new Promise((resolve) => {
+    const samples = [];
+    let previous = performance.now();
+    const sample = (now) => {
+      samples.push(now - previous);
+      previous = now;
+      if (samples.length >= 120) resolve(samples.slice(5));
+      else requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  }));
+  const sorted = [...frameTimes].sort((a, b) => a - b);
+  const p95FrameMs = sorted[Math.floor(sorted.length * 0.95)];
+  const heapMB = (await page.metrics()).JSHeapUsedSize / (1024 * 1024);
+  log(`  PERF: p95 frame ${p95FrameMs.toFixed(1)} ms · JS heap ${heapMB.toFixed(1)} MB`);
+  if (p95FrameMs > LIVE_MAX_P95_FRAME_MS) {
+    throw new Error(`Live 3D p95 frame time ${p95FrameMs.toFixed(1)}ms exceeds ${LIVE_MAX_P95_FRAME_MS}ms budget`);
+  }
+  if (heapMB > LIVE_MAX_JS_HEAP_MB) {
+    throw new Error(`Live 3D JS heap ${heapMB.toFixed(1)}MB exceeds ${LIVE_MAX_JS_HEAP_MB}MB budget`);
+  }
+
+  // Exercise the touch-friendly steppers as well as the close-model LOD where
+  // the former fragment-uniform overflow occurred.
+  await page.click('button[aria-label="Zoom in"]');
+  await page.click('button[aria-label="Zoom out"]');
+  await clickButtonByText(page, 'Exit Live');
+  await sleep(500);
+}
+
 async function run() {
+  let recorder = null;
+  let recordingAbort = null;
+  let recordingDone = null;
+
   await rm(OUT_DIR, { recursive: true, force: true });
   await mkdir(OUT_DIR, { recursive: true });
 
@@ -209,15 +279,55 @@ async function run() {
 
   try {
     const page = await browser.newPage();
-    page.on('pageerror', (err) => log(`  🔴 pageerror: ${err.message}`));
+    const criticalErrors = [];
+    page.on('pageerror', (err) => {
+      criticalErrors.push(err.message);
+      log(`  🔴 pageerror: ${err.message}`);
+    });
     page.on('console', (msg) => {
-      if (msg.type() === 'error') log(`  🔴 console: ${msg.text()}`);
+      if (msg.type() !== 'error') return;
+      const message = msg.text();
+      log(`  🔴 console: ${message}`);
+      if (/shader|WebGLProgram|uniforms count exceeds|VALIDATE_STATUS/i.test(message)) criticalErrors.push(message);
     });
 
     log(`opening ${BASE_URL}`);
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await dismissDisclaimer(page);
     await waitForSceneReady(page);
+
+    if (RECORD_VIDEO) {
+      log(`starting ${Math.round(VIDEO_MS / 1000)}-second video capture...`);
+
+      recorder = await page.screencast({
+        path: VIDEO_PATH,
+        format: 'mp4',
+        fps: 30,
+        quality: 25,
+        overwrite: true
+      });
+
+      recordingAbort = new AbortController();
+
+      recordingDone = (async () => {
+        try {
+          await sleep(VIDEO_MS, undefined, {
+            signal: recordingAbort.signal
+          });
+        } catch (err) {
+          if (err?.name === 'AbortError') return;
+          throw err;
+        }
+
+        if (recorder) {
+          const activeRecorder = recorder;
+          recorder = null;
+
+          await activeRecorder.stop();
+          log(`🎥 video saved: ${VIDEO_PATH}`);
+        }
+      })();
+    }
 
     let cities = await getCityOptions(page);
     if (ONLY_CITY) cities = cities.filter((c) => c.value.toLowerCase() === ONLY_CITY);
@@ -246,14 +356,38 @@ async function run() {
           await testPhotoMode(page, city.label, mode.label);
         }
       }
+
+      if (TEST_LIVE && city.value.toLowerCase() === 'stuttgart') {
+        await testLive3D(page, city.label);
+      }
+    }
+
+    if (criticalErrors.length) {
+      throw new Error(`browser reported ${criticalErrors.length} critical error(s); see run.log`);
+    }
+
+    if (recordingDone) {
+      log('screenshot pass complete; waiting for the recording window to finish...');
+      await recordingDone;
     }
 
     log(`DONE — ${shotIndex} screenshots in ${OUT_DIR}`);
+
     if (KEEP_OPEN) {
       log('KEEP_OPEN set; leaving the browser open. Press Ctrl+C to quit.');
       await new Promise(() => {});
     }
   } finally {
+    recordingAbort?.abort();
+
+    if (recorder) {
+      const activeRecorder = recorder;
+      recorder = null;
+
+      await activeRecorder
+          .stop()
+          .catch((err) => log(`⚠️ could not finalize video: ${err.message}`));
+    }
     if (!KEEP_OPEN) await browser.close();
     if (server) server.kill('SIGTERM');
     await writeFile(path.join(OUT_DIR, 'run.log'), logLines.join('\n') + '\n').catch(() => {});

@@ -13,6 +13,12 @@ export type VehicleMaterialConfig = {
   transparent?: boolean;
   emissive?: string;
   emissiveIntensity?: number;
+  clearcoat?: number;
+  clearcoatRoughness?: number;
+  envMapIntensity?: number;
+  transmission?: number;
+  thickness?: number;
+  ior?: number;
   texturePath?: string;
 };
 

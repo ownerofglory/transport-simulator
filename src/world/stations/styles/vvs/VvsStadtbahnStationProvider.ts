@@ -69,6 +69,9 @@ export type VvsStationStyleOptions = {
   platformHeightM: number;
   /** The blue U totem and the orange SSB kiosk are SSB kit; DB stops have neither. */
   ssbStreetFurniture: boolean;
+  /** Optional authored interior; shared route-following platforms and access remain intact. */
+  buildInterior?: (local: THREE.Group, root: THREE.Group, context: StationBuildContext,
+    definition: StationVisualDefinition) => boolean;
 };
 
 const SSB_STYLE: VvsStationStyleOptions = {
@@ -249,7 +252,11 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     const canopyLen = roof === 'none' ? 0 : fullCanopy ? Math.min(platformLengthM * 0.9, platformLengthM - 4) : canopyLengthM;
     const canopyCenterZ = fullCanopy ? 0 : 8;
 
-    if (island) {
+    const customInterior = underground && island &&
+      this.style.buildInterior?.(scaffold.local, scaffold.root, context, definition);
+    if (customInterior) {
+      // The station-specific builder owns its fittings, lights, and wayfinding.
+    } else if (island) {
       this.buildIslandStation(scaffold.local, deck, context, materials, definition, station, {
         canopyLengthM: canopyLen,
         accent,
@@ -330,7 +337,7 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       buildVvsTerminusBuffer(scaffold.local, materials, platformLengthM, endSign, trackOffsetM);
     }
 
-    if (underground) buildVvsWayfinding(scaffold.local, station, definition.signage?.exits);
+    if (underground && !customInterior) buildVvsWayfinding(scaffold.local, station, definition.signage?.exits);
 
     return {
       root: scaffold.root,

@@ -45,6 +45,10 @@ export type CityDefinition = CityCatalogEntry & {
   // no live-traffic code loads for that city (concept §1 scope gate).
   liveTraffic?: { network: 'vvs' };
 
+  // Opt-in public-transport passenger itineraries. The browser always uses the
+  // simulator backend; this only declares that its routing graph covers a city.
+  passengerTransit?: { network: 'vvs' };
+
   // Fallback data keeps the app usable when generated city files fail to load.
   routeManifestFallback: RouteFeedManifest;
   demoRoutesFallback: DemoRoute[];

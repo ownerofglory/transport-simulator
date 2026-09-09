@@ -2,7 +2,7 @@ import type { BootstrapResult } from '../../app/useAppBootstrap';
 import { useAppState } from '../../app/useAppState';
 import { TransportModeTabs } from './TransportModeTabs';
 
-/** City / transport-mode / route / start-station / ride-mode / time selectors. */
+/** Compact city, line, operating-mode, and time selectors. */
 export function SelectionPanel({ catalog }: { catalog: BootstrapResult }) {
   const { state, dispatch } = useAppState();
   const route = catalog.routes.find((entry) => entry.id === state.selectedRouteId);
@@ -49,24 +49,18 @@ export function SelectionPanel({ catalog }: { catalog: BootstrapResult }) {
             <option key={`${station.name}-${index}`} value={index}>{station.name}</option>
           ))}
         </select>
-        <select
-          aria-label="Mode"
-          value={state.selectedMode}
-          onChange={(e) => dispatch({ type: 'ride-mode-selected', mode: e.target.value as 'ride' | 'driver' })}
-        >
-          <option value="ride">Ride</option>
-          <option value="driver">Drive</option>
-        </select>
-        <select
-          aria-label="Time of day"
-          value={state.selectedTime}
-          onChange={(e) => dispatch({ type: 'time-selected', time: e.target.value === 'auto' ? 'auto' : Number(e.target.value) })}
-        >
-          <option value="auto">Local time (auto)</option>
-          <option value="6">06:00 · Dawn</option>
-          <option value="9">09:00 · Morning</option>
-          <option value="13">13:00 · Day</option>
-        </select>
+      </div>
+      <div className="compact-settings" aria-label="Operating mode and time of day">
+        <div className="compact-switch" aria-label="Mode">
+          <button className={state.selectedMode === 'ride' ? 'active' : ''} aria-label="Ride mode" aria-pressed={state.selectedMode === 'ride'} title="Ride mode" onClick={() => dispatch({ type: 'ride-mode-selected', mode: 'ride' })}>◉</button>
+          <button className={state.selectedMode === 'driver' ? 'active' : ''} aria-label="Drive mode" aria-pressed={state.selectedMode === 'driver'} title="Drive mode" onClick={() => dispatch({ type: 'ride-mode-selected', mode: 'driver' })}>⌁</button>
+        </div>
+        <div className="compact-switch" aria-label="Time of day">
+          <button className={state.selectedTime === 'auto' ? 'active' : ''} aria-label="Use local time" aria-pressed={state.selectedTime === 'auto'} title="Local time" onClick={() => dispatch({ type: 'time-selected', time: 'auto' })}>◷</button>
+          <button className={state.selectedTime === 6 ? 'active' : ''} aria-label="Dawn, 06:00" aria-pressed={state.selectedTime === 6} title="06:00 · Dawn" onClick={() => dispatch({ type: 'time-selected', time: 6 })}>◒</button>
+          <button className={state.selectedTime === 9 ? 'active' : ''} aria-label="Morning, 09:00" aria-pressed={state.selectedTime === 9} title="09:00 · Morning" onClick={() => dispatch({ type: 'time-selected', time: 9 })}>◐</button>
+          <button className={state.selectedTime === 13 ? 'active' : ''} aria-label="Day, 13:00" aria-pressed={state.selectedTime === 13} title="13:00 · Day" onClick={() => dispatch({ type: 'time-selected', time: 13 })}>☀︎</button>
+        </div>
       </div>
     </>
   );

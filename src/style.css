@@ -27,7 +27,7 @@ canvas {
   padding: 14px 16px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  background: rgba(8, 12, 18, 0.68);
+  background: rgba(8, 12, 18, 0.46);
   backdrop-filter: blur(18px);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.34);
   user-select: none;
@@ -174,6 +174,65 @@ canvas {
   flex-wrap: wrap;
 }
 
+.weather-current {
+  margin: 8px 0;
+  padding: 6px 8px;
+  border: 1px solid rgba(178, 215, 239, 0.16);
+  border-radius: 7px;
+  background: rgba(86, 137, 179, 0.16);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(248, 252, 255, 0.86);
+  font-size: 11px;
+}
+
+.weather-current-icon,
+.weather-current strong {
+  color: #fff;
+  font-size: 14px;
+}
+
+.weather-current-wind {
+  margin-left: auto;
+  color: rgba(225, 238, 248, 0.65);
+}
+
+.compact-settings {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0 10px;
+}
+
+.compact-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.compact-switch button {
+  display: grid;
+  width: 29px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.compact-switch button.active {
+  color: #161b1f;
+  background: #ffdf00;
+}
+
 .driver-stat,
 .driver-controls {
   display: none;
@@ -239,7 +298,7 @@ input:focus-visible {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
-  background: rgba(8, 12, 18, 0.72);
+  background: rgba(8, 12, 18, 0.48);
   backdrop-filter: blur(18px);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
 }
@@ -448,7 +507,7 @@ body.photo-capture .photo-overlay {
     width: calc(100vw - 16px);
     box-sizing: border-box;
     padding: 12px;
-    background: rgba(8, 12, 18, 0.54);
+    background: rgba(8, 12, 18, 0.42);
     backdrop-filter: blur(12px) saturate(1.15);
   }
 

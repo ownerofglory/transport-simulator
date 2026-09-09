@@ -34,14 +34,14 @@ function loadScript(src: string): Promise<void> {
 /** Thin TypeScript client around the Go/WASM simulator bridge. */
 export class SimulatorClient {
   // Shared promise prevents duplicate wasm_exec.js / sim.wasm initialization.
-  private wasmReady: Promise<void> | null = null;
+  private static wasmReady: Promise<void> | null = null;
 
   /** Loads wasm_exec.js, instantiates sim.wasm, and waits for window.ssim. */
   async load(): Promise<void> {
     if (window.ssim) return;
-    if (this.wasmReady) return this.wasmReady;
+    if (SimulatorClient.wasmReady) return SimulatorClient.wasmReady;
 
-    this.wasmReady = (async () => {
+    SimulatorClient.wasmReady = (async () => {
       await loadScript('/wasm_exec.js'); // Go-provided JS runtime shim.
 
       const go = new window.Go();
@@ -60,9 +60,12 @@ export class SimulatorClient {
       if (!window.ssim) {
         throw new Error('Go WASM loaded, but window.ssim was not registered.');
       }
-    })();
+    })().catch((error) => {
+      SimulatorClient.wasmReady = null;
+      throw error;
+    });
 
-    return this.wasmReady;
+    return SimulatorClient.wasmReady;
   }
 
   /** Initializes a new simulator session from route/config data. */

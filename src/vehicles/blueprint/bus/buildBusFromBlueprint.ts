@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { makeSsbSurfaceTexture } from '../../surfaceTextures';
+import { addCitaroDetails } from './citaroDetails';
 import { makeLabelTexture } from '../../../labels';
 import type { ResolvedVehicleBuildContext, VehicleInstance } from '../../types';
 import {
@@ -21,6 +24,7 @@ import type { BusBlueprintConfig, BusMaterialRole, BusSectionConfig } from './Bu
 // the task is about changing bus visuals.
 
 type BusMaterials = Record<BusMaterialRole, THREE.MeshStandardMaterial>;
+type BusSeatGeometry = Record<'cushion' | 'back' | 'headrest' | 'shell', THREE.BufferGeometry>;
 
 type BusBuildState = {
   root: THREE.Group;
@@ -31,6 +35,7 @@ type BusBuildState = {
   passengerShells: THREE.Mesh[];
   cabDisplays: THREE.Mesh[];
   rig: ExteriorLightRig;
+  seatGeometry?: BusSeatGeometry;
 };
 
 export function buildBusVehicle(config: BusBlueprintConfig, context: ResolvedVehicleBuildContext): VehicleInstance {
@@ -45,6 +50,18 @@ export function buildBusVehicle(config: BusBlueprintConfig, context: ResolvedVeh
     rig: makeExteriorLightRig()
   };
   const materials = makeBusMaterials(config.materials);
+  if (config.detailStyle === 'ssb-citaro') {
+    materials.seat.map = makeSsbSurfaceTexture('fabric');
+    materials.seat.color.setHex(0xffffff);
+    materials.floor.map = makeSsbSurfaceTexture('floor');
+    materials.floor.color.setHex(0xaaaaaa);
+    state.seatGeometry = {
+      cushion: new RoundedBoxGeometry(0.46, 0.14, 0.6, 2, 0.04),
+      back: new RoundedBoxGeometry(0.46, 0.56, 0.11, 2, 0.035),
+      headrest: new RoundedBoxGeometry(0.44, 0.2, 0.1, 2, 0.035),
+      shell: new RoundedBoxGeometry(0.49, 0.62, 0.07, 2, 0.025)
+    };
+  }
   const displayMaterial = context.makeInteriorDisplayMaterial();
 
   const articulated = isArticulatedFormation(config, context);
@@ -113,7 +130,9 @@ function addBusSection(
   car.name = section.name;
   car.userData.centerOffsetM = section.centerOffsetM;
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(2.55, 2.62, L), m.body);
+  const detailed = config.detailStyle === 'ssb-citaro';
+  const body = new THREE.Mesh(detailed ? new RoundedBoxGeometry(2.55, 2.62, L, 2, 0.1) : new THREE.BoxGeometry(2.55, 2.62, L), m.body);
+  body.name = 'Citaro body shell';
   body.position.y = 1.82;
   body.castShadow = true;
   car.add(body);
@@ -123,30 +142,33 @@ function addBusSection(
   const skirt = new THREE.Mesh(new THREE.BoxGeometry(2.58, 0.62, L - 0.1), m.skirt);
   skirt.position.y = 0.72;
   car.add(skirt);
-  const roofCap = new THREE.Mesh(new THREE.BoxGeometry(2.34, 0.2, L - 0.3), m.roof);
+  const roofCap = new THREE.Mesh(detailed ? new RoundedBoxGeometry(2.34, 0.2, L - 0.3, 2, 0.08) : new THREE.BoxGeometry(2.34, 0.2, L - 0.3), m.roof);
   roofCap.position.y = 3.19;
   car.add(roofCap);
+  state.passengerShells.push(skirt, roofCap);
 
   addBusSideWindows(state, car, m, half, section.doorZs, section.cab === 'front');
   for (const z of section.doorZs) {
     addSlidingVehicleDoor(state.doors, car, -1.315, z, m.body, m.glass, m.black, 1.62, 1.95);
   }
-  for (const z of section.axleZs) addBusWheels(car, m, z);
+  for (const z of section.axleZs) addBusWheels(car, m, z, detailed);
 
   // Roof air-conditioning pod, offset toward the non-cab end.
-  const acPod = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.26, Math.min(3.2, L * 0.32)), m.black);
+  const acLength = Math.min(3.2, L * 0.32);
+  const acPod = new THREE.Mesh(detailed ? new RoundedBoxGeometry(1.8, 0.26, acLength, 2, 0.1) : new THREE.BoxGeometry(1.8, 0.26, acLength), m.black);
   acPod.position.set(0, 3.34, section.cab === 'front' ? -half * 0.45 : half * 0.35);
   car.add(acPod);
 
   // Interior floor, ceiling, walls, seating, grab rails and fittings.
   const floor = new THREE.Mesh(new THREE.BoxGeometry(2.28, 0.08, L - 0.7), m.floor);
   floor.position.y = 1.02;
+  floor.name = 'Citaro textured saloon floor';
   car.add(floor);
   const ceiling = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.08, L - 0.8), m.interior);
   ceiling.position.y = 3.0;
   car.add(ceiling);
   addOpaqueTransitInterior(car, L - 0.8, 1.18, m.interior, (side) => side < 0 ? section.doorZs : []);
-  addBusSeating(car, m, half, section.doorZs, section.cab === 'front', section.rear === 'tail');
+  addBusSeating(car, m, half, section.doorZs, section.cab === 'front', section.rear === 'tail', state.seatGeometry);
   addBusInteriorFittings(car, m, half, section.cab === 'front');
 
   if (section.cab === 'front') {
@@ -161,6 +183,7 @@ function addBusSection(
   }
 
   addCabinLight(state.rig, car, 2.78, section.cab === 'front' ? -half * 0.3 : 0);
+  if (detailed) addCitaroDetails(car, section, state.passengerShells, m);
   state.root.add(car);
   return car;
 }
@@ -190,7 +213,7 @@ function addBusSideWindows(
   }
 }
 
-function addBusWheels(car: THREE.Group, m: BusMaterials, z: number): void {
+function addBusWheels(car: THREE.Group, m: BusMaterials, z: number, detailed: boolean): void {
   for (const x of [-1.24, 1.24]) {
     const tyre = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.24, 22), m.tyre);
     tyre.rotation.z = Math.PI / 2;
@@ -201,8 +224,12 @@ function addBusWheels(car: THREE.Group, m: BusMaterials, z: number): void {
     hub.position.set(x, 0.5, z);
     car.add(hub);
     // Wheel-arch trim following the tyre crown.
-    const arch = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.34, 1.18), m.skirt);
-    arch.position.set(x + Math.sign(x) * 0.06, 0.86, z);
+    const arch = new THREE.Mesh(detailed
+      ? new THREE.RingGeometry(0.475, 0.575, 24, 1, 0, Math.PI)
+      : new THREE.BoxGeometry(0.16, 0.34, 1.18), m.skirt);
+    arch.name = 'Citaro wheel arch';
+    arch.position.set(x + Math.sign(x) * (detailed ? 0.14 : 0.06), detailed ? 0.5 : 0.86, z);
+    if (detailed) arch.rotation.y = Math.sign(x) * Math.PI / 2;
     car.add(arch);
   }
 }
@@ -213,7 +240,8 @@ function addBusSeating(
   half: number,
   doorZs: number[],
   cabFront: boolean,
-  tail: boolean
+  tail: boolean,
+  geometry?: BusSeatGeometry
 ): void {
   const rowStart = cabFront ? -half + 1.0 : -half + 0.9;
   const rowEnd = tail ? half - 1.2 : half - 0.9;
@@ -221,16 +249,23 @@ function addBusSeating(
     if (cabFront && z > half - 2.4) continue; // keep the driver bay clear.
     if (doorZs.some((doorZ) => Math.abs(z - doorZ) < 0.66)) continue;
     for (const x of [-0.92, 0.92]) {
-      const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.14, 0.6), m.seat);
+      const cushion = new THREE.Mesh(geometry?.cushion ?? new THREE.BoxGeometry(0.46, 0.14, 0.6), m.seat);
+      cushion.name = 'Citaro upholstered seat cushion';
       cushion.position.set(x, 1.35, z);
       car.add(cushion);
       // Contoured moquette back with a darker headrest and an aisle grab handle.
-      const back = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.56, 0.11), m.seat);
+      const back = new THREE.Mesh(geometry?.back ?? new THREE.BoxGeometry(0.46, 0.56, 0.11), m.seat);
       back.position.set(x, 1.66, z - 0.29);
       car.add(back);
-      const headrest = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.2, 0.1), m.seatBack);
+      const headrest = new THREE.Mesh(geometry?.headrest ?? new THREE.BoxGeometry(0.44, 0.2, 0.1), m.seatBack);
       headrest.position.set(x, 1.98, z - 0.31);
       car.add(headrest);
+      if (geometry) {
+        const shell = new THREE.Mesh(geometry.shell, m.interior);
+        shell.name = 'Citaro molded seat back';
+        shell.position.set(x, 1.7, z - 0.375);
+        car.add(shell);
+      }
       const handle = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.014, 6, 12), m.grab);
       handle.rotation.x = Math.PI / 2;
       handle.position.set(x - Math.sign(x) * 0.24, 2.02, z - 0.3);
@@ -319,8 +354,11 @@ function addBusFrontEnd(
   state.rig.headLampMaterials.push(m.headlight);
 
   // Black mask panel wrapping the windscreen and destination display.
-  const mask = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.9, 0.1), m.black);
-  mask.position.set(0, 2.62, frontZ + 0.02);
+  const detailed = config.detailStyle === 'ssb-citaro';
+  const mask = new THREE.Mesh(detailed
+    ? new RoundedBoxGeometry(2.5, 1.68, 0.1, 2, 0.04)
+    : new THREE.BoxGeometry(2.5, 1.9, 0.1), m.black);
+  mask.position.set(0, detailed ? 2.45 : 2.62, frontZ + 0.02);
   car.add(mask);
   state.cabShells.push(mask);
 
@@ -347,6 +385,25 @@ function addBusFrontEnd(
   bumper.position.set(0, 0.78, frontZ + 0.02);
   car.add(bumper);
   state.cabShells.push(bumper);
+  if (detailed) {
+    const badge = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.012, 6, 24), m.hub);
+    badge.name = 'Citaro front badge ring';
+    badge.position.set(0, 1.45, frontZ + 0.13);
+    car.add(badge);
+    state.cabShells.push(badge);
+    const star = new THREE.InstancedMesh(new THREE.BoxGeometry(0.013, 0.16, 0.014), m.hub, 3);
+    star.name = 'Citaro three-point badge';
+    const matrix = new THREE.Matrix4();
+    for (let index = 0; index < 3; index++) {
+      const angle = index * Math.PI * 2 / 3;
+      matrix.compose(new THREE.Vector3(Math.sin(angle) * 0.075, 1.45 + Math.cos(angle) * 0.075, frontZ + 0.13),
+        new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -angle), new THREE.Vector3(1, 1, 1));
+      star.setMatrixAt(index, matrix);
+    }
+    star.instanceMatrix.needsUpdate = true;
+    car.add(star);
+    state.cabShells.push(star);
+  }
   for (const side of [-1, 1] as const) {
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.24, 0.08), m.headlight);
     head.position.set(side * 0.92, 1.02, frontZ + 0.1);

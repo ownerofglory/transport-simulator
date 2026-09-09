@@ -3,6 +3,9 @@ export type StationConfig = {
   name: string;
   distanceM: number; // distance from route start in meters
   scheduledS?: number; // optional scheduled time from trip start in seconds
+  // Present in generated GTFS route packages; optional for legacy demo routes.
+  lat?: number;
+  lon?: number;
 };
 
 // Config used to initialize or restart one simulator session.

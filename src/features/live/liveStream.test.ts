@@ -49,10 +49,19 @@ describe('openVehicleStream', () => {
     const es = FakeEventSource.last!;
     expect(es.url).toContain('/live/vehicles/stream');
     expect(es.countFor('vehicle-upsert')).toBe(1);
+    expect(es.countFor('delta')).toBe(1);
 
     dispose();
     expect(es.closed).toBe(true);
     expect(es.countFor('vehicle-upsert')).toBe(0);
+    expect(es.countFor('delta')).toBe(0);
+  });
+
+  it('delivers every upsert in a batched delta', () => {
+    const onVehicle = vi.fn();
+    openVehicleStream({ onVehicle });
+    FakeEventSource.last!.emit('delta', { upserts: [veh('a'), veh('b')] });
+    expect(onVehicle.mock.calls.map(([vehicle]) => vehicle.runId)).toEqual(['a', 'b']);
   });
 
   it('survives a malformed event instead of tearing down the subscription', () => {

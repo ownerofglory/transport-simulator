@@ -1,10 +1,10 @@
 # Transit Simulator
 
-Free, non-commercial browser prototype for public transport simulation, covering ten city/network modules.
+Free, non-commercial browser prototype for public transport simulation, covering eleven city/network modules.
 
 The app started as a Stuttgart-only prototype and is now structured as a multi-city platform: Stuttgart was the first city module rather than a hard-coded one-off. New cities are added through a city catalog entry, a city definition, and city-specific route manifests while reusing the shared renderer, simulator, HUD, minimap, and route diagram. Transport modes and vehicle families are defined per city, so each city can expose a different set of modes and map those modes onto different vehicle and guideway behaviors.
 
-The repository currently includes ten city modules:
+The repository currently includes eleven city modules:
 
 - **Stuttgart** — Stadtbahn, bus, S-Bahn, Zacke and Seilbahn; also the only city with [live mode](#live-mode) (real-time VVS traffic)
 - **Ulm/Neu-Ulm** — SWU tram lines 1 and 2 plus bus line 5
@@ -15,6 +15,8 @@ The repository currently includes ten city modules:
 - **Mexico City** — metro, tram, rail, Cablebús, trolleybus and bus
 - **Baden-Württemberg Rail** — regional and inter-regional trains across the state
 - **Wuppertal** — the Wuppertaler Schwebebahn suspended railway
+- **Vancouver** — TransLink SkyTrain rapid transit
+- **Karlsruhe** — AVG/KVV tram-train and Stadtbahn services
 
 The app uses:
 
@@ -31,10 +33,11 @@ The app uses:
 | ![Simulator tunnel](docs/assets/03_simulator_tunnel.png) Underground Stadtbahn tunnel section | ![Simulator photo mode](docs/assets/04_simulator_photo_mode.png) Photo mode |
 | ![Simulator S-Bahn](docs/assets/05_simulator_s-bahn.png) S-Bahn service | ![Live mode 3D map](docs/assets/06_live_mode_3d_map.png) Live mode, 3D map |
 | ![Live mode 2D top view](docs/assets/07_live_mode_2d_map_top_view.png) Live mode, 2D top-down map | ![Live mode follow view](docs/assets/08_live_mode_follow_view.png) Live mode, follow view |
+| ![Karlsruhe underground station](docs/assets/09_underground_station_karlsruhe.png) Karlsruhe Kombilösung underground Stadtbahn station | ![Stuttgart underground S-Bahn station](docs/assets/10_underground_sbahn_station_stuttgart.png) Stuttgart Stammstrecke underground S-Bahn station |
 
 ## What is included
 
-The list below describes the Stuttgart module, the most detailed and the origin of the shared simulator engine. The other nine cities reuse the same renderer, simulator, HUD, minimap and route diagram with their own GTFS-derived route packages and vehicle models, at varying levels of scenery and vehicle detail.
+The list below describes the Stuttgart module, the most detailed and the origin of the shared simulator engine. The other ten cities reuse the same renderer, simulator, HUD, minimap and route diagram with their own GTFS-derived route packages and vehicle models, at varying levels of scenery and vehicle detail.
 
 - 50 generated directional VVS GTFS route packages: 36 Stadtbahn services, central bus lines 40/42/43/44, S1 Herrenberg–Kirchheim (Teck), Zacke line 10, and Seilbahn line 20
 - Active transport tabs and a mode-neutral route domain for Stadtbahn, bus, S-Bahn, Zacke and Seilbahn
@@ -77,7 +80,7 @@ The list below describes the Stuttgart module, the most detailed and the origin 
 
 ## Live mode
 
-Live mode shows real-time vehicle positions on a 3D or 2D map, sourced from the VVS network's realtime data (see [Realtime API types](#realtime-api-types)). It is currently available for **Stuttgart only**; the other nine city modules offer the offline simulator (passenger ride and driver training) without a live-traffic layer. A city opts into live mode by declaring a `liveTraffic` network in its city definition (`src/cities/stuttgart.ts`), so adding live support for another city means wiring up a realtime data source for that network first.
+Live mode shows real-time vehicle positions on a 3D or 2D map, sourced from the VVS network's realtime data (see [Realtime API types](#realtime-api-types)). It is currently available for **Stuttgart only**; the other ten city modules offer the offline simulator (passenger ride and driver training) without a live-traffic layer. A city opts into live mode by declaring a `liveTraffic` network in its city definition (`src/cities/stuttgart.ts`), so adding live support for another city means wiring up a realtime data source for that network first.
 
 ## Requirements
 
