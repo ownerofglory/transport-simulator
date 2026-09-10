@@ -2,7 +2,7 @@ import { isKnownTransportMode, type TransportMode } from '../domain/transport';
 import type { CameraMode } from '../world/CameraController';
 import type { AppState } from './AppState';
 import type { EndpointValue } from '../features/realtime/LocationField';
-import type { Mode, Season } from './types';
+import type { Mode, Season, TrafficDensity } from './types';
 
 export type AppUrlState = {
   city: string;
@@ -12,6 +12,7 @@ export type AppUrlState = {
   rideMode: Mode;
   season: Season;
   time: 'auto' | number;
+  trafficDensity: TrafficDensity;
   cameraMode: CameraMode;
   // Live-traffic workspace flag (own key; `view` above is ride/driver mode).
   liveView?: boolean;
@@ -21,6 +22,7 @@ export type AppUrlState = {
 const CAMERA_MODES = new Set<CameraMode>(['chase', 'passenger', 'cab']);
 const RIDE_MODES = new Set<Mode>(['ride', 'driver']);
 const SEASONS = new Set<Season>(['spring', 'summer', 'autumn', 'winter']);
+const TRAFFIC_DENSITIES = new Set<TrafficDensity>(['few', 'medium', 'many']);
 
 export function readUrlState(): Partial<AppUrlState> {
   const params = new URLSearchParams(window.location.search);
@@ -57,6 +59,9 @@ export function readUrlState(): Partial<AppUrlState> {
     if (Number.isFinite(value) && value >= 0 && value <= 24) state.time = value;
   }
 
+  const traffic = params.get('traffic');
+  if (traffic && TRAFFIC_DENSITIES.has(traffic as TrafficDensity)) state.trafficDensity = traffic as TrafficDensity;
+
   const cameraMode = params.get('camera');
   if (cameraMode && CAMERA_MODES.has(cameraMode as CameraMode)) state.cameraMode = cameraMode as CameraMode;
 
@@ -89,6 +94,7 @@ export function writeUrlState(state: AppState): void {
   params.set('view', state.selectedMode);
   params.set('season', state.selectedSeason);
   params.set('time', state.selectedTime === 'auto' ? 'auto' : String(state.selectedTime));
+  params.set('traffic', state.selectedTrafficDensity);
   params.set('camera', state.selectedCameraMode);
 
   if (state.view === 'live') params.set('live', '1');

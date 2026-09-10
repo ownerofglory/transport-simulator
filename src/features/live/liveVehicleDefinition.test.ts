@@ -174,6 +174,31 @@ describe('followed-vehicle capabilities', () => {
         expect((car.getObjectByName('BR430 steel wheel treads') as THREE.InstancedMesh).count).toBe(8);
         expect((car.getObjectByName('BR430 aluminium door thresholds') as THREE.InstancedMesh).count).toBe(4);
         expect(!!car.getObjectByName('BR430 automatic coupler')).toBe(index === 0 || index === 3);
+        expect(car.getObjectByName('BR430 blue accessibility panel')).toBeDefined();
+        expect(car.getObjectByName('BR430 side bwegt branding')).toBeDefined();
+        const cabCar = index === 0 || index === 3;
+        expect(!!car.getObjectByName('BR430 rounded cab shell')).toBe(cabCar);
+        expect(!!car.getObjectByName('BR430 bowed lower cab apron')).toBe(cabCar);
+        expect(!!car.getObjectByName('BR430 stepped cab roof fairing')).toBe(cabCar);
+        expect(!!car.getObjectByName('BR430 yellow first-class panel')).toBe(cabCar);
+        expect(!!car.getObjectByName('BR430 side S-Bahn emblem')).toBe(cabCar);
+        expect(!!car.getObjectByName('BR430 lower blue side stripes')).toBe(cabCar);
+        if (cabCar) {
+          const emblem = car.getObjectByName('BR430 green S cab emblem') as THREE.Mesh;
+          expect(emblem.geometry.type).toBe('CircleGeometry');
+          const apron = car.getObjectByName('BR430 bowed lower cab apron') as THREE.Mesh;
+          apron.geometry.computeBoundingBox();
+          expect(apron.geometry.boundingBox!.max.z - apron.geometry.boundingBox!.min.z).toBeGreaterThan(0.5);
+          const windscreen = car.getObjectByName('BR430 curved windscreen') as THREE.Mesh;
+          const windscreenMaterial = windscreen.material as THREE.MeshPhysicalMaterial;
+          expect(windscreenMaterial.depthWrite).toBe(true);
+          expect(windscreenMaterial.opacity).toBeGreaterThanOrEqual(0.7);
+          expect(windscreen.rotation.y).toBeCloseTo(index === 0 ? Math.PI : 0);
+          const mask = car.getObjectByName('BR430 rounded windscreen mask') as THREE.Mesh<THREE.ExtrudeGeometry>;
+          expect(mask.rotation.y).toBeCloseTo(index === 0 ? Math.PI : 0);
+          const maskShapes = mask.geometry.parameters.shapes;
+          expect((Array.isArray(maskShapes) ? maskShapes[0] : maskShapes).holes).toHaveLength(1);
+        }
         labels.add((car.getObjectByName('BR430 side destination display') as THREE.Mesh).material as THREE.Material);
         expect(car.getObjectByName('BR430 molded seat back')).toBeDefined();
         expect(car.userData.passengerCameraLocal).toEqual([0.2, 2.3, -4.4]);

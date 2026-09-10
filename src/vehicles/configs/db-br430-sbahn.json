@@ -4,25 +4,29 @@
   "displayName": "DB BR 430 S-Bahn (Stuttgart)",
   "exteriorDetailStyle": "br430",
   "materials": {
-    "shell": { "color": "#dfe1df", "roughness": 0.3, "metalness": 0.14, "clearcoat": 0.32 },
-    "accent": { "color": "#d71920", "roughness": 0.3, "clearcoat": 0.34 },
-    "dark": { "color": "#202428", "roughness": 0.32, "clearcoat": 0.14 },
+    "shell": { "color": "#e6e8e7", "roughness": 0.27, "metalness": 0.18, "clearcoat": 0.38 },
+    "accent": { "color": "#159bd3", "roughness": 0.3, "clearcoat": 0.36 },
+    "dark": { "color": "#252b2e", "roughness": 0.31, "clearcoat": 0.16 },
     "glass": { "color": "#8fb9c7", "transparent": true, "opacity": 0.42, "roughness": 0.04, "clearcoat": 0.48, "envMapIntensity": 1.35, "doubleSided": true },
     "interior": { "color": "#e4e1d8", "roughness": 0.88 },
     "floor": { "color": "#8f9398", "roughness": 0.9 },
     "seat": { "color": "#2454a6", "roughness": 0.88 },
     "metal": { "color": "#989d9e", "roughness": 0.35, "metalness": 0.7 },
     "headlight": { "color": "#ffffff", "emissive": "#fff4c7", "emissiveIntensity": 0.55 },
-    "tailLamp": { "color": "#8c1f1c", "emissive": "#7a1512", "emissiveIntensity": 0.35 }
+    "tailLamp": { "color": "#8c1f1c", "emissive": "#7a1512", "emissiveIntensity": 0.35 },
+    "lowerBand": { "color": "#2e3437", "roughness": 0.38, "clearcoat": 0.12 },
+    "belt": { "color": "#e6e8e7", "roughness": 0.27, "metalness": 0.18, "clearcoat": 0.38 },
+    "door": { "color": "#4c5356", "roughness": 0.32, "clearcoat": 0.2 },
+    "nose": { "color": "#e8eae9", "roughness": 0.25, "metalness": 0.16, "clearcoat": 0.42 }
   },
   "logo": {
-    "text": "DB",
-    "background": "#e0202b",
+    "text": "S",
+    "background": "#438b43",
     "foreground": "#ffffff"
   },
   "destinationDisplay": {
     "background": "#111",
-    "foreground": "#fff"
+    "foreground": "#f0d36b"
   },
   "formation": {
     "carCenters": [-25.2, -8.4, 8.4, 25.2],

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { routeMode, type DemoRoute } from '../route';
 import { transportModeLabel } from '../domain/transport';
 import { SimulatorCommandsContext } from '../features/simulation/useSimulatorRuntime';
@@ -8,6 +8,7 @@ import { SelectionPanel } from '../features/selection/SelectionPanel';
 import { RealtimePanel } from '../features/realtime/RealtimePanel';
 import { SimulatorHud } from '../features/simulation/SimulatorHud';
 import { DriverControls } from '../features/simulation/DriverControls';
+import { DebugPanel } from '../features/simulation/DebugPanel';
 import { MiniMapPanel } from '../features/minimap/MiniMapPanel';
 import { RouteDiagramPanel } from '../features/route-diagram/RouteDiagramPanel';
 import { PhotoModeOverlay } from '../features/photo/PhotoModeOverlay';
@@ -22,6 +23,13 @@ import { InputController } from './InputController';
 import { RuntimeBridge } from './RuntimeBridge';
 import type { DesiredRuntimeState } from '../engine/runtime/DesiredRuntimeState';
 import { LIVE_MODE_ENABLED } from './liveModeFlag';
+import { NO_TAPS, registerTap } from './tapUnlock';
+
+// Hidden debug unlock: ten taps on the HUD title toggles debug mode. The window
+// is per-tap and deliberately generous — a frame hitch while terrain loads
+// should not silently reset a run — but nobody taps a title ten times in a row
+// by accident.
+const DEBUG_TAPS = { required: 10, windowMs: 3000 };
 
 // The live-traffic workspace is heavy (Leaflet + realtime tools) and Stuttgart-only,
 // so it is code-split and loaded only when the user enters Live (concept §2.1).
@@ -53,6 +61,14 @@ export function AppShell() {
   }, []);
 
   const onRuntime = useCallback((next: SimulatorRuntime | null) => setRuntime(next), []);
+
+  // Ten quick taps on the title toggle debug mode; the same gesture turns it off.
+  const taps = useRef(NO_TAPS);
+  const onTitleTap = useCallback(() => {
+    const result = registerTap(taps.current, Date.now(), DEBUG_TAPS);
+    taps.current = result.state;
+    if (result.triggered) dispatch({ type: 'debug-mode-toggled' });
+  }, [dispatch]);
   const catalogRoute = catalog.routes.find((entry) => entry.id === state.selectedRouteId);
   // Realtime routes are Stuttgart-referenced, so simulate them against the Stuttgart city context.
   const realtimeCity = state.realtimeRoute ? catalog.cities.find((c) => c.id === 'stuttgart') ?? catalog.currentCity : null;
@@ -66,7 +82,9 @@ export function AppShell() {
         startStationIndex: 0,
         season: state.selectedSeason,
         time: state.selectedTime,
-        cameraMode: state.selectedCameraMode
+        cameraMode: state.selectedCameraMode,
+        trafficDensity: state.selectedTrafficDensity,
+        debugWeather: state.debugWeather
       };
     }
     return catalogRoute && catalog.currentCity
@@ -78,10 +96,12 @@ export function AppShell() {
           startStationIndex: state.selectedStartStation,
           season: state.selectedSeason,
           time: state.selectedTime,
-          cameraMode: state.selectedCameraMode
+          cameraMode: state.selectedCameraMode,
+          trafficDensity: state.selectedTrafficDensity,
+          debugWeather: state.debugWeather
         }
       : null;
-  }, [state.realtimeRoute, realtimeCity, catalogRoute, catalog.routes, catalog.currentCity, state.selectedMode, state.selectedStartStation, state.selectedSeason, state.selectedTime, state.selectedCameraMode]);
+  }, [state.realtimeRoute, realtimeCity, catalogRoute, catalog.routes, catalog.currentCity, state.selectedMode, state.selectedStartStation, state.selectedSeason, state.selectedTime, state.selectedTrafficDensity, state.selectedCameraMode, state.debugWeather]);
 
   // Realtime transfers change the world imperatively, so keep presentation
   // panels aligned with the currently active journey leg.
@@ -101,8 +121,14 @@ export function AppShell() {
   const desired = useMemo<DesiredRuntimeState>(() => ({
     session,
     simulation: { paused: state.paused },
-    presentation: { season: state.selectedSeason, time: state.selectedTime, cameraMode: state.selectedCameraMode }
-  }), [session, state.paused, state.selectedSeason, state.selectedTime, state.selectedCameraMode]);
+    presentation: {
+      season: state.selectedSeason,
+      time: state.selectedTime,
+      cameraMode: state.selectedCameraMode,
+      trafficDensity: state.selectedTrafficDensity,
+      debugWeather: state.debugWeather
+    }
+  }), [session, state.paused, state.selectedSeason, state.selectedTime, state.selectedCameraMode, state.selectedTrafficDensity, state.debugWeather]);
 
   // Low-frequency notifications (not commands) stay as one-shot subscriptions.
   useEffect(() => { runtime?.onPhotoLabel(setPhotoLabel); }, [runtime]);
@@ -141,7 +167,10 @@ export function AppShell() {
       <div className={`hud ${collapsed ? 'collapsed' : ''} ${state.selectedMode === 'driver' ? 'driver-mode' : ''}`}>
         <div className="hud-header">
           <div>
-            <h1>{catalog.currentCity?.menuTitle ?? 'Transit Simulator'}</h1>
+            <h1 className="hud-title" onClick={onTitleTap}>
+              {catalog.currentCity?.menuTitle ?? 'Transit Simulator'}
+              {state.debugMode && <span className="debug-badge">debug</span>}
+            </h1>
             <div className="label">{catalog.currentCity?.freeRideNotice ?? 'Free, non-commercial simulator'}</div>
           </div>
           <button
@@ -176,6 +205,7 @@ export function AppShell() {
           ) : (
             <>
               <SelectionPanel catalog={catalog} />
+              <DebugPanel />
               <CityWeatherForecast city={catalog.currentCity} route={route} />
               <SimulatorHud snapshot={snapshot} />
               <div className="controls">

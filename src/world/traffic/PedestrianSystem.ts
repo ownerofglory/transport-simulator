@@ -3,6 +3,8 @@ import { buildPathGeometry, dampAngle, lerpAt, pickHeightAnchors, poseAtDistance
 import { flatDistanceM, randomGeoPointNear, type LatLon } from './trafficGeo';
 import { fetchWalkingRoute } from './pedestrianRoutingClient';
 import { animatePedestrian, buildPedestrian, type PedestrianRig } from './pedestrianMesh';
+import { trafficDensityScale } from './trafficDensity';
+import type { TrafficDensity } from '../../app/types';
 
 export type PedestrianContext = {
   /** Same projection TransitWorld builds every other layer against. */
@@ -88,6 +90,7 @@ export class PedestrianSystem {
   private disposed = false;
   private simClockS = 0;
   private frameIndex = 0;
+  private densityScale = 1;
   private readonly centerWorld = new THREE.Vector2(0, 0);
 
   constructor(private readonly ctx: PedestrianContext) {
@@ -144,7 +147,7 @@ export class PedestrianSystem {
       if (state.windingDown || !state.loaded) continue;
       state.trickleCooldownS -= dtSec;
       if (state.trickleCooldownS <= 0) {
-        state.trickleCooldownS = TRICKLE_INTERVAL_S;
+        state.trickleCooldownS = TRICKLE_INTERVAL_S / this.densityScale;
         const route = state.routes[Math.floor(Math.random() * state.routes.length)];
         if (route) this.spawnPedestrian(state, route, false);
       }
@@ -159,6 +162,15 @@ export class PedestrianSystem {
       if (state.emptySinceS === null) state.emptySinceS = this.simClockS;
       else if (this.simClockS - state.emptySinceS > CACHE_RELEASE_GRACE_S) this.stationStates.delete(index);
     }
+  }
+
+  /**
+   * Ambient population multiplier. `ROUTES_PER_STATION` is deliberately not
+   * scaled: a denser crowd walks the routes already fetched for its station, so
+   * the walking-route request count is the same at every density.
+   */
+  setDensity(density: TrafficDensity): void {
+    this.densityScale = trafficDensityScale(density);
   }
 
   /** Hides/shows all pedestrians at once — the player can't see the street while underground. */
@@ -199,8 +211,9 @@ export class PedestrianSystem {
     await Promise.all(loads);
     if (this.disposed || !this.stationStates.has(state.stationIndex)) return;
     state.loaded = true;
+    const perRoute = INITIAL_PEDS_PER_ROUTE * this.densityScale;
     for (const route of state.routes) {
-      for (let n = 0; n < INITIAL_PEDS_PER_ROUTE; n++) this.spawnPedestrian(state, route, true);
+      for (let n = 0; n < perRoute; n++) this.spawnPedestrian(state, route, true);
     }
   }
 
@@ -246,7 +259,8 @@ export class PedestrianSystem {
 
   private spawnPedestrian(state: StationPedState, route: PedRoute, staggered: boolean): void {
     if (this.disposed) return;
-    if (this.active.length >= MAX_TOTAL_PEDESTRIANS || state.activeCount >= MAX_PEDS_PER_STATION) return;
+    if (this.active.length >= MAX_TOTAL_PEDESTRIANS * this.densityScale) return;
+    if (state.activeCount >= MAX_PEDS_PER_STATION * this.densityScale) return;
 
     const spawnDelayS = staggered ? Math.random() * SPAWN_STAGGER_MAX_S : 0;
     const rig = this.acquireRig();

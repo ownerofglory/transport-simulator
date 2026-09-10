@@ -1,7 +1,18 @@
 import * as THREE from 'three';
 import type { StationConfig } from '../../simulator/simulator-types';
 import type { LatLon } from './trafficGeo';
-import { animatePedestrian, buildPedestrian, type PedestrianRig } from './pedestrianMesh';
+import {
+  PEDESTRIAN_HIP_HEIGHT_M,
+  animatePedestrian,
+  buildPedestrian,
+  poseSeated,
+  poseStanding,
+  poseStandingHold,
+  type PedestrianRig
+} from './pedestrianMesh';
+import { readInteriorFloorY, readSeatAnchors } from '../../vehicles/interiorSeating';
+import { trafficDensityScale } from './trafficDensity';
+import type { TrafficDensity } from '../../app/types';
 import { fetchTransitItineraries, type TransitItinerary } from './transitPassengerRoutingClient';
 
 export type TransitPassengerContext = {
@@ -25,6 +36,8 @@ type Passenger = {
   transitionS: number;
   progressS: number;
   car: THREE.Group | null;
+  /** Index into the car's registered seat anchors while riding, else null. */
+  seatIndex: number | null;
 };
 
 type StationState = {
@@ -50,8 +63,11 @@ export class TransitPassengerSystem {
   private readonly passengers: Passenger[] = [];
   private readonly stations = new Map<number, StationState>();
   private readonly controllers = new Set<AbortController>();
+  // Seats taken per car (by uuid), so two riders never share a cushion.
+  private readonly occupiedSeats = new Map<string, Set<number>>();
   private disposed = false;
   private clockS = 0;
+  private densityScale = 1;
 
   constructor(private readonly ctx: TransitPassengerContext) {
     this.root.name = 'Transit passengers';
@@ -92,12 +108,22 @@ export class TransitPassengerSystem {
     }
   }
 
+  /**
+   * Ambient population multiplier. One journey query is made per approaching
+   * station whatever the density — a denser cohort just boards from the same
+   * itinerary — so this never changes the request count.
+   */
+  setDensity(density: TrafficDensity): void {
+    this.densityScale = trafficDensityScale(density);
+  }
+
   dispose(): void {
     this.disposed = true;
     for (const controller of this.controllers) controller.abort();
     this.controllers.clear();
     for (const passenger of this.passengers) passenger.rig.root.removeFromParent();
     this.passengers.length = 0;
+    this.occupiedSeats.clear();
     this.stations.clear();
     this.root.clear();
   }
@@ -131,13 +157,23 @@ export class TransitPassengerSystem {
   }
 
   private spawnWaiting(originIndex: number, destinationIndex: number): void {
-    const count = Math.min(MAX_STATION_PASSENGERS, MAX_ACTIVE_PASSENGERS - this.passengers.length);
+    const count = Math.min(
+      MAX_STATION_PASSENGERS * this.densityScale,
+      MAX_ACTIVE_PASSENGERS * this.densityScale - this.passengers.length
+    );
     const station = this.ctx.stationWorldAt(originIndex);
     const tangent = this.ctx.stationTangentAt(originIndex);
     const lateral = new THREE.Vector3(tangent.z, 0, -tangent.x).normalize();
     for (let index = 0; index < count; index++) {
       const rig = buildPedestrian();
-      const offset = lateral.clone().multiplyScalar(3.1 + index * 0.55).addScaledVector(tangent, (index - 1.5) * 0.7);
+      // Wrapped into rows of four: a denser cohort waits further along the
+      // platform instead of trailing off sideways into the track bed.
+      const row = index % 4;
+      const column = Math.floor(index / 4);
+      const offset = lateral
+        .clone()
+        .multiplyScalar(3.1 + row * 0.55)
+        .addScaledVector(tangent, (row - 1.5) * 0.7 + column * 1.9);
       const position = station.clone().add(offset);
       rig.root.position.copy(position);
       rig.root.rotation.y = Math.atan2(tangent.x, tangent.z);
@@ -151,7 +187,8 @@ export class TransitPassengerSystem {
         to: position.clone(),
         transitionS: 0,
         progressS: 0,
-        car: null
+        car: null,
+        seatIndex: null
       });
     }
   }
@@ -172,7 +209,9 @@ export class TransitPassengerSystem {
     for (const passenger of this.passengers) {
       if (passenger.phase !== 'riding' || passenger.destinationIndex !== stationIndex) continue;
       const target = this.exitTarget(vehicleDistanceM, stations, stationIndex);
-      passenger.car?.getWorldPosition(passenger.from);
+      this.releaseSeat(passenger);
+      poseStanding(passenger.rig);
+      passenger.rig.root.getWorldPosition(passenger.from);
       this.root.attach(passenger.rig.root);
       passenger.rig.root.position.copy(passenger.from);
       passenger.phase = 'alighting';
@@ -199,11 +238,64 @@ export class TransitPassengerSystem {
   private enterVehicle(passenger: Passenger): void {
     const car = this.nearestCar(0, 0);
     car.attach(passenger.rig.root);
-    const slot = this.passengers.filter((candidate) => candidate.phase === 'riding').length;
-    passenger.rig.root.position.set((slot % 2 ? 0.38 : -0.38), 0.05, (slot % 4 - 1.5) * 0.55);
-    passenger.rig.root.rotation.set(0, slot % 2 ? Math.PI / 2 : -Math.PI / 2, 0);
     passenger.phase = 'riding';
     passenger.car = car;
+
+    const seatIndex = this.claimSeat(car);
+    const anchors = readSeatAnchors(car);
+    const interiorFloorY = readInteriorFloorY(car);
+    if (seatIndex !== null) {
+      const seat = anchors[seatIndex];
+      passenger.seatIndex = seatIndex;
+      // Drop the rig so its hips land on the cushion; hip height scales with build.
+      passenger.rig.root.position.set(seat.x, seat.y - PEDESTRIAN_HIP_HEIGHT_M * passenger.rig.scale, seat.z);
+      passenger.rig.root.rotation.set(0, seat.yaw, 0);
+      // How high this cushion sits above this car's floor decides how far the
+      // knees come up, so the feet land on the floor in every vehicle.
+      poseSeated(passenger.rig, interiorFloorY === undefined ? undefined : seat.y - interiorFloorY);
+      return;
+    }
+
+    // Standees ride the aisle at floor level, holding the ceiling rail. A car
+    // that never registered its interior keeps them on its own origin plane.
+    const floorY = interiorFloorY ?? 0;
+    const standing = this.standingRiderCount(car);
+    passenger.seatIndex = null;
+    passenger.rig.root.position.set(standing % 2 ? 0.2 : -0.2, floorY, ((standing % 4) - 1.5) * 1.15);
+    passenger.rig.root.rotation.set(0, standing % 2 ? Math.PI / 2 : -Math.PI / 2, 0);
+    poseStandingHold(passenger.rig);
+  }
+
+  /** Takes a free seat in `car`, preferring a spread over the whole saloon. */
+  private claimSeat(car: THREE.Group): number | null {
+    const anchors = readSeatAnchors(car);
+    if (anchors.length === 0) return null;
+    let taken = this.occupiedSeats.get(car.uuid);
+    if (!taken) {
+      taken = new Set<number>();
+      this.occupiedSeats.set(car.uuid, taken);
+    }
+    if (taken.size >= anchors.length) return null;
+    const start = Math.floor(Math.random() * anchors.length);
+    for (let step = 0; step < anchors.length; step++) {
+      const index = (start + step) % anchors.length;
+      if (taken.has(index)) continue;
+      taken.add(index);
+      return index;
+    }
+    return null;
+  }
+
+  private releaseSeat(passenger: Passenger): void {
+    if (passenger.seatIndex === null || !passenger.car) return;
+    this.occupiedSeats.get(passenger.car.uuid)?.delete(passenger.seatIndex);
+    passenger.seatIndex = null;
+  }
+
+  private standingRiderCount(car: THREE.Group): number {
+    return this.passengers.filter(
+      (candidate) => candidate.phase === 'riding' && candidate.car === car && candidate.seatIndex === null
+    ).length;
   }
 
   private nearestCar(_vehicleDistanceM: number, _stationDistanceM: number): THREE.Group {
@@ -214,6 +306,7 @@ export class TransitPassengerSystem {
 
   private removePassenger(index: number): void {
     const [passenger] = this.passengers.splice(index, 1);
+    this.releaseSeat(passenger);
     passenger.rig.root.removeFromParent();
   }
 }

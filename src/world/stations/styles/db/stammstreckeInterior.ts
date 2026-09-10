@@ -3,10 +3,21 @@ import { makeLabelTexture } from '../../../../labels';
 import type { StationBuildContext, StationVisualDefinition } from '../../types';
 import { undergroundHallHalfLengthM } from '../../hallExtent';
 
-// Reference-based permanent architecture, not the temporary construction layout.
-export const HAUPTBAHNHOF_INTERIOR = 'stuttgart-hbf-tief';
+/**
+ * The 1970s Stammstrecke platform: one authored interior shared by the four
+ * tunnel stops between Hauptbahnhof and Schwabstraße. Reference-based permanent
+ * architecture, not the temporary construction layout.
+ *
+ * The stations are the same box, the same centre piers and the same suspended
+ * ceiling; what tells them apart is the colour on the pier cladding, which each
+ * stop carries in its own house colour (`architecture.walls.color`).
+ */
+export const STAMMSTRECKE_INTERIOR = 'stuttgart-stammstrecke';
 
-export function hauptbahnhofColumnOffsets(definition: StationVisualDefinition): number[] {
+/** Station colour used where the design is colour-coded; Hauptbahnhof red is the fallback. */
+const DEFAULT_ACCENT = '#a73930';
+
+export function stammstreckeColumnOffsets(definition: StationVisualDefinition): number[] {
   const half = definition.platform.lengthM / 2 - 10;
   const access = definition.access ?? [];
   const rise = (definition.architecture?.hall?.heightM ?? 4.9) - definition.platform.heightM + 1.4;
@@ -21,12 +32,12 @@ export function hauptbahnhofColumnOffsets(definition: StationVisualDefinition): 
   return offsets;
 }
 
-export function buildHauptbahnhofInterior(
+export function buildStammstreckeInterior(
   local: THREE.Group, root: THREE.Group, _context: StationBuildContext, definition: StationVisualDefinition
 ): boolean {
-  if (definition.architecture?.customAsset !== HAUPTBAHNHOF_INTERIOR) return false;
+  if (definition.architecture?.customAsset !== STAMMSTRECKE_INTERIOR) return false;
   const group = new THREE.Group();
-  group.name = 'Hauptbahnhof reference interior';
+  group.name = `Stammstrecke reference interior ${definition.stationId}`;
   local.add(group);
   const height = definition.architecture.hall?.heightM ?? 4.9;
   const deck = definition.platform.heightM;
@@ -35,7 +46,7 @@ export function buildHauptbahnhofInterior(
   const material = (color: string, roughness = 0.7) => new THREE.MeshStandardMaterial({
     color, roughness, emissive: color, emissiveIntensity: 0.3
   });
-  const red = material('#a73930');
+  const accent = material(definition.architecture.walls?.color ?? DEFAULT_ACCENT);
   const concrete = material('#b6b0a2');
   const steel = material('#aeb4b5', 0.4);
   const dark = material('#343536');
@@ -98,16 +109,16 @@ export function buildHauptbahnhofInterior(
   for (const side of [-1, 1]) {
     box('Continuous white station-name frieze', [0.06, 0.55, length - 1], [side * wallX, 2.6, 0], white);
     for (let z = -length / 2 + 15; z < length / 2 - 8; z += 28) {
-      label('Hauptbahnhof', 5.4, 0.5, side * (wallX - 0.04), 2.6, z,
+      label(definition.displayName, 5.4, 0.5, side * (wallX - 0.04), 2.6, z,
         -side * Math.PI / 2, '#deddd3', '#242726');
     }
     box('Platform light reflector', [0.85, 0.26, length - 2], [side * 4.35, height - 0.45, 0], steel);
     box('Continuous fluorescent diffuser', [0.58, 0.08, length - 2], [side * 4.35, height - 0.6, 0], light);
   }
 
-  for (const z of hauptbahnhofColumnOffsets(definition)) {
+  for (const z of stammstreckeColumnOffsets(definition)) {
     box('Rectangular concrete pier', [1.4, height - deck, 1.8], [0, (height + deck) / 2, z], concrete);
-    box('Red lower pier cladding', [1.44, 2.05, 1.84], [0, deck + 1.025, z], red);
+    box('Lower pier cladding in the station colour', [1.44, 2.05, 1.84], [0, deck + 1.025, z], accent);
     box('Pier skirting', [1.48, 0.12, 1.88], [0, deck + 0.06, z], dark);
     for (const side of [-1, 1]) {
       box('Wall-mounted bench seat', [0.46, 0.1, 1.65], [side * 0.97, deck + 0.46, z], steel);
@@ -115,12 +126,14 @@ export function buildHauptbahnhofInterior(
     }
   }
 
-  // Neutral track-pair wayfinding avoids assigning a wrong track when a route reverses.
+  // Neutral track wayfinding avoids assigning a wrong track when a route reverses.
+  // Hauptbahnhof's island serves a numbered pair; the other stops carry one number.
+  const tracks = definition.signage?.platformNumber ?? '1';
+  const trackSign = `S-Bahn     ${tracks.includes('·') ? 'Gleise' : 'Gleis'} ${tracks}`;
   for (const z of [-70, -16, 70]) {
     box('Suspended platform wayfinding', [5.8, 0.56, 0.14], [0, height - 0.9, z], dark);
     for (const facing of [-1, 1]) {
-      label('S-Bahn     Gleise 101 · 102', 5.65, 0.45, 0, height - 0.9, z + facing * 0.08,
-        facing === 1 ? 0 : Math.PI);
+      label(trackSign, 5.65, 0.45, 0, height - 0.9, z + facing * 0.08, facing === 1 ? 0 : Math.PI);
     }
     for (const x of [-2.4, 2.4]) box('Sign suspension', [0.045, 0.62, 0.045], [x, height - 0.31, z], steel);
   }

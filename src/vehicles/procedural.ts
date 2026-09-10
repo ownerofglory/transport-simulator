@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { addTangoExteriorDetails } from './tangoDetails';
+import { registerInteriorFloor, registerSeatAnchors, yawForFacing } from './interiorSeating';
 import { makeSsbSurfaceTexture } from './surfaceTextures';
 import { makeLabelTexture } from '../labels';
 import type { VehicleKind } from '../domain/transport';
@@ -312,6 +313,7 @@ class ProceduralTransitVehicleFactory {
       const floor = new THREE.Mesh(new THREE.BoxGeometry(2.92, 0.12, 11.55), floorMaterial);
       floor.position.y = 1.12;
       car.add(floor);
+      registerInteriorFloor(car, 1.19);
       const aisle = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.018, 11.32), aisleMaterial);
       aisle.position.y = 1.19;
       car.add(aisle);
@@ -405,6 +407,7 @@ class ProceduralTransitVehicleFactory {
     seat.add(pedestal);
     seat.position.set(x, 0, z);
     car.add(seat);
+    registerSeatAnchors(car, [{ x, y: 1.425, z, yaw: yawForFacing(facing) }]);
   }
 
   private addBwegtRegionalCeiling(car: THREE.Group, light: THREE.Material, trim: THREE.Material): void {
@@ -2353,6 +2356,7 @@ class ProceduralTransitVehicleFactory {
     const floorPanel = new THREE.Mesh(new THREE.BoxGeometry(saloonHalfWidth * 2 - 0.1, 0.08, sectionLength - 0.28), interior.floor);
     floorPanel.position.y = 0.98;
     saloon.add(floorPanel);
+    registerInteriorFloor(car, 1.02);
 
     const ceilingPanel = new THREE.Mesh(new THREE.BoxGeometry(saloonHalfWidth * 2 - 0.14, 0.08, sectionLength - 0.34), interior.ceiling);
     ceilingPanel.position.y = 2.98;
@@ -2453,6 +2457,7 @@ class ProceduralTransitVehicleFactory {
     seat.add(pedestal);
     seat.position.set(x, 0, z);
     car.add(seat);
+    registerSeatAnchors(car, [{ x, y: 1.355, z, yaw: yawForFacing(facing) }]);
   }
 
   // VBK's classic articulated city tram: three bodies on four bogies in the KVV
@@ -2965,6 +2970,7 @@ class ProceduralTransitVehicleFactory {
       const floorMesh = new THREE.Mesh(new THREE.BoxGeometry(2.32, 0.08, carLength - 0.26), floor);
       floorMesh.position.y = 0.98;
       car.add(floorMesh);
+      registerInteriorFloor(car, 1.02);
       const ceilingMesh = new THREE.Mesh(new THREE.BoxGeometry(2.28, 0.08, carLength - 0.34), interior);
       ceilingMesh.position.y = 3.12;
       car.add(ceilingMesh);
@@ -3106,6 +3112,12 @@ class ProceduralTransitVehicleFactory {
         const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.11, length), seatMaterial);
         cushion.position.set(side * 0.92, 1.29, (start + end) / 2);
         car.add(cushion);
+        // A bench seats one rider per ~0.48 m, all facing across the aisle.
+        const places = Math.max(1, Math.floor(length / 0.48));
+        for (let place = 0; place < places; place++) {
+          const z = start + (length / places) * (place + 0.5);
+          registerSeatAnchors(car, [{ x: side * 0.92, y: 1.345, z, yaw: side > 0 ? -Math.PI / 2 : Math.PI / 2 }]);
+        }
         const back = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.56, length), seatMaterial);
         back.position.set(side * 1.13, 1.6, (start + end) / 2);
         car.add(back);
@@ -3587,6 +3599,7 @@ class ProceduralTransitVehicleFactory {
     floor.receiveShadow = true;
     floor.position.y = 1.02;
     car.add(floor);
+    registerInteriorFloor(car, 1.06);
     this.addInteriorShell(car, cabZ, cabDirection, interiorWallMat, blackMat, glassMat, doorMat);
     this.addPassengerSeating(car, cabDirection, metalMat, doorMat, seatFabricMat);
     this.addInteriorDisplays(car, cabDirection, interiorDisplayMat, blackMat);
@@ -3808,6 +3821,7 @@ class ProceduralTransitVehicleFactory {
       matrix.makeTranslation(seat.x, 1.15, seat.z - seat.facing * 0.08);
       pedestals.setMatrixAt(index, matrix);
     });
+    registerSeatAnchors(car, seats.map((seat) => ({ x: seat.x, y: 1.365, z: seat.z, yaw: yawForFacing(seat.facing) })));
     cushions.name = 'SSB paired seat cushions';
     backrests.name = 'SSB paired seat backrests';
     pedestals.name = 'SSB cantilever seat supports';

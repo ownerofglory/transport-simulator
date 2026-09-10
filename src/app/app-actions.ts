@@ -3,7 +3,7 @@ import type { CameraMode } from '../world/CameraController';
 import type { DemoRoute } from '../route';
 import type { AppState } from './AppState';
 import type { RealtimeJourneySimulation } from '../features/realtime/journeyRoute';
-import type { HudTab, Mode, Season } from './types';
+import type { DebugWeather, HudTab, Mode, Season, TrafficDensity } from './types';
 
 /** All state transitions the React shell can dispatch. */
 export type AppAction =
@@ -17,6 +17,9 @@ export type AppAction =
   | { type: 'ride-mode-selected'; mode: Mode }
   | { type: 'season-selected'; season: Season }
   | { type: 'time-selected'; time: 'auto' | number }
+  | { type: 'traffic-density-selected'; density: TrafficDensity }
+  | { type: 'debug-mode-toggled' }
+  | { type: 'debug-weather-selected'; weather: DebugWeather }
   | { type: 'camera-selected'; cameraMode: CameraMode }
   | { type: 'pause-changed'; paused: boolean }
   | { type: 'initial-state-loaded'; state: Partial<AppState> };

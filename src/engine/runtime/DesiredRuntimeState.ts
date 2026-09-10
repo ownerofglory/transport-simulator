@@ -1,5 +1,5 @@
 import type { CameraMode } from '../../world/CameraController';
-import type { Season } from '../../app/types';
+import type { DebugWeather, Season, TrafficDensity } from '../../app/types';
 import type { RouteSession } from '../../simulator/SimulatorRuntime';
 
 /**
@@ -20,5 +20,8 @@ export type DesiredRuntimeState = {
     season: Season;
     time: 'auto' | number;
     cameraMode: CameraMode;
+    trafficDensity: TrafficDensity;
+    /** Debug-mode weather override; 'auto' follows the live provider. */
+    debugWeather: DebugWeather;
   };
 };

@@ -10,6 +10,8 @@ function makeRuntime() {
     setRideMode: vi.fn(),
     setSeason: vi.fn(),
     setTime: vi.fn(),
+    setTrafficDensity: vi.fn(),
+    setDebugWeather: vi.fn(),
     setCameraMode: vi.fn(),
     setPaused: vi.fn()
   } satisfies ReconcilerRuntime;
@@ -26,7 +28,9 @@ function session(overrides: Partial<{ cityId: string; routeId: string; transport
     startStationIndex,
     season: 'summer',
     time: 'auto',
-    cameraMode: 'chase'
+    cameraMode: 'chase',
+    trafficDensity: 'few',
+    debugWeather: 'auto'
   } as unknown as RouteSession;
 }
 
@@ -37,7 +41,9 @@ function desired(overrides: Partial<DesiredRuntimeState['presentation']> & { ses
     presentation: {
       season: overrides.season ?? 'summer',
       time: overrides.time ?? 'auto',
-      cameraMode: overrides.cameraMode ?? 'chase'
+      cameraMode: overrides.cameraMode ?? 'chase',
+      trafficDensity: overrides.trafficDensity ?? 'few',
+      debugWeather: overrides.debugWeather ?? 'auto'
     }
   };
 }
@@ -111,6 +117,30 @@ describe('RuntimeReconciler', () => {
     r.apply(desired({ session: session({ mode: 'driver' }) }));
     expect(runtime.setRideMode).toHaveBeenCalledTimes(1);
     expect(runtime.loadRoute).not.toHaveBeenCalled();
+  });
+
+  it('traffic density updates the running world without a rebuild', () => {
+    const runtime = makeRuntime();
+    const r = new RuntimeReconciler(runtime);
+    r.apply(desired());
+    Object.values(runtime).forEach((fn) => fn.mockClear());
+    r.apply(desired({ trafficDensity: 'many' }));
+    expect(runtime.setTrafficDensity).toHaveBeenCalledWith('many');
+    expect(runtime.loadRoute).not.toHaveBeenCalled();
+    r.apply(desired({ trafficDensity: 'many' }));
+    expect(runtime.setTrafficDensity).toHaveBeenCalledTimes(1);
+  });
+
+  it('debug weather forces a condition and hands it back on auto', () => {
+    const runtime = makeRuntime();
+    const r = new RuntimeReconciler(runtime);
+    r.apply(desired());
+    Object.values(runtime).forEach((fn) => fn.mockClear());
+    r.apply(desired({ debugWeather: 'snow' }));
+    expect(runtime.setDebugWeather).toHaveBeenCalledWith('snow');
+    expect(runtime.loadRoute).not.toHaveBeenCalled();
+    r.apply(desired({ debugWeather: 'auto' }));
+    expect(runtime.setDebugWeather).toHaveBeenLastCalledWith('auto');
   });
 
   it('pause toggles setPaused only when it changes', () => {

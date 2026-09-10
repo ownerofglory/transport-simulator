@@ -12,6 +12,7 @@
         "curved": true
       },
       "architecture": {
+        "customAsset": "stuttgart-stammstrecke",
         "family": "stammstrecke",
         "roof": "hall",
         "hall": {
@@ -146,6 +147,7 @@
         "curved": true
       },
       "architecture": {
+        "customAsset": "stuttgart-stammstrecke",
         "family": "stammstrecke",
         "roof": "hall",
         "hall": {
@@ -210,6 +212,7 @@
         "curved": true
       },
       "architecture": {
+        "customAsset": "stuttgart-stammstrecke",
         "family": "stammstrecke",
         "roof": "hall",
         "hall": {
@@ -275,7 +278,7 @@
         "curved": true
       },
       "architecture": {
-        "customAsset": "stuttgart-hbf-tief",
+        "customAsset": "stuttgart-stammstrecke",
         "family": "stammstrecke",
         "roof": "hall",
         "hall": {

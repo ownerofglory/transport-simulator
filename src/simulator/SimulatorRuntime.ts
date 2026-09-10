@@ -5,7 +5,7 @@ import type { CameraMode } from '../world/CameraController';
 import { TransitWorld } from '../world';
 import { SimulatorClient } from './SimulatorClient';
 import { SimulatorLoop } from '../app/SimulatorLoop';
-import type { Mode, Season } from '../app/types';
+import type { DebugWeather, Mode, Season, TrafficDensity } from '../app/types';
 import type { SimulatorSnapshotStore } from '../features/simulation/SimulatorSnapshotStore';
 import { InputState } from '../engine/runtime/InputState';
 import { RuntimeMachine } from '../engine/runtime/RuntimeMachine';
@@ -27,6 +27,8 @@ export type RouteSession = {
   season: Season;
   time: 'auto' | number;
   cameraMode: CameraMode;
+  trafficDensity: TrafficDensity;
+  debugWeather: DebugWeather;
 };
 
 /** Imperative command surface the React shell drives via effects. */
@@ -45,6 +47,8 @@ export type SimulatorCommands = {
   adjustZoom(delta: number): void;
   setSeason(season: Season): void;
   setTime(time: 'auto' | number): void;
+  setTrafficDensity(density: TrafficDensity): void;
+  setDebugWeather(weather: DebugWeather): void;
   togglePhotoMode(): void;
   enterPhotoMode(): void;
   exitPhotoMode(): void;
@@ -266,6 +270,16 @@ export class SimulatorRuntime implements SimulatorCommands {
     this.world?.setTimeOfDay(time === 'auto' ? currentLocalHour() : time);
   }
 
+  setTrafficDensity(density: TrafficDensity): void {
+    if (this.session) this.session.trafficDensity = density;
+    this.world?.setTrafficDensity(density);
+  }
+
+  setDebugWeather(weather: DebugWeather): void {
+    if (this.session) this.session.debugWeather = weather;
+    this.world?.setWeatherOverride(weather === 'auto' ? null : weather);
+  }
+
   /** Registers a callback for photo-mode activation changes (overlay visibility). */
   onPhotoMode(handler: (active: boolean) => void): void {
     this.photoModeHandler = handler;
@@ -339,6 +353,8 @@ export class SimulatorRuntime implements SimulatorCommands {
     this.world?.setCameraMode(session.cameraMode);
     this.world?.setSeason(session.season);
     this.world?.setTimeOfDay(session.time === 'auto' ? currentLocalHour() : session.time);
+    this.world?.setTrafficDensity(session.trafficDensity);
+    this.world?.setWeatherOverride(session.debugWeather === 'auto' ? null : session.debugWeather);
   }
 
   private renderNow(): void {

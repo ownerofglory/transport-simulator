@@ -2,14 +2,14 @@ import * as THREE from 'three';
 import { makeLabelTexture } from './labels';
 import type { DemoRoute } from './route';
 import type { GuidewayKind, TransportModeDefinition } from './domain/transport';
-import type { Season } from './app/types';
+import type { Season, TrafficDensity } from './app/types';
 import type { CityDefinition } from './cities';
 import type { CameraMode } from './world/CameraController';
 import { CameraSystem } from './engine/systems/CameraSystem';
 import { LightingSystem } from './engine/systems/LightingSystem';
 import { PhotoSystem, type CinematicPreset } from './engine/systems/PhotoSystem';
 import { WeatherEffects } from './world/WeatherEffects';
-import { fetchCurrentWeather, weatherLocationFor } from './world/weather';
+import { debugWeatherPreset, fetchCurrentWeather, weatherLocationFor, type VisualWeather, type WeatherKind } from './world/weather';
 
 export type { CinematicPreset };
 import { ActiveVehicleSystem } from './engine/systems/ActiveVehicleSystem';
@@ -47,6 +47,7 @@ export class TransitWorld {
   private pedestrians: PedestrianSystem | null = null;
   // Scheduled public-transport cohorts for cities covered by the backend graph.
   private transitPassengers: TransitPassengerSystem | null = null;
+  private trafficDensity: TrafficDensity = 'few';
   // The active vehicle (placement, doors, interior display, visibility, lamps).
   private activeVehicle!: ActiveVehicleSystem;
   // Terrain sampling, curated landmarks, OSM streaming, and scenery visibility.
@@ -57,6 +58,10 @@ export class TransitWorld {
   private readonly lightingSystem = new LightingSystem(this.scene, this.renderer);
   private readonly weatherEffects = new WeatherEffects(this.scene);
   private readonly weatherAbort = new AbortController();
+  // Last conditions the provider reported, kept so clearing a debug override
+  // returns to the real weather without re-fetching.
+  private liveWeather: VisualWeather | null = null;
+  private weatherOverride: WeatherKind | null = null;
   // Last pushed vehicle lamp state, so the per-frame check only writes on a flip.
   private vehicleLightsOn: boolean | null = null;
   // Stable reference so the per-frame camera input does not allocate a closure.
@@ -171,6 +176,7 @@ export class TransitWorld {
         terrainHeightAt: (lat, lon) => this.environment.terrainHeightAt(lat, lon)
       });
       this.scene.add(this.roadTraffic.root);
+      this.roadTraffic.setDensity(this.trafficDensity);
       // Lamp materials are shared module state, so a world built at night (or
       // after one that was) has to be told the current state once up front —
       // updateVehicleLighting only pushes on a change.
@@ -184,6 +190,7 @@ export class TransitWorld {
         }
       });
       this.scene.add(this.pedestrians.root);
+      this.pedestrians.setDensity(this.trafficDensity);
       if (this.city?.passengerTransit?.network === 'vvs' && this.route.stations.length >= 2) {
         this.transitPassengers = new TransitPassengerSystem({
           line: this.route.line,
@@ -199,6 +206,7 @@ export class TransitWorld {
           vehicleCars: this.activeVehicle.cars
         });
         this.scene.add(this.transitPassengers.root);
+        this.transitPassengers.setDensity(this.trafficDensity);
       }
     }
 
@@ -207,6 +215,17 @@ export class TransitWorld {
 
   mount(target: HTMLElement): void {
     target.appendChild(this.renderer.domElement);
+  }
+
+  /**
+   * Ambient traffic population. Applied live to the running systems and kept so
+   * a rebuilt world starts at the same density.
+   */
+  setTrafficDensity(density: TrafficDensity): void {
+    this.trafficDensity = density;
+    this.roadTraffic?.setDensity(density);
+    this.pedestrians?.setDensity(density);
+    this.transitPassengers?.setDensity(density);
   }
 
   setSeason(season: Season): void {
@@ -358,14 +377,33 @@ export class TransitWorld {
     this.renderer.dispose();
   }
 
+  /**
+   * Debug weather: forces a condition, or `null` to follow the live provider
+   * again. Applied immediately and re-applied after a world rebuild.
+   */
+  setWeatherOverride(kind: WeatherKind | null): void {
+    this.weatherOverride = kind;
+    this.applyWeather();
+  }
+
+  private applyWeather(): void {
+    const base = this.liveWeather ?? undefined;
+    const weather = this.weatherOverride ? debugWeatherPreset(this.weatherOverride, base) : this.liveWeather;
+    if (!weather) return;
+    this.lightingSystem.setWeather(weather);
+    this.weatherEffects.setWeather(weather);
+    this.updateVehicleLighting();
+  }
+
   private async loadCurrentWeather(): Promise<void> {
     const location = weatherLocationFor(this.city, this.route);
     if (!location) return;
     try {
       const weather = await fetchCurrentWeather(location, this.weatherAbort.signal);
       if (this.weatherAbort.signal.aborted) return;
-      this.lightingSystem.setWeather(weather);
-      this.weatherEffects.setWeather(weather);
+      this.liveWeather = weather;
+      // A debug override set while this was in flight wins over the arrival.
+      this.applyWeather();
     } catch (error) {
       if (!this.weatherAbort.signal.aborted) console.warn('Could not load current weather; using the clear-weather presentation.', error);
     }

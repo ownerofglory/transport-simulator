@@ -1,8 +1,19 @@
 import type { BootstrapResult } from '../../app/useAppBootstrap';
 import { useAppState } from '../../app/useAppState';
+import type { TrafficDensity } from '../../app/types';
 import { TransportModeTabs } from './TransportModeTabs';
 
-/** Compact city, line, operating-mode, and time selectors. */
+// One, two or three dots: how much company you have out there, with no word of
+// text. (Shade blocks ░▒▓ were the obvious pick but render as unrelated hatch
+// patterns at this size.) Denser settings reuse routes already fetched, so none
+// of them costs extra routing requests.
+const TRAFFIC_OPTIONS: { density: TrafficDensity; icon: string; label: string }[] = [
+  { density: 'few', icon: '•', label: 'Light traffic' },
+  { density: 'medium', icon: '••', label: 'Medium traffic' },
+  { density: 'many', icon: '•••', label: 'Heavy traffic' }
+];
+
+/** Compact city, line, operating-mode, time, and traffic selectors. */
 export function SelectionPanel({ catalog }: { catalog: BootstrapResult }) {
   const { state, dispatch } = useAppState();
   const route = catalog.routes.find((entry) => entry.id === state.selectedRouteId);
@@ -50,7 +61,7 @@ export function SelectionPanel({ catalog }: { catalog: BootstrapResult }) {
           ))}
         </select>
       </div>
-      <div className="compact-settings" aria-label="Operating mode and time of day">
+      <div className="compact-settings" aria-label="Operating mode, time of day and traffic">
         <div className="compact-switch" aria-label="Mode">
           <button className={state.selectedMode === 'ride' ? 'active' : ''} aria-label="Ride mode" aria-pressed={state.selectedMode === 'ride'} title="Ride mode" onClick={() => dispatch({ type: 'ride-mode-selected', mode: 'ride' })}>◉</button>
           <button className={state.selectedMode === 'driver' ? 'active' : ''} aria-label="Drive mode" aria-pressed={state.selectedMode === 'driver'} title="Drive mode" onClick={() => dispatch({ type: 'ride-mode-selected', mode: 'driver' })}>⌁</button>
@@ -60,6 +71,20 @@ export function SelectionPanel({ catalog }: { catalog: BootstrapResult }) {
           <button className={state.selectedTime === 6 ? 'active' : ''} aria-label="Dawn, 06:00" aria-pressed={state.selectedTime === 6} title="06:00 · Dawn" onClick={() => dispatch({ type: 'time-selected', time: 6 })}>◒</button>
           <button className={state.selectedTime === 9 ? 'active' : ''} aria-label="Morning, 09:00" aria-pressed={state.selectedTime === 9} title="09:00 · Morning" onClick={() => dispatch({ type: 'time-selected', time: 9 })}>◐</button>
           <button className={state.selectedTime === 13 ? 'active' : ''} aria-label="Day, 13:00" aria-pressed={state.selectedTime === 13} title="13:00 · Day" onClick={() => dispatch({ type: 'time-selected', time: 13 })}>☀︎</button>
+        </div>
+        <div className="compact-switch" aria-label="Traffic">
+          {TRAFFIC_OPTIONS.map((option) => (
+            <button
+              key={option.density}
+              className={state.selectedTrafficDensity === option.density ? 'active' : ''}
+              aria-label={option.label}
+              aria-pressed={state.selectedTrafficDensity === option.density}
+              title={`${option.label} · cars, pedestrians and riders`}
+              onClick={() => dispatch({ type: 'traffic-density-selected', density: option.density })}
+            >
+              {option.icon}
+            </button>
+          ))}
         </div>
       </div>
     </>

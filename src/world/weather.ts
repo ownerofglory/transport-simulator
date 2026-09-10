@@ -88,6 +88,23 @@ export const DEFAULT_WEATHER: VisualWeather = {
   kind: 'clear', cloudCover: 0.1, precipitationMm: 0, snowfallCm: 0, windSpeedKmh: 8, temperatureC: null, visibilityM: 20_000, isDay: true, sunriseHour: 6, sunsetHour: 18
 };
 
+/**
+ * Hand-picked condition sets for the debug weather switch. The sun window and
+ * temperature come from whatever the city actually reported, so forcing a
+ * condition changes the sky and precipitation without also moving the sun.
+ */
+export function debugWeatherPreset(kind: WeatherKind, base: VisualWeather = DEFAULT_WEATHER): VisualWeather {
+  const presets: Record<WeatherKind, Pick<VisualWeather, 'cloudCover' | 'precipitationMm' | 'snowfallCm' | 'visibilityM'>> = {
+    clear: { cloudCover: 0.04, precipitationMm: 0, snowfallCm: 0, visibilityM: 26_000 },
+    cloudy: { cloudCover: 0.82, precipitationMm: 0, snowfallCm: 0, visibilityM: 18_000 },
+    fog: { cloudCover: 0.96, precipitationMm: 0, snowfallCm: 0, visibilityM: 400 },
+    rain: { cloudCover: 0.88, precipitationMm: 2.4, snowfallCm: 0, visibilityM: 6_000 },
+    snow: { cloudCover: 0.8, precipitationMm: 0.6, snowfallCm: 1.6, visibilityM: 2_500 },
+    thunder: { cloudCover: 0.95, precipitationMm: 4.5, snowfallCm: 0, visibilityM: 4_500 }
+  };
+  return { ...base, kind, ...presets[kind] };
+}
+
 /** Uses the selected city centre, falling back to the current route midpoint for future cities. */
 export function weatherLocationFor(city: CityDefinition | undefined, route: DemoRoute): LatLon | null {
   if (city && CITY_CENTRES[city.id]) return CITY_CENTRES[city.id];

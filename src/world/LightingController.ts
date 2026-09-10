@@ -130,12 +130,19 @@ export class LightingController {
     this.scene.background = sky;
 
     // Fog draws farther in daylight, especially in summer.
-    const weatherVisibility = THREE.MathUtils.clamp(this.weather.visibilityM * 0.42, 180, 4_000);
+    // The floor keeps even a dense-fog reading from closing the view to a couple
+    // of blocks; below roughly this distance fog reads as a painted backdrop.
+    const weatherVisibility = THREE.MathUtils.clamp(this.weather.visibilityM * 0.42, 900, 4_000);
     const fogFar = Math.min(THREE.MathUtils.lerp(2300, this.currentSeason === 'summer' ? 3400 : 2700, daylight), weatherVisibility);
     // Underground the fog turns near-black and closes right in, so the lining
     // falls off into darkness a few car lengths ahead instead of staying evenly lit.
     const fogColor = sky.clone().lerp(new THREE.Color(0x07080a), below);
-    const near = THREE.MathUtils.lerp(fogFar * 0.4, 12, below);
+    // Clear conditions keep the usual short ramp near the horizon. When weather
+    // closes the view in, the ramp is stretched instead of scaled down: haze has
+    // to fade in over several hundred metres, or fog stands up as a flat wall a
+    // couple of blocks ahead rather than veiling the distance.
+    const fogNear = Math.min(fogFar * 0.4, Math.max(90, fogFar - 800));
+    const near = THREE.MathUtils.lerp(fogNear, 12, below);
     const far = THREE.MathUtils.lerp(fogFar, 155, below);
 
     // Mutate the existing fog rather than replacing it; underground blending

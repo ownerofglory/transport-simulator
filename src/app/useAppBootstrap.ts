@@ -65,6 +65,7 @@ export function useAppBootstrap(): BootstrapResult {
             ...(url.rideMode && { selectedMode: url.rideMode }),
             ...(url.season && { selectedSeason: url.season }),
             ...(url.time !== undefined && { selectedTime: url.time }),
+            ...(url.trafficDensity && { selectedTrafficDensity: url.trafficDensity }),
             ...(url.cameraMode && { selectedCameraMode: url.cameraMode })
           }
         });

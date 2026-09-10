@@ -1,5 +1,5 @@
 import type { CameraMode } from '../../world/CameraController';
-import type { Season } from '../../app/types';
+import type { DebugWeather, Season, TrafficDensity } from '../../app/types';
 import type { RouteSession } from '../../simulator/SimulatorRuntime';
 import type { DesiredRuntimeState } from './DesiredRuntimeState';
 import { worldKey } from './worldKey';
@@ -11,6 +11,8 @@ export interface ReconcilerRuntime {
   setRideMode(session: RouteSession): void;
   setSeason(season: Season): void;
   setTime(time: 'auto' | number): void;
+  setTrafficDensity(density: TrafficDensity): void;
+  setDebugWeather(weather: DebugWeather): void;
   setCameraMode(mode: CameraMode): void;
   setPaused(paused: boolean): void;
 }
@@ -21,7 +23,7 @@ export interface ReconcilerRuntime {
  *
  * - A change to the structural {@link worldKey} rebuilds the world once.
  * - A start-station or ride-mode change updates the existing world.
- * - Season/time/camera/pause changes update presentation without rebuilding.
+ * - Season/time/traffic/weather/camera/pause changes update presentation without rebuilding.
  *
  * Applying the same desired state twice is a no-op.
  */
@@ -54,6 +56,12 @@ export class RuntimeReconciler {
     }
     if (previous?.presentation.time !== next.presentation.time) {
       this.runtime.setTime(next.presentation.time);
+    }
+    if (previous?.presentation.trafficDensity !== next.presentation.trafficDensity) {
+      this.runtime.setTrafficDensity(next.presentation.trafficDensity);
+    }
+    if (previous?.presentation.debugWeather !== next.presentation.debugWeather) {
+      this.runtime.setDebugWeather(next.presentation.debugWeather);
     }
     if (previous?.presentation.cameraMode !== next.presentation.cameraMode) {
       this.runtime.setCameraMode(next.presentation.cameraMode);

@@ -14,6 +14,7 @@ import {
   type ExteriorLightRig
 } from '../../parts';
 import { makeStandardMaterial } from '../standardMaterial';
+import { registerSeatAnchors, yawForFacing } from '../../interiorSeating';
 import type { BusBlueprintConfig, BusMaterialRole, BusSectionConfig } from './BusBlueprintConfig';
 
 // Mercedes-Benz Citaro family renderer, driven by a BusBlueprintConfig.
@@ -253,6 +254,7 @@ function addBusSeating(
       cushion.name = 'Citaro upholstered seat cushion';
       cushion.position.set(x, 1.35, z);
       car.add(cushion);
+      registerSeatAnchors(car, [{ x, y: 1.42, z, yaw: yawForFacing(1) }]);
       // Contoured moquette back with a darker headrest and an aisle grab handle.
       const back = new THREE.Mesh(geometry?.back ?? new THREE.BoxGeometry(0.46, 0.56, 0.11), m.seat);
       back.position.set(x, 1.66, z - 0.29);

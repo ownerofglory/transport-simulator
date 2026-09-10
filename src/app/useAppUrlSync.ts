@@ -19,6 +19,7 @@ export function useAppUrlSync(state: AppState, ready: boolean): void {
     state.selectedMode,
     state.selectedSeason,
     state.selectedTime,
+    state.selectedTrafficDensity,
     state.selectedCameraMode,
     state.view,
     state.realtimeJourney

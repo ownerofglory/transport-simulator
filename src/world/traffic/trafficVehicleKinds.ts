@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { axleCylinder, extrudeProfile, pick } from './trafficMeshUtils';
 
 export type TrafficKind = 'car' | 'truck' | 'cyclist';
@@ -35,6 +36,7 @@ const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x141b24, roughnes
 const tyreMaterial = new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.95 });
 const rimMaterial = new THREE.MeshStandardMaterial({ color: 0xb8bcc2, roughness: 0.35, metalness: 0.8 });
 const trimMaterial = new THREE.MeshStandardMaterial({ color: 0x33383f, roughness: 0.7 });
+const plateMaterial = new THREE.MeshStandardMaterial({ color: 0xe5e8e7, roughness: 0.48 });
 // Lamp materials are shared, so the day/night flip below recolours every vehicle
 // on the road in two writes instead of walking the scene graph.
 const headlampMaterial = new THREE.MeshStandardMaterial({ color: 0xf6f2e2, emissive: 0xfff0c2, emissiveIntensity: 0 });
@@ -211,7 +213,7 @@ const CAR_VARIANT_DEFS: CarVariantDef[] = [
 ];
 
 const carBodyMaterials = [0xb4b8bd, 0x1c1f26, 0x8b1e1e, 0x27436b, 0xe8e2d0, 0x4a4f57, 0x2f5d4a, 0xc9a227].map(
-  (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.35 })
+  (color) => new THREE.MeshPhysicalMaterial({ color, roughness: 0.3, metalness: 0.25, clearcoat: 0.65, clearcoatRoughness: 0.23 })
 );
 
 type CarVariant = CarVariantDef & {
@@ -220,7 +222,68 @@ type CarVariant = CarVariantDef & {
   skirtGeometry: THREE.BufferGeometry;
   tyreGeometry: THREE.BufferGeometry;
   rimGeometry: THREE.BufferGeometry;
+  darkDetails: THREE.BufferGeometry;
+  chromeDetails: THREE.BufferGeometry;
+  plates: THREE.BufferGeometry;
+  windscreen: THREE.BufferGeometry;
 };
+
+function carWindscreen(def: CarVariantDef): THREE.BufferGeometry {
+  const [topZ, topY] = def.glass[0];
+  const [bottomZ, bottomY] = def.glass[def.glass.length - 1];
+  const half = def.widthM * 0.41;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute([
+    -half, bottomY, bottomZ + 0.085, half, bottomY, bottomZ + 0.085,
+    half * 0.92, topY, topZ + 0.085, -half * 0.92, topY, topZ + 0.085
+  ], 3));
+  geometry.setIndex([0, 1, 2, 0, 2, 3]);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function alloyWheel(radius: number, width: number): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [axleCylinder(radius * 0.19, width + 0.025, 12)];
+  for (const side of [-1, 1]) {
+    parts.push(new THREE.TorusGeometry(radius * 0.58, 0.018, 6, 20).rotateY(Math.PI / 2).translate(side * (width / 2 + 0.012), 0, 0));
+    for (let i = 0; i < 5; i++) {
+      parts.push(new THREE.BoxGeometry(0.025, radius * 0.49, 0.034)
+        .translate(0, radius * 0.32, 0).rotateX(i * Math.PI * 2 / 5).translate(side * (width / 2 + 0.012), 0, 0));
+    }
+  }
+  const result = mergeGeometries(parts, false)!;
+  parts.forEach(part => part.dispose());
+  return result;
+}
+
+function carDetails(def: CarVariantDef, finish: 'dark' | 'chrome' | 'plate'): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const box = (size: [number, number, number], position: [number, number, number]) => {
+    parts.push(new THREE.BoxGeometry(...size).translate(...position));
+  };
+  const front = def.headlamp[2] + 0.09;
+  const rear = def.taillamp[2] - 0.09;
+  if (finish === 'plate') {
+    for (const z of [front + 0.015, rear - 0.015]) box([0.46, 0.095, 0.018], [0, 0.66, z]);
+  } else if (finish === 'dark') {
+    box([0.85, 0.13, 0.04], [0, def.headlamp[1] - 0.12, front]);
+    box([def.widthM * 0.74, 0.065, 0.04], [0, def.skirt.yM + 0.05, front]);
+    for (const side of [-1, 1]) {
+      const x = side * (def.widthM / 2 + 0.028);
+      box([0.018, 0.44, 0.009], [x, def.skirt.yM + 0.39, -0.08]);
+      box([0.022, 0.026, 1.8], [x, def.skirt.yM + 0.63, -0.25]);
+    }
+  } else {
+    for (let i = 0; i < 4; i++) box([0.76, 0.008, 0.012], [0, def.headlamp[1] - 0.165 + i * 0.03, front + 0.025]);
+    for (const side of [-1, 1]) for (const z of [0.24, -0.65]) {
+      box([0.028, 0.025, 0.16], [side * (def.widthM / 2 + 0.035), def.skirt.yM + 0.56, z]);
+    }
+    box([0.075, 0.055, 0.015], [0, def.taillamp[1], rear]);
+  }
+  const result = mergeGeometries(parts, false)!;
+  parts.forEach(part => part.dispose());
+  return result;
+}
 
 // Each variant's geometry is built once at module load, same as every other
 // shared shape in this file — buildCar only ever wraps them in a fresh Group.
@@ -232,7 +295,11 @@ const CAR_VARIANTS: CarVariant[] = CAR_VARIANT_DEFS.map((def) => ({
   glassGeometry: extrudeProfile(def.glass, def.widthM + 0.04, 0.02),
   skirtGeometry: new THREE.BoxGeometry(def.skirt.widthM, def.skirt.heightM, def.skirt.lengthM),
   tyreGeometry: axleCylinder(def.wheelRadiusM, def.wheelWidthM, 14),
-  rimGeometry: axleCylinder(def.wheelRadiusM * 0.58, def.wheelWidthM + 0.015, 10)
+  rimGeometry: alloyWheel(def.wheelRadiusM, def.wheelWidthM),
+  darkDetails: carDetails(def, 'dark'),
+  chromeDetails: carDetails(def, 'chrome'),
+  plates: carDetails(def, 'plate'),
+  windscreen: carWindscreen(def)
 }));
 
 function makeWheel(tyre: THREE.BufferGeometry, rim: THREE.BufferGeometry): THREE.Group {
@@ -252,6 +319,18 @@ function buildCar(): TrafficRig {
   const skirt = new THREE.Mesh(variant.skirtGeometry, trimMaterial);
   skirt.position.y = variant.skirt.yM;
   root.add(body, glass, skirt);
+  const windscreen = new THREE.Mesh(variant.windscreen, glassMaterial);
+  windscreen.name = 'Raked front windscreen';
+  root.add(windscreen);
+  for (const [geometry, material, name] of [
+    [variant.darkDetails, trimMaterial, 'Grille, lower intake and door seams'],
+    [variant.chromeDetails, rimMaterial, 'Grille slats, door handles and rear badge'],
+    [variant.plates, plateMaterial, 'Front and rear registration plates']
+  ] as const) {
+    const detail = new THREE.Mesh(geometry, material);
+    detail.name = name;
+    root.add(detail);
+  }
 
   // Mirrors, number-plate holders and glazing pillars share one unit cube and
   // one instanced draw call. They sharpen the silhouette without multiplying
@@ -274,9 +353,9 @@ function buildCar(): TrafficRig {
     matrix.compose(position, quaternion, scale);
     details.setMatrixAt(detailIndex++, matrix);
   }
-  for (const z of [0.55, -0.72]) {
-    position.set(0, 1.24, z);
-    scale.set(0.035, 0.46, 0.055);
+  for (const side of [-1, 1]) {
+    position.set(side * (variant.widthM / 2 + 0.025), variant.name === 'suv' ? 1.49 : 1.22, -0.15);
+    scale.set(0.025, 0.36, 0.085);
     matrix.compose(position, quaternion, scale);
     details.setMatrixAt(detailIndex++, matrix);
   }

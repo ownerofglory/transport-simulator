@@ -28,6 +28,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, selectedSeason: action.season };
     case 'time-selected':
       return { ...state, selectedTime: action.time };
+    case 'traffic-density-selected':
+      return { ...state, selectedTrafficDensity: action.density };
+    case 'debug-mode-toggled':
+      // Leaving debug mode hands the weather back to the live provider, so the
+      // world never stays stuck on a forced condition with no way to change it.
+      return state.debugMode
+        ? { ...state, debugMode: false, debugWeather: 'auto' }
+        : { ...state, debugMode: true };
+    case 'debug-weather-selected':
+      return { ...state, debugWeather: action.weather };
     case 'camera-selected':
       return { ...state, selectedCameraMode: action.cameraMode };
     case 'pause-changed':

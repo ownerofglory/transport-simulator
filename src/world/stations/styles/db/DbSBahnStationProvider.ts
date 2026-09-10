@@ -1,7 +1,7 @@
 import { VvsStadtbahnStationProvider } from '../vvs/VvsStadtbahnStationProvider';
 import { VvsStationCatalog } from '../vvs/VvsStationCatalog';
 import dbSBahnStations from './configs/db-sbahn-stations.json';
-import { buildHauptbahnhofInterior } from './hauptbahnhofInterior';
+import { buildStammstreckeInterior } from './stammstreckeInterior';
 
 /**
  * DB S-Bahn station style.
@@ -16,13 +16,14 @@ import { buildHauptbahnhofInterior } from './hauptbahnhofInterior';
  * The Stammstrecke stations are one design in four colours — a long island in a
  * box, big round columns down the centre, and enamel track walls in the
  * station's own colour: Hauptbahnhof red, Stadtmitte green, Feuersee blue,
- * Schwabstraße yellow.
+ * Schwabstraße yellow. All four share the authored interior; only the colour,
+ * the name on the frieze and the track number change between them.
  */
 export function createDbSBahnStationProvider(): VvsStadtbahnStationProvider {
   return new VvsStadtbahnStationProvider(new VvsStationCatalog(dbSBahnStations as never), {
     id: 'db-sbahn',
     platformHeightM: 0.96,
     ssbStreetFurniture: false,
-    buildInterior: buildHauptbahnhofInterior
+    buildInterior: buildStammstreckeInterior
   });
 }

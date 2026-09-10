@@ -14,6 +14,7 @@ import {
   type ExteriorLightRig
 } from '../../parts';
 import { makeStandardMaterial } from '../standardMaterial';
+import { registerSeatAnchors, yawForFacing } from '../../interiorSeating';
 import type { SBahnBlueprintConfig, SBahnMaterialRole } from './SBahnBlueprintConfig';
 
 // DB BR 430-family S-Bahn renderer, driven by an SBahnBlueprintConfig.
@@ -46,6 +47,7 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
   const exteriorLabels = config.exteriorDetailStyle === 'br430'
     ? makeBR430ExteriorLabels(context.definition.line, context.definition.destination)
     : null;
+  const cabWindscreenMaterial = exteriorLabels ? makeBR430WindscreenMaterial() : m.glass;
   const sharedDisplayMaterial = context.makeInteriorDisplayMaterial();
   const displayMaterial = exteriorLabels ? sharedDisplayMaterial.clone() : sharedDisplayMaterial;
   if (exteriorLabels) displayMaterial.side = THREE.FrontSide;
@@ -114,11 +116,12 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
       }
     }
     if (index === 0 || index === carCenters.length - 1) {
-      // BR 430 front: flat, slightly raked red nose with a wide black
-      // windscreen band, vertical LED light bars and a top destination display.
+      // The Stuttgart BR 430 cab tapers in plan view and rolls into the lower
+      // skirt, with a wide black windscreen band and slim vertical LED lamps.
       const cabEnd = (index === 0 ? -1 : 1) as -1 | 1;
       const faceTilt = -cabEnd * 0.197;
       const nose = new THREE.Mesh(makeSBahn430Nose(), m.nose);
+      nose.name = 'BR430 rounded cab shell';
       nose.position.z = cabEnd * 8.0;
       if (cabEnd < 0) nose.rotation.y = Math.PI;
       nose.castShadow = true;
@@ -126,14 +129,18 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
       cabShells.push(nose);
 
       const mask = new THREE.Mesh(makeSBahn430Mask(), m.dark);
+      mask.name = 'BR430 rounded windscreen mask';
       mask.position.set(0, 2.58, cabEnd * 8.76);
       mask.rotation.x = faceTilt;
+      if (cabEnd < 0) mask.rotation.y = Math.PI;
       car.add(mask);
       cabShells.push(mask);
 
-      const windscreen = new THREE.Mesh(makeSBahn430Windscreen(), m.glass);
+      const windscreen = new THREE.Mesh(makeSBahn430Windscreen(), cabWindscreenMaterial);
+      windscreen.name = 'BR430 curved windscreen';
       windscreen.position.set(0, 2.5, cabEnd * 8.82);
       windscreen.rotation.x = faceTilt;
+      if (cabEnd < 0) windscreen.rotation.y = Math.PI;
       car.add(windscreen);
 
       const roundLamps = config.cabLampStyle === 'round';
@@ -142,7 +149,7 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
         // the CDMX cars carry two large round clusters side by side instead.
         const housing = roundLamps
           ? new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.29, 0.07, 20), m.dark)
-          : new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.78, 0.07), m.dark);
+          : new THREE.Mesh(new RoundedBoxGeometry(0.24, 0.8, 0.08, 4, 0.07), m.dark);
         if (roundLamps) housing.rotation.x = Math.PI / 2;
         housing.position.set(side * 1.12, roundLamps ? 1.34 : 1.32, cabEnd * 8.88);
         car.add(housing);
@@ -150,13 +157,13 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
 
         const headBar = roundLamps
           ? new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.055, 20), m.headlight)
-          : new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.42, 0.055), m.headlight);
+          : new THREE.Mesh(new RoundedBoxGeometry(0.13, 0.43, 0.06, 3, 0.035), m.headlight);
         if (roundLamps) headBar.rotation.x = Math.PI / 2;
         headBar.position.set(side * (roundLamps ? 1.24 : 1.12), roundLamps ? 1.34 : 1.18, cabEnd * 8.92);
         car.add(headBar);
         const tailDot = roundLamps
           ? new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.055, 16), m.tailLamp)
-          : new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.055), m.tailLamp);
+          : new THREE.Mesh(new RoundedBoxGeometry(0.13, 0.17, 0.06, 3, 0.035), m.tailLamp);
         if (roundLamps) tailDot.rotation.x = Math.PI / 2;
         tailDot.position.set(side * (roundLamps ? 0.98 : 1.12), roundLamps ? 1.34 : 1.56, cabEnd * 8.92);
         car.add(tailDot);
@@ -167,18 +174,22 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
         car.add(cabWindow);
       }
 
-      const frontSkirt = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.3, 0.16), m.dark);
-      frontSkirt.position.set(0, 0.52, cabEnd * 8.72);
-      car.add(frontSkirt);
-      cabShells.push(frontSkirt);
+      const frontApron = new THREE.Mesh(makeSBahn430Apron(), m.dark);
+      frontApron.name = 'BR430 bowed lower cab apron';
+      frontApron.position.set(0, 0.65, cabEnd * 8.76);
+      if (cabEnd < 0) frontApron.rotation.y = Math.PI;
+      frontApron.castShadow = true;
+      car.add(frontApron);
+      cabShells.push(frontApron);
 
       const logo = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.4, 0.28),
+        exteriorLabels ? new THREE.CircleGeometry(0.22, 32) : new THREE.PlaneGeometry(0.4, 0.28),
         new THREE.MeshBasicMaterial({
           map: makeLabelTexture(config.logo.text, { width: 160, height: 112, bg: config.logo.background, fg: config.logo.foreground }),
           side: THREE.DoubleSide
         })
       );
+      logo.name = exteriorLabels ? 'BR430 green S cab emblem' : 'S-Bahn cab operator logo';
       logo.position.set(0, 1.5, cabEnd * 8.9);
       if (cabEnd < 0) logo.rotation.y = Math.PI;
       car.add(logo);
@@ -270,7 +281,7 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
     }
     if (exteriorLabels) {
       addBR430ExteriorDetails(car, config, index === 0 ? -1 : index === carCenters.length - 1 ? 1 : 0,
-        passengerShells, cabShells, { dark: m.dark, metal: m.metal, ...exteriorLabels });
+        passengerShells, cabShells, { dark: m.dark, metal: m.metal, accent: m.accent, ...exteriorLabels });
     }
     cars.push(car);
     root.add(car);
@@ -479,6 +490,7 @@ function addSBahnSeat(
   // about the seat origin keeps the cushion over the same floor patch.
   if (longitudinal) seat.rotation.y = x < 0 ? Math.PI / 2 : -Math.PI / 2;
   car.add(seat);
+  registerSeatAnchors(car, [{ x, y: 1.46, z, yaw: longitudinal ? seat.rotation.y : yawForFacing(facing) }]);
 }
 
 function addSBahnVestibulePartitions(car: THREE.Group, doorZs: number[], m: SBahnInteriorMaterials): void {
@@ -617,52 +629,167 @@ function makeSBahn430Body(lengthM: number): THREE.ExtrudeGeometry {
 }
 
 function makeSBahn430Nose(): THREE.ExtrudeGeometry {
-  // Side profile of the flat, slightly raked BR 430 front, extruded across the width.
+  // The extruded side profile is bowed afterwards so the cab face curves across
+  // its width instead of reading as a flat slab from chase and overhead views.
   const profile = new THREE.Shape();
-  profile.moveTo(0, 0.42);
-  profile.lineTo(0.55, 0.42);
-  profile.lineTo(0.72, 0.62);
-  profile.lineTo(0.78, 1.9);
-  profile.lineTo(0.52, 3.2);
-  profile.quadraticCurveTo(0.42, 3.5, 0.12, 3.6);
+  profile.moveTo(0, 0.38);
+  profile.lineTo(0.42, 0.38);
+  profile.quadraticCurveTo(0.64, 0.4, 0.74, 0.62);
+  profile.quadraticCurveTo(0.82, 1.12, 0.79, 1.9);
+  profile.quadraticCurveTo(0.7, 2.56, 0.5, 3.22);
+  profile.quadraticCurveTo(0.39, 3.51, 0.1, 3.6);
   profile.lineTo(0, 3.6);
   profile.closePath();
   const geometry = new THREE.ExtrudeGeometry(profile, {
-    depth: 2.7,
+    depth: 2.56,
+    curveSegments: 16,
     bevelEnabled: true,
-    bevelThickness: 0.09,
-    bevelSize: 0.09,
-    bevelSegments: 3
+    bevelThickness: 0.14,
+    bevelSize: 0.11,
+    bevelSegments: 7
   });
-  geometry.translate(0, 0, -1.35);
+  geometry.translate(0, 0, -1.28);
   geometry.rotateY(-Math.PI / 2);
+  const position = geometry.getAttribute('position');
+  for (let index = 0; index < position.count; index++) {
+    const x = position.getX(index);
+    const z = position.getZ(index);
+    const widthRatio = Math.min(1, Math.abs(x) / 1.42);
+    const faceRatio = THREE.MathUtils.clamp(z / 0.82, 0, 1);
+    position.setZ(index, z + 0.2 * (1 - widthRatio * widthRatio) * faceRatio);
+  }
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
   return geometry;
 }
 
 function makeSBahn430Mask(): THREE.ExtrudeGeometry {
   const shape = new THREE.Shape();
-  shape.moveTo(-1.3, -0.66);
-  shape.lineTo(1.3, -0.66);
-  shape.lineTo(1.06, 0.56);
-  shape.quadraticCurveTo(0.98, 0.66, 0.82, 0.68);
+  shape.moveTo(-1.16, -0.68);
+  shape.quadraticCurveTo(0, -0.8, 1.16, -0.68);
+  shape.quadraticCurveTo(1.28, -0.61, 1.24, -0.43);
+  shape.lineTo(1.02, 0.54);
+  shape.quadraticCurveTo(0.96, 0.66, 0.78, 0.69);
   shape.lineTo(-0.82, 0.68);
   shape.quadraticCurveTo(-0.98, 0.66, -1.06, 0.56);
+  shape.lineTo(-1.24, -0.43);
+  shape.quadraticCurveTo(-1.28, -0.61, -1.16, -0.68);
   shape.closePath();
-  const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 2 });
+  // A real frame, not a dark filled plate behind the transparent pane. The
+  // filled plate produced a visible horizontal band through the windscreen.
+  const opening = new THREE.Path();
+  opening.moveTo(-1.06, -0.55);
+  opening.lineTo(-0.9, 0.44);
+  opening.quadraticCurveTo(-0.84, 0.54, -0.68, 0.56);
+  opening.lineTo(0.68, 0.56);
+  opening.quadraticCurveTo(0.84, 0.54, 0.9, 0.44);
+  opening.lineTo(1.06, -0.55);
+  opening.quadraticCurveTo(0, -0.65, -1.06, -0.55);
+  opening.closePath();
+  shape.holes.push(opening);
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.06, curveSegments: 16, bevelEnabled: true, bevelSize: 0.035, bevelThickness: 0.025, bevelSegments: 5 });
   geometry.translate(0, 0, -0.03);
+  bowCabFace(geometry, 1.3, 0.11);
   return geometry;
 }
 
-function makeSBahn430Windscreen(): THREE.ExtrudeGeometry {
-  const shape = new THREE.Shape();
-  shape.moveTo(-1.18, -0.56);
-  shape.lineTo(1.18, -0.56);
-  shape.lineTo(0.92, 0.44);
-  shape.quadraticCurveTo(0.84, 0.54, 0.68, 0.56);
-  shape.lineTo(-0.68, 0.56);
-  shape.quadraticCurveTo(-0.84, 0.54, -0.92, 0.44);
-  shape.closePath();
-  const geometry = new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.015, bevelSegments: 2 });
-  geometry.translate(0, 0, -0.025);
+function makeSBahn430Windscreen(): THREE.BufferGeometry {
+  const columns = 12;
+  const rows = 6;
+  const vertices: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  for (let row = 0; row <= rows; row++) {
+    const v = row / rows;
+    const y = THREE.MathUtils.lerp(-0.57, 0.56, v);
+    const halfWidth = THREE.MathUtils.lerp(1.08, 0.7, v) + Math.sin(v * Math.PI) * 0.035;
+    for (let column = 0; column <= columns; column++) {
+      const u = column / columns;
+      const x = (u * 2 - 1) * halfWidth;
+      const widthRatio = x / 1.1;
+      const z = 0.135 * Math.max(0, 1 - widthRatio * widthRatio) + 0.012 * Math.sin(v * Math.PI);
+      vertices.push(x, y, z);
+      uvs.push(u, v);
+    }
+  }
+  for (let row = 0; row < rows; row++) {
+    for (let column = 0; column < columns; column++) {
+      const a = row * (columns + 1) + column;
+      const b = a + columns + 1;
+      indices.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
   return geometry;
+}
+
+function makeSBahn430Apron(): THREE.ExtrudeGeometry {
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.9, -0.31);
+  shape.quadraticCurveTo(-1.17, -0.3, -1.27, -0.08);
+  shape.quadraticCurveTo(-1.3, 0.12, -1.15, 0.28);
+  shape.quadraticCurveTo(-1.04, 0.36, -0.84, 0.37);
+  shape.lineTo(0.84, 0.37);
+  shape.quadraticCurveTo(1.04, 0.36, 1.15, 0.28);
+  shape.quadraticCurveTo(1.3, 0.12, 1.27, -0.08);
+  shape.quadraticCurveTo(1.17, -0.3, 0.9, -0.31);
+  shape.quadraticCurveTo(0, -0.39, -0.9, -0.31);
+  shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.3,
+    curveSegments: 18,
+    bevelEnabled: true,
+    bevelSize: 0.035,
+    bevelThickness: 0.025,
+    bevelSegments: 6
+  });
+  geometry.translate(0, 0, -0.15);
+  const position = geometry.getAttribute('position');
+  for (let index = 0; index < position.count; index++) {
+    const x = position.getX(index);
+    const y = position.getY(index);
+    const widthRatio = Math.min(1, Math.abs(x) / 1.3);
+    const verticalFade = 1 - 0.35 * THREE.MathUtils.smoothstep(y, -0.31, 0.37);
+    position.setZ(index, position.getZ(index) + 0.31 * (1 - widthRatio * widthRatio) * verticalFade);
+  }
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+function bowCabFace(geometry: THREE.BufferGeometry, halfWidth: number, amount: number): void {
+  const position = geometry.getAttribute('position');
+  for (let index = 0; index < position.count; index++) {
+    const widthRatio = Math.min(1, Math.abs(position.getX(index)) / halfWidth);
+    position.setZ(index, position.getZ(index) + amount * (1 - widthRatio * widthRatio));
+  }
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+}
+
+function makeBR430WindscreenMaterial(): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
+    color: '#1d333d',
+    transparent: true,
+    opacity: 0.74,
+    roughness: 0.07,
+    metalness: 0.04,
+    clearcoat: 0.72,
+    clearcoatRoughness: 0.08,
+    envMapIntensity: 1.65,
+    depthWrite: true,
+    side: THREE.DoubleSide
+  });
 }

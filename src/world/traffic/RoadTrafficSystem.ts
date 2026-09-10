@@ -11,6 +11,8 @@ import {
 import { flatDistanceM, randomGeoPointNear, type LatLon } from './trafficGeo';
 import { fetchRoadRoute } from './roadRoutingClient';
 import { animateTrafficRig, pickWeightedKind, setTrafficLampsOn, type TrafficKind, type TrafficKindSpec, type TrafficRig } from './trafficVehicleKinds';
+import { trafficDensityScale } from './trafficDensity';
+import type { TrafficDensity } from '../../app/types';
 
 export type RoadTrafficContext = {
   /** Same projection TransitWorld builds every other layer against. */
@@ -34,13 +36,26 @@ const MAX_CONCURRENT_REQUESTS = 3;
 const SPAWN_ATTEMPT_INTERVAL_S = 1.2;
 const HEIGHT_SAMPLE_SPACING_M = 120; // terrain is sampled sparsely and lerped, not per vertex
 const HEIGHT_SAMPLE_MAX = 24; // caps terrain fetches per spawned route
+// Denser settings never route more trips; they put extra vehicles on roads
+// already fetched, trailing the traffic that is driving them.
+const FOLLOWER_SPAWN_INTERVAL_S = 0.3;
+const FOLLOWER_GAP_MIN_M = 18;
+const FOLLOWER_GAP_MAX_M = 65;
+const ROUTE_REUSE_POOL = 14; // most recent routed trips kept for followers
+
+/** A routed trip, kept after spawning so more vehicles can drive it later. */
+type RoutedTrip = {
+  path: PathGeometry;
+  heightAnchorAtM: Float64Array;
+  heightAnchorM: Float64Array;
+};
 
 type TrafficVehicle = {
   spec: TrafficKindSpec;
   rig: TrafficRig;
-  path: PathGeometry;
-  heightAnchorAtM: Float64Array;
-  heightAnchorM: Float64Array;
+  trip: RoutedTrip;
+  /** False for vehicles reusing a trip, which are not counted against the routing budget. */
+  routed: boolean;
   distanceM: number;
   speedMps: number;
   cruiseSpeedMps: number;
@@ -59,8 +74,12 @@ export class RoadTrafficSystem {
   private readonly active: TrafficVehicle[] = [];
   private readonly pools = new Map<TrafficKind, TrafficRig[]>();
   private readonly abortControllers = new Set<AbortController>();
+  private readonly recentTrips: RoutedTrip[] = [];
   private pendingRequests = 0;
+  private routedCount = 0;
   private spawnCooldownS = 0;
+  private followerCooldownS = 0;
+  private densityScale = 1;
   private frameIndex = 0;
   private disposed = false;
   private readonly centerWorld = new THREE.Vector2(0, 0);
@@ -79,10 +98,10 @@ export class RoadTrafficSystem {
     for (let i = this.active.length - 1; i >= 0; i--) {
       const vehicle = this.active[i];
       vehicle.distanceM += vehicle.speedMps * stepSec;
-      const pose = poseAtDistance(vehicle.path, vehicle.distanceM);
+      const pose = poseAtDistance(vehicle.trip.path, vehicle.distanceM);
       const dx = pose.x - this.centerWorld.x;
       const dz = pose.z - this.centerWorld.y;
-      const finishedTrip = vehicle.distanceM >= vehicle.path.total;
+      const finishedTrip = vehicle.distanceM >= vehicle.trip.path.total;
       const outOfRange = dx * dx + dz * dz > ACTIVE_RADIUS_M * ACTIVE_RADIUS_M;
       if (finishedTrip || outOfRange) {
         this.despawn(i);
@@ -96,16 +115,16 @@ export class RoadTrafficSystem {
       // Look a little ahead so a car eases into a bend instead of snapping at
       // a polyline vertex. Sharp bends and the end of a route also trim speed.
       const lookAheadM = Math.min(6, Math.max(2, vehicle.speedMps * 0.45));
-      const targetHeading = poseAtDistance(vehicle.path, vehicle.distanceM + lookAheadM).headingRad;
+      const targetHeading = poseAtDistance(vehicle.trip.path, vehicle.distanceM + lookAheadM).headingRad;
       const turnRad = Math.abs(shortestAngleDelta(vehicle.headingRad, targetHeading));
       const turnScale = 1 - Math.min(turnRad / (Math.PI / 2), 1) * 0.38;
-      const remainingM = vehicle.path.total - vehicle.distanceM;
+      const remainingM = vehicle.trip.path.total - vehicle.distanceM;
       const arrivalScale = THREE.MathUtils.clamp(remainingM / 28, 0.28, 1);
       const targetSpeedMps = vehicle.cruiseSpeedMps * Math.min(turnScale, arrivalScale);
       vehicle.speedMps += (targetSpeedMps - vehicle.speedMps) * (1 - Math.exp(-2.4 * stepSec));
       vehicle.headingRad = dampAngle(vehicle.headingRad, targetHeading, 7.5, stepSec);
 
-      const y = lerpAt(vehicle.heightAnchorAtM, vehicle.heightAnchorM, vehicle.distanceM);
+      const y = lerpAt(vehicle.trip.heightAnchorAtM, vehicle.trip.heightAnchorM, vehicle.distanceM);
       vehicle.rig.root.position.set(pose.x, y, pose.z);
       vehicle.rig.root.rotation.y = vehicle.headingRad;
       if (visible && (distanceSq <= FULL_ANIMATION_RADIUS_M * FULL_ANIMATION_RADIUS_M || this.frameIndex % FAR_ANIMATION_INTERVAL === 0)) {
@@ -113,12 +132,50 @@ export class RoadTrafficSystem {
       }
     }
 
+    // Routing budget: unchanged by density. Only vehicles that own a routed
+    // trip count against it, so the server sees the same request rate whether
+    // the streets carry 28 vehicles or 84.
     this.spawnCooldownS -= dtSec;
-    const wantsMore = this.active.length + this.pendingRequests < TARGET_VEHICLE_COUNT;
-    if (this.spawnCooldownS <= 0 && wantsMore && this.pendingRequests < MAX_CONCURRENT_REQUESTS) {
+    const wantsRoute = this.routedCount + this.pendingRequests < TARGET_VEHICLE_COUNT;
+    if (this.spawnCooldownS <= 0 && wantsRoute && this.pendingRequests < MAX_CONCURRENT_REQUESTS) {
       this.spawnCooldownS = SPAWN_ATTEMPT_INTERVAL_S;
       void this.trySpawn(centerGeo);
     }
+
+    // Everything above the base population rides an already-routed trip. At
+    // 'few' the allowance is zero, so the streets look exactly as they did
+    // before this setting existed.
+    this.followerCooldownS -= dtSec;
+    const followerAllowance = Math.round(TARGET_VEHICLE_COUNT * (this.densityScale - 1));
+    if (this.followerCooldownS <= 0 && this.active.length - this.routedCount < followerAllowance) {
+      this.followerCooldownS = FOLLOWER_SPAWN_INTERVAL_S;
+      this.spawnFollower();
+    }
+  }
+
+  /** Ambient population multiplier. Does not change the routing request rate. */
+  setDensity(density: TrafficDensity): void {
+    this.densityScale = trafficDensityScale(density);
+  }
+
+  /**
+   * Puts one more vehicle on a trip that has already been routed, spaced a gap
+   * behind whichever vehicle is furthest back on it — a car joining the same
+   * road rather than a second request for the same street.
+   */
+  private spawnFollower(): void {
+    const trip = this.recentTrips[Math.floor(Math.random() * this.recentTrips.length)];
+    if (!trip) return;
+
+    let trailingM = Infinity;
+    for (const vehicle of this.active) {
+      if (vehicle.trip === trip && vehicle.distanceM < trailingM) trailingM = vehicle.distanceM;
+    }
+    const gapM = FOLLOWER_GAP_MIN_M + Math.random() * (FOLLOWER_GAP_MAX_M - FOLLOWER_GAP_MIN_M);
+    // Nobody on this trip yet: start it from the top rather than mid-road.
+    const distanceM = trailingM === Infinity ? 0 : Math.max(0, trailingM - gapM);
+    if (distanceM >= trip.path.total) return;
+    this.addVehicle(pickWeightedKind(), trip, distanceM, false);
   }
 
   /** Hides/shows all traffic at once — the player can't see streets while underground. */
@@ -136,6 +193,8 @@ export class RoadTrafficSystem {
     for (const controller of this.abortControllers) controller.abort();
     this.abortControllers.clear();
     this.active.length = 0;
+    this.recentTrips.length = 0;
+    this.routedCount = 0;
     this.pools.clear();
     this.root.clear();
   }
@@ -174,20 +233,30 @@ export class RoadTrafficSystem {
     const heights = await Promise.all(anchors.map((a) => this.ctx.terrainHeightAt(a.point.lat, a.point.lon)));
     if (this.disposed) return;
 
+    const trip: RoutedTrip = {
+      path,
+      heightAnchorAtM: Float64Array.from(anchors.map((a) => a.atM)),
+      heightAnchorM: Float64Array.from(heights)
+    };
+    this.recentTrips.push(trip);
+    if (this.recentTrips.length > ROUTE_REUSE_POOL) this.recentTrips.shift();
+    this.addVehicle(spec, trip, 0, true);
+  }
+
+  private addVehicle(spec: TrafficKindSpec, trip: RoutedTrip, distanceM: number, routed: boolean): void {
     const rig = this.acquireRig(spec);
     const cruiseSpeedMps = THREE.MathUtils.lerp(spec.minSpeedMps, spec.maxSpeedMps, Math.random());
-    const headingRad = poseAtDistance(path, 0).headingRad;
     this.root.add(rig.root);
+    if (routed) this.routedCount++;
     this.active.push({
       spec,
       rig,
-      path,
-      heightAnchorAtM: Float64Array.from(anchors.map((a) => a.atM)),
-      heightAnchorM: Float64Array.from(heights),
-      distanceM: 0,
+      trip,
+      routed,
+      distanceM,
       speedMps: cruiseSpeedMps,
       cruiseSpeedMps,
-      headingRad
+      headingRad: poseAtDistance(trip.path, distanceM).headingRad
     });
   }
 
@@ -202,6 +271,7 @@ export class RoadTrafficSystem {
 
   private despawn(index: number): void {
     const [vehicle] = this.active.splice(index, 1);
+    if (vehicle.routed) this.routedCount--;
     this.root.remove(vehicle.rig.root);
     let pool = this.pools.get(vehicle.spec.id);
     if (!pool) {

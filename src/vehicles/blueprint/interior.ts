@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { VehicleDoorConfig, VehicleInteriorConfig, VehicleSectionConfig } from './VehicleBlueprintConfig';
 import { resolveMaterial } from './materials';
+import { registerInteriorFloor, registerSeatAnchors, yawForFacing } from '../interiorSeating';
 
 // Builds a simple opaque interior shell (floor, ceiling, wall segments that
 // avoid door openings) plus optional auto-placed bench seats and grab poles.
@@ -27,6 +28,7 @@ export function buildBlueprintInterior(
   const floor = new THREE.Mesh(new THREE.BoxGeometry(widthM * 0.86, 0.06, section.length - 0.14), floorMaterial);
   floor.position.y = floorHeightM * 0.35 + 0.03;
   group.add(floor);
+  registerInteriorFloor(group, floorHeightM * 0.35 + 0.06);
   const ceiling = new THREE.Mesh(new THREE.BoxGeometry(widthM * 0.82, 0.06, section.length - 0.2), wallMaterial);
   ceiling.position.y = bodyCenterY + bodyHeight / 2 - 0.05;
   group.add(ceiling);
@@ -62,6 +64,7 @@ export function buildBlueprintInterior(
           const back = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.62, 0.1), seatMaterial);
           back.position.set(x, floorHeightM * 0.35 + 0.68, z - 0.24);
           group.add(back);
+          registerSeatAnchors(group, [{ x, y: floorHeightM * 0.35 + 0.42, z, yaw: yawForFacing(1) }]);
         }
       }
     }
