@@ -19,7 +19,8 @@ import { useAppBootstrap } from './useAppBootstrap';
 import { useAppState } from './useAppState';
 import { useAppUrlSync } from './useAppUrlSync';
 import type { SimulatorRuntime, RouteSession } from '../simulator/SimulatorRuntime';
-import { InputController } from './InputController';
+import { InputController, type CameraCycleDirection } from './InputController';
+import type { CameraMode } from '../world/CameraController';
 import { RuntimeBridge } from './RuntimeBridge';
 import type { DesiredRuntimeState } from '../engine/runtime/DesiredRuntimeState';
 import { LIVE_MODE_ENABLED } from './liveModeFlag';
@@ -30,6 +31,12 @@ import { NO_TAPS, registerTap } from './tapUnlock';
 // should not silently reset a run — but nobody taps a title ten times in a row
 // by accident.
 const DEBUG_TAPS = { required: 10, windowMs: 3000 };
+const CAMERA_MODES: readonly CameraMode[] = ['chase', 'passenger', 'cab'];
+
+function cameraModeAfterCycle(mode: CameraMode, direction: CameraCycleDirection): CameraMode {
+  const step = direction === 'next' ? 1 : -1;
+  return CAMERA_MODES[(CAMERA_MODES.indexOf(mode) + step + CAMERA_MODES.length) % CAMERA_MODES.length];
+}
 
 // The live-traffic workspace is heavy (Leaflet + realtime tools) and Stuttgart-only,
 // so it is code-split and loaded only when the user enters Live (concept §2.1).
@@ -52,6 +59,8 @@ export function AppShell() {
   const [photoLabel, setPhotoLabel] = useState('Platform fly-by');
   // Photo activation is owned by the runtime; the shell only mirrors it for the overlay.
   const [photoActive, setPhotoActive] = useState(false);
+  const selectedCameraModeRef = useRef(state.selectedCameraMode);
+  selectedCameraModeRef.current = state.selectedCameraMode;
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 760px)');
@@ -149,6 +158,12 @@ export function AppShell() {
       onBrake: (held) => runtime.handleInput({ type: 'brake', value: held ? 1 : 0 }),
       onLook: (left, right) => runtime.handleInput({ type: 'look', left, right }),
       onZoom: (delta) => runtime.handleInput({ type: 'zoom', delta }),
+      onCameraCycle: (direction) => {
+        const mode = cameraModeAfterCycle(selectedCameraModeRef.current, direction);
+        selectedCameraModeRef.current = mode;
+        runtime.setCameraMode(mode);
+        dispatch({ type: 'camera-selected', cameraMode: mode });
+      },
       onPhotoToggle: () => runtime.handleInput({ type: 'photo-toggle' }),
       onPhotoExit: () => runtime.handleInput({ type: 'photo-exit' })
     });

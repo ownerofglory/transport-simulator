@@ -5,9 +5,32 @@ export type InputCallbacks = {
   onBrake(held: boolean): void;
   onLook(left: boolean, right: boolean): void;
   onZoom(delta: number): void;
+  onCameraCycle(direction: CameraCycleDirection): void;
   onPhotoToggle(): void;
   onPhotoExit(): void;
 };
+
+export type CameraCycleDirection = 'next' | 'previous';
+
+const CAMERA_SWIPE_DISTANCE = 72;
+
+/** Recognizes deliberate vertical view changes while leaving horizontal look intact. */
+export function cameraSwipeDirection(
+  deltaX: number,
+  deltaY: number,
+  isMobile: boolean
+): CameraCycleDirection | undefined {
+  if (!isMobile || Math.abs(deltaY) < CAMERA_SWIPE_DISTANCE || Math.abs(deltaY) <= Math.abs(deltaX)) return undefined;
+  return deltaY < 0 ? 'next' : 'previous';
+}
+
+/** Maps desktop camera shortcuts without intercepting them in the mobile layout. */
+export function cameraKeyDirection(key: string, isMobile: boolean): CameraCycleDirection | undefined {
+  if (isMobile) return undefined;
+  if (key === 'ArrowUp') return 'next';
+  if (key === 'ArrowDown') return 'previous';
+  return undefined;
+}
 
 /** Owns keyboard, wheel, and touch gestures without coupling them to React or Three.js. */
 export class InputController {
@@ -59,16 +82,22 @@ export class InputController {
       e.preventDefault();
       this.callbacks.onPhotoToggle();
     }
+    const cameraDirection = cameraKeyDirection(e.key, window.matchMedia('(max-width: 760px)').matches);
+    if (cameraDirection) {
+      e.preventDefault();
+      if (!e.repeat) this.callbacks.onCameraCycle(cameraDirection);
+      return;
+    }
     if (e.repeat) return;
-    if (e.key === 'w' || e.key === 'ArrowUp') this.callbacks.onThrottle(true);
-    if (e.key === 's' || e.key === 'ArrowDown') this.callbacks.onBrake(true);
+    if (e.key === 'w') this.callbacks.onThrottle(true);
+    if (e.key === 's') this.callbacks.onBrake(true);
     if (e.key === 'ArrowLeft') this.callbacks.onLook(true, false);
     if (e.key === 'ArrowRight') this.callbacks.onLook(false, true);
   };
 
   private keyUp = (e: KeyboardEvent): void => {
-    if (e.key === 'w' || e.key === 'ArrowUp') this.callbacks.onThrottle(false);
-    if (e.key === 's' || e.key === 'ArrowDown') this.callbacks.onBrake(false);
+    if (e.key === 'w') this.callbacks.onThrottle(false);
+    if (e.key === 's') this.callbacks.onBrake(false);
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') this.callbacks.onLook(false, false);
   };
 
@@ -109,7 +138,16 @@ export class InputController {
     this.callbacks.onLook(x > 24, x < -24);
   };
 
-  private touchEnd = (): void => {
+  private touchEnd = (e: TouchEvent): void => {
+    const touch = Array.from(e.changedTouches).find((entry) => entry.identifier === this.touchId);
+    if (e.type === 'touchend' && touch && this.pinchDistance == null) {
+      const direction = cameraSwipeDirection(
+        touch.clientX - this.startX,
+        touch.clientY - this.startY,
+        window.matchMedia('(max-width: 760px)').matches
+      );
+      if (direction) this.callbacks.onCameraCycle(direction);
+    }
     this.touchId = null;
     this.pinchDistance = null;
     this.callbacks.onLook(false, false);
