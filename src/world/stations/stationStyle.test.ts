@@ -122,6 +122,17 @@ describe('station catalog schema 2', () => {
     expect(resolved.signage?.lines).toEqual(['U1', 'U9', 'U11']);
   });
 
+  it('uses Rotebühlplatz Stadtmitte’s trussed interchange treatment and its served lines', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    const station: RouteStation = { name: 'Rotebühlplatz', distanceM: 400 };
+    const resolved = provider.resolve(station, { layer: {} as never, placement: placementAt(station, true) });
+
+    expect(resolved.displayName).toBe('Rotebühlplatz Stadtmitte');
+    expect(resolved.architecture?.family).toBe('rotebuehlplatz-trussed-interchange');
+    expect(resolved.architecture?.hall?.ceiling).toBe('trussed-vault');
+    expect(resolved.signage?.lines).toEqual(['U1', 'U2', 'U4', 'U11']);
+  });
+
   it('gives underground stops departure boards and ad cases, surface stops neither', () => {
     const provider = new VvsStadtbahnStationProvider();
     // Absent from the catalog, so both come from the archetype defaults.

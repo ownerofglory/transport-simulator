@@ -1688,6 +1688,7 @@
       }
     },
     "Rotebühlplatz": {
+      "displayName": "Rotebühlplatz Stadtmitte",
       "archetype": "underground-interchange",
       "platform": {
         "layout": "side",
@@ -1697,7 +1698,7 @@
         "curved": true
       },
       "architecture": {
-        "family": "major-underground",
+        "family": "rotebuehlplatz-trussed-interchange",
         "roof": "hall",
         "hall": {
           "widthM": 26,
@@ -1722,7 +1723,7 @@
         }
       },
       "furniture": {
-        "dfiDisplays": 2,
+        "dfiDisplays": 3,
         "ticketMachines": 2,
         "adVitrines": 3
       },
@@ -1748,7 +1749,13 @@
           "Gerberviertel"
         ],
         "platformNumber": "1",
-        "nameBandRepeatM": 26
+        "nameBandRepeatM": 26,
+        "lines": [
+          "U1",
+          "U2",
+          "U4",
+          "U11"
+        ]
       }
     },
     "Ruhbank (Fernsehturm)": {
