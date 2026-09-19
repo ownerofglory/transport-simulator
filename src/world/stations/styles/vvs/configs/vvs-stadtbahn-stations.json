@@ -2040,6 +2040,72 @@
         "vegetation": "suburban"
       }
     },
+    "Schlossplatz": {
+      "archetype": "underground-interchange",
+      "platform": {
+        "layout": "side",
+        "lengthM": 120,
+        "widthM": 8,
+        "heightM": 0.8,
+        "curved": true
+      },
+      "architecture": {
+        "family": "schlossplatz-curved-shell",
+        "roof": "hall",
+        "hall": {
+          "widthM": 26,
+          "heightM": 5.8,
+          "ceiling": "flat-slab",
+          "ceilingColor": "#b9b5ac"
+        },
+        "walls": {
+          "finish": "concrete",
+          "plinthColor": "#333436"
+        },
+        "columns": {
+          "style": "none"
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#fff8e8"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -18,
+          "direction": "Schlossplatz"
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 16,
+          "direction": "Königstraße"
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Schlossplatz",
+          "Königstraße"
+        ],
+        "nameBandRepeatM": 26,
+        "lines": [
+          "U5",
+          "U6",
+          "U7",
+          "U12",
+          "U15"
+        ]
+      },
+      "furniture": {
+        "dfiDisplays": 4,
+        "benches": 2,
+        "ticketMachines": 2,
+        "bins": 2,
+        "adVitrines": 3
+      }
+    },
     "Schemppstraße": {
       "archetype": "cutting",
       "platform": {

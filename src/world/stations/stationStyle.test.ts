@@ -161,6 +161,16 @@ describe('station catalog schema 2', () => {
     expect(resolved.access?.map((entry) => entry.type)).toEqual(['escalator', 'stairs', 'lift']);
   });
 
+  it('uses Schlossplatz’s rounded shell treatment and core service lines', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    const station: RouteStation = { name: 'Schlossplatz', distanceM: 400 };
+    const resolved = provider.resolve(station, { layer: {} as never, placement: placementAt(station, true) });
+    expect(resolved.architecture?.family).toBe('schlossplatz-curved-shell');
+    expect(resolved.platform.curved).toBe(true);
+    expect(resolved.signage?.lines).toEqual(['U5', 'U6', 'U7', 'U12', 'U15']);
+    expect(resolved.furniture?.dfiDisplays).toBe(4);
+  });
+
   it('gives underground stops departure boards and ad cases, surface stops neither', () => {
     const provider = new VvsStadtbahnStationProvider();
     // Absent from the catalog, so both come from the archetype defaults.
