@@ -1104,6 +1104,74 @@
         "nameBandRepeatM": 24
       }
     },
+    "Maybachstraße": {
+      "archetype": "underground-side",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.8,
+        "curved": false
+      },
+      "architecture": {
+        "family": "maybachstrasse-deep-box",
+        "roof": "hall",
+        "hall": {
+          "widthM": 27,
+          "heightM": 6.35,
+          "ceiling": "ribbed-metal",
+          "ceilingColor": "#30312e"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#918e82",
+          "plinthColor": "#3b3b37",
+          "bandColor": "#d7d3c7",
+          "nameColor": "#20211f"
+        },
+        "columns": {
+          "style": "round",
+          "color": "#5a5b56",
+          "spacingM": 22
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#fff0cd"
+        }
+      },
+      "access": [
+        {
+          "type": "lift",
+          "side": "right",
+          "offsetM": 10
+        },
+        {
+          "type": "stairs",
+          "side": "left",
+          "offsetM": -20,
+          "direction": "Maybachstraße"
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Maybachstraße",
+          "Hohensteinstraße"
+        ],
+        "nameBandRepeatM": 22,
+        "lines": [
+          "U6",
+          "U13",
+          "U16"
+        ]
+      },
+      "furniture": {
+        "dfiDisplays": 3,
+        "benches": 2,
+        "ticketMachines": 1,
+        "bins": 2,
+        "adVitrines": 3
+      }
+    },
     "Mercedesstraße": {
       "archetype": "landmark",
       "platform": {

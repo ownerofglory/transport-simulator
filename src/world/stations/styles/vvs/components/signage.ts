@@ -54,14 +54,16 @@ export function buildVvsSuspendedDfi(
   lengthM: number,
   ceilingHeightM: number,
   platformNumber?: string,
-  lateralM = 6.9 // over a side platform; an island hangs them nearer the centre
+  lateralM = 6.9, // over a side platform; an island hangs them nearer the centre
+  lines?: readonly string[]
 ): void {
   const boards = Math.max(0, Math.min(count, 4));
   if (boards === 0) return;
 
+  const services = lines && lines.length > 0 ? lines.join('  ·  ') : layer.route.line;
   const label = platformNumber
-    ? `${platformNumber}   ${layer.route.line}  ${layer.route.destination}`
-    : `${layer.route.line}  ${layer.route.destination}`;
+    ? `${platformNumber}   ${services}  ${layer.route.destination}`
+    : `${services}  ${layer.route.destination}`;
   const face = makeLabelTexture(label, { width: 1024, height: 150, bg: '#0d1116', fg: '#ffb300' });
   const usable = Math.max(10, lengthM - 24);
   const y = ceilingHeightM - 1.05;

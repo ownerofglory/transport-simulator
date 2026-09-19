@@ -100,6 +100,18 @@ describe('station catalog schema 2', () => {
     expect(resolved.signage?.exits).toContain('Königstraße');
   });
 
+  it('uses the authored Maybachstraße underground box and its three served lines', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    const station: RouteStation = { name: 'Maybachstraße', distanceM: 400 };
+    const resolved = provider.resolve(station, { layer: {} as never, placement: placementAt(station, true) });
+
+    expect(resolved.archetype).toBe('underground-side');
+    expect(resolved.architecture?.family).toBe('maybachstrasse-deep-box');
+    expect(resolved.architecture?.hall?.ceiling).toBe('ribbed-metal');
+    expect(resolved.signage?.lines).toEqual(['U6', 'U13', 'U16']);
+    expect(resolved.furniture?.dfiDisplays).toBe(3);
+  });
+
   it('gives underground stops departure boards and ad cases, surface stops neither', () => {
     const provider = new VvsStadtbahnStationProvider();
     // Absent from the catalog, so both come from the archetype defaults.

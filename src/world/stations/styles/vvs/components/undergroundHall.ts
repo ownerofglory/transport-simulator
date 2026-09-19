@@ -261,7 +261,8 @@ function buildCeiling(
 
   if (style === 'ribbed-metal') {
     // Dark suspended deck with closely spaced transverse ribs.
-    const plate = new THREE.Mesh(new THREE.BoxGeometry(widthM - 0.8, 0.1, lengthM), materials.ceilingMetal);
+    const metal = options.ceilingColor ? materials.painted(options.ceilingColor) : materials.ceilingMetal;
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(widthM - 0.8, 0.1, lengthM), metal);
     plate.position.y = heightM - 0.06;
     local.add(plate);
 
@@ -269,7 +270,7 @@ function buildCeiling(
     const count = Math.max(1, Math.floor(lengthM / spacingM));
     const ribs = new THREE.InstancedMesh(
       new THREE.BoxGeometry(widthM - 1.4, 0.16, 0.42),
-      materials.ceilingMetal,
+      metal,
       count
     );
     const dummy = new THREE.Object3D();

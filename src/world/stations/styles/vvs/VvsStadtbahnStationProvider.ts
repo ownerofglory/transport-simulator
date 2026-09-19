@@ -46,6 +46,7 @@ import {
   buildVvsTotem
 } from './components/surfaceFurniture';
 import { buildVvsTerminusBuffer } from './components/terminus';
+import { buildMaybachstrasseFittings } from './components/maybachstrasse';
 
 // Legacy single-item platform layout, used as the default so unlisted stops
 // keep close to the original look (seeded counts still allow 1–2 benches).
@@ -210,6 +211,9 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       if (definition.access?.length) {
         buildVvsAccess(scaffold.local, materials, definition.access, { ceilingHeightM, deckTopM });
       }
+      if (definition.architecture?.family === 'maybachstrasse-deep-box') {
+        buildMaybachstrasseFittings(scaffold.local, materials, { lengthM: hallLengthM, ceilingHeightM });
+      }
     }
 
     // Staggered stops offset the two side platforms along the route.
@@ -288,7 +292,9 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
             dfiDisplays,
             platformLengthM,
             ceilingHeightM,
-            definition.signage?.platformNumber
+            definition.signage?.platformNumber,
+            undefined,
+            definition.signage?.lines
           );
         }
       } else buildVvsCanopy(deck, materials, side, {
@@ -400,7 +406,8 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
             options.platformLengthM,
             ceilingHeightM,
             definition.signage?.platformNumber,
-            halfWidthM - 1.2
+            halfWidthM - 1.2,
+            definition.signage?.lines
           );
         }
       }
