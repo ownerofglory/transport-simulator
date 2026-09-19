@@ -47,6 +47,7 @@ import {
 } from './components/surfaceFurniture';
 import { buildVvsTerminusBuffer } from './components/terminus';
 import { buildMaybachstrasseFittings } from './components/maybachstrasse';
+import { buildBoersenplatzFittings } from './components/boersenplatz';
 
 // Legacy single-item platform layout, used as the default so unlisted stops
 // keep close to the original look (seeded counts still allow 1–2 benches).
@@ -213,6 +214,9 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       }
       if (definition.architecture?.family === 'maybachstrasse-deep-box') {
         buildMaybachstrasseFittings(scaffold.local, materials, { lengthM: hallLengthM, ceilingHeightM });
+      }
+      if (definition.architecture?.family === 'boersenplatz-green-curve') {
+        buildBoersenplatzFittings(scaffold.local, materials, { lengthM: hallLengthM, ceilingHeightM });
       }
     }
 

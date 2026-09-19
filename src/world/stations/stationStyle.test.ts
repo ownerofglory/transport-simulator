@@ -112,6 +112,16 @@ describe('station catalog schema 2', () => {
     expect(resolved.furniture?.dfiDisplays).toBe(3);
   });
 
+  it('uses Börsenplatz’s curved green platform treatment and its served lines', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    const station: RouteStation = { name: 'Börsenplatz', distanceM: 400 };
+    const resolved = provider.resolve(station, { layer: {} as never, placement: placementAt(station, true) });
+
+    expect(resolved.architecture?.family).toBe('boersenplatz-green-curve');
+    expect(resolved.platform.curved).toBe(true);
+    expect(resolved.signage?.lines).toEqual(['U1', 'U9', 'U11']);
+  });
+
   it('gives underground stops departure boards and ad cases, surface stops neither', () => {
     const provider = new VvsStadtbahnStationProvider();
     // Absent from the catalog, so both come from the archetype defaults.

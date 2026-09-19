@@ -73,6 +73,68 @@
         "vegetation": "urban"
       }
     },
+    "Börsenplatz": {
+      "archetype": "underground-side",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.8,
+        "curved": true
+      },
+      "architecture": {
+        "family": "boersenplatz-green-curve",
+        "roof": "hall",
+        "hall": {
+          "widthM": 27,
+          "heightM": 5.8,
+          "ceiling": "ribbed-metal",
+          "ceilingColor": "#25272a"
+        },
+        "walls": {
+          "finish": "concrete",
+          "plinthColor": "#27292a"
+        },
+        "columns": {
+          "style": "none"
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#f8f3dd"
+        }
+      },
+      "access": [
+        {
+          "type": "lift",
+          "side": "left",
+          "offsetM": -12
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 14,
+          "direction": "Kleiner Schlossplatz"
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Kleiner Schlossplatz",
+          "L-Bank"
+        ],
+        "lines": [
+          "U1",
+          "U9",
+          "U11"
+        ]
+      },
+      "furniture": {
+        "dfiDisplays": 3,
+        "benches": 2,
+        "ticketMachines": 1,
+        "bins": 2,
+        "adVitrines": 2
+      }
+    },
     "Bihlplatz": {
       "archetype": "surface-staggered",
       "platform": {
