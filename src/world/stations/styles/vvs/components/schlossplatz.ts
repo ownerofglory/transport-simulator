@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { makeLabelTexture } from '../../../../../labels';
 import type { VvsStationMaterials } from '../VvsStationMaterials';
 
-/** Schlossplatz wraps its side platforms in a fine-ribbed rounded shell. */
+/** Schlossplatz wraps its side platforms in a fine-ribbed, softly curved shell. */
 export function buildSchlossplatzFittings(
   local: THREE.Group,
   materials: VvsStationMaterials,
@@ -22,10 +22,12 @@ function buildRibbedShells(
   lengthM: number,
   ceilingHeightM: number
 ): void {
-  const radiusM = 4.9;
-  const centerX = 6.9;
-  const centerY = 0.82;
-  const geometry = roundedShellGeometry(radiusM, 0.24, lengthM - 2);
+  // The lower half of the real walls is close to vertical. Only the upper
+  // corner rolls into the ceiling, avoiding the full quarter-cylinder shape.
+  const radiusM = 2.8;
+  const centerX = 8.6;
+  const centerY = 2.94;
+  const geometry = shallowCornerShellGeometry(radiusM, 0.24, lengthM - 2, centerX, centerY);
   for (const side of [-1, 1]) {
     const shell = new THREE.Mesh(geometry, materials.painted('#b9b5ac'));
     shell.position.set(0, 0, -(lengthM - 2) / 2);
@@ -48,14 +50,23 @@ function buildRibbedShells(
   root.position.y = Math.min(0, ceilingHeightM - (centerY + radiusM) - 0.08);
 }
 
-function roundedShellGeometry(radiusM: number, thicknessM: number, lengthM: number): THREE.ExtrudeGeometry {
-  const centerX = 6.9;
-  const centerY = 0.82;
+function shallowCornerShellGeometry(
+  radiusM: number,
+  thicknessM: number,
+  lengthM: number,
+  centerX: number,
+  centerY: number
+): THREE.ExtrudeGeometry {
+  const floorY = 0.82;
+  const wallX = centerX + radiusM;
+  const innerRadiusM = radiusM - thicknessM;
   const shape = new THREE.Shape();
-  shape.moveTo(centerX + radiusM, centerY);
+  shape.moveTo(wallX, floorY);
+  shape.lineTo(wallX, centerY);
   shape.absarc(centerX, centerY, radiusM, 0, Math.PI / 2, false);
-  shape.lineTo(centerX, centerY + radiusM - thicknessM);
-  shape.absarc(centerX, centerY, radiusM - thicknessM, Math.PI / 2, 0, true);
+  shape.lineTo(centerX, centerY + innerRadiusM);
+  shape.absarc(centerX, centerY, innerRadiusM, Math.PI / 2, 0, true);
+  shape.lineTo(wallX - thicknessM, floorY);
   shape.closePath();
   return new THREE.ExtrudeGeometry(shape, { depth: lengthM, bevelEnabled: false, curveSegments: 20 });
 }
