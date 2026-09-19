@@ -133,6 +133,23 @@ describe('station catalog schema 2', () => {
     expect(resolved.signage?.lines).toEqual(['U1', 'U2', 'U4', 'U11']);
   });
 
+  it('shares the warm tile interchange treatment across Marienplatz, Österreichischer Platz, and Rathaus', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    const expectedLines: Record<string, string[]> = {
+      Marienplatz: ['U1', 'U14'],
+      'Österreichischer Platz': ['U1', 'U14'],
+      Rathaus: ['U2', 'U4', 'U11', 'U14']
+    };
+
+    for (const [name, lines] of Object.entries(expectedLines)) {
+      const station: RouteStation = { name, distanceM: 400 };
+      const resolved = provider.resolve(station, { layer: {} as never, placement: placementAt(station, true) });
+      expect(resolved.architecture?.family).toBe('warm-tile-interchange');
+      expect(resolved.architecture?.walls?.finish).toBe('tile');
+      expect(resolved.signage?.lines).toEqual(lines);
+    }
+  });
+
   it('gives underground stops departure boards and ad cases, surface stops neither', () => {
     const provider = new VvsStadtbahnStationProvider();
     // Absent from the catalog, so both come from the archetype defaults.

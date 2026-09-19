@@ -1112,22 +1112,22 @@
         "curved": true
       },
       "architecture": {
-        "family": "urban-underground",
+        "family": "warm-tile-interchange",
         "roof": "hall",
         "hall": {
           "widthM": 26,
           "heightM": 5.5,
-          "ceiling": "ribbed-metal",
-          "ceilingColor": "#d8d5ce"
+          "ceiling": "flat-slab",
+          "ceilingColor": "#d5c8b3"
         },
         "walls": {
-          "finish": "enamel-panel",
-          "color": "#d8dfe4",
-          "plinthColor": "#26282c"
+          "finish": "tile",
+          "color": "#e8dfcd",
+          "plinthColor": "#34312d"
         },
         "columns": {
-          "style": "round",
-          "color": "#5a5f63",
+          "style": "square",
+          "color": "#d6cec0",
           "spacingM": 20
         },
         "lighting": {
@@ -1136,7 +1136,7 @@
         }
       },
       "furniture": {
-        "dfiDisplays": 2,
+        "dfiDisplays": 3,
         "ticketMachines": 2,
         "adVitrines": 2
       },
@@ -1163,7 +1163,11 @@
           "Marienplatz",
           "Böblinger Straße"
         ],
-        "nameBandRepeatM": 24
+        "nameBandRepeatM": 24,
+        "lines": [
+          "U1",
+          "U14"
+        ]
       }
     },
     "Maybachstraße": {
@@ -1525,6 +1529,72 @@
         "vegetation": "suburban"
       }
     },
+    "Österreichischer Platz": {
+      "archetype": "underground-interchange",
+      "platform": {
+        "layout": "side",
+        "lengthM": 80,
+        "widthM": 8,
+        "heightM": 0.8,
+        "curved": true
+      },
+      "architecture": {
+        "family": "warm-tile-interchange",
+        "roof": "hall",
+        "hall": {
+          "widthM": 26,
+          "heightM": 5.5,
+          "ceiling": "flat-slab",
+          "ceilingColor": "#d5c8b3"
+        },
+        "walls": {
+          "finish": "tile",
+          "color": "#e8dfcd",
+          "plinthColor": "#34312d"
+        },
+        "columns": {
+          "style": "square",
+          "color": "#d6cec0",
+          "spacingM": 20
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#fff6e4"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -22,
+          "direction": "Österreichischer Platz"
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 22,
+          "direction": "Hauptstätter Straße"
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Österreichischer Platz",
+          "Hauptstätter Straße"
+        ],
+        "nameBandRepeatM": 24,
+        "lines": [
+          "U1",
+          "U14"
+        ]
+      },
+      "furniture": {
+        "dfiDisplays": 3,
+        "benches": 2,
+        "ticketMachines": 2,
+        "bins": 2,
+        "adVitrines": 2
+      }
+    },
     "Plieningen": {
       "archetype": "terminus",
       "platform": {
@@ -1618,31 +1688,31 @@
         "curved": true
       },
       "architecture": {
-        "family": "three-track-underground",
+        "family": "warm-tile-interchange",
         "roof": "hall",
         "hall": {
           "widthM": 28,
           "heightM": 5.6,
-          "ceiling": "coffered",
-          "ceilingColor": "#cbc6bb"
+          "ceiling": "flat-slab",
+          "ceilingColor": "#d5c8b3"
         },
         "walls": {
           "finish": "tile",
-          "color": "#b9c4bd",
-          "plinthColor": "#2d2f2e"
+          "color": "#e8dfcd",
+          "plinthColor": "#34312d"
         },
         "columns": {
           "style": "square",
-          "color": "#c7c2b6",
-          "spacingM": 22
+          "color": "#d6cec0",
+          "spacingM": 20
         },
         "lighting": {
           "style": "strip-continuous",
-          "color": "#fff1d2"
+          "color": "#fff6e4"
         }
       },
       "furniture": {
-        "dfiDisplays": 3,
+        "dfiDisplays": 4,
         "ticketMachines": 2,
         "adVitrines": 3
       },
@@ -1666,7 +1736,13 @@
           "Eberhardstraße"
         ],
         "platformNumber": "1",
-        "nameBandRepeatM": 28
+        "nameBandRepeatM": 28,
+        "lines": [
+          "U2",
+          "U4",
+          "U11",
+          "U14"
+        ]
       }
     },
     "Rosensteinbrücke": {

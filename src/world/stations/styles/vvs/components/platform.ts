@@ -76,7 +76,8 @@ export function buildVvsSidePlatforms(
   station: RouteStation,
   platform?: StationPlatformDefinition,
   staggerM = 0,
-  underground = false
+  underground = false,
+  platformMaterial?: THREE.Material
 ): void {
   const lengthM = platform?.lengthM ?? DEFAULT_LENGTH_M;
   const widthM = platform?.widthM ?? DEFAULT_WIDTH_M;
@@ -102,7 +103,7 @@ export function buildVvsSidePlatforms(
 
     const deck = new THREE.Mesh(
       layer.makeRouteStrip(side * offset, widthM, startT, endT, 24, deckTopM),
-      finish.platform
+      platformMaterial ?? finish.platform
     );
     deck.receiveShadow = true;
     deck.name = `Curved platform ${station.name}`;

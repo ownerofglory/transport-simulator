@@ -49,6 +49,7 @@ import { buildVvsTerminusBuffer } from './components/terminus';
 import { buildMaybachstrasseFittings } from './components/maybachstrasse';
 import { buildBoersenplatzFittings } from './components/boersenplatz';
 import { buildRotebuehlplatzFittings } from './components/rotebuehlplatz';
+import { buildWarmTileInterchangeFittings } from './components/warmTileInterchange';
 
 // Legacy single-item platform layout, used as the default so unlisted stops
 // keep close to the original look (seeded counts still allow 1–2 benches).
@@ -170,6 +171,7 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     const accentColor = definition.architecture?.accentColor;
     const accent = materials.accent(accentColor);
     const layout = definition.platform?.layout;
+    const warmTileInterchange = definition.architecture?.family === 'warm-tile-interchange';
 
     const scaffold = createStationScaffold(
       `${underground ? 'Underground' : 'Surface'} station ${station.name}`,
@@ -222,6 +224,13 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       if (definition.architecture?.family === 'rotebuehlplatz-trussed-interchange') {
         buildRotebuehlplatzFittings(scaffold.local, materials, { lengthM: hallLengthM, ceilingHeightM });
       }
+      if (warmTileInterchange) {
+        buildWarmTileInterchangeFittings(scaffold.local, materials, {
+          lengthM: hallLengthM,
+          ceilingHeightM,
+          stationName: definition.displayName
+        });
+      }
     }
 
     // Staggered stops offset the two side platforms along the route.
@@ -234,7 +243,16 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       buildVvsCenterPlatform(scaffold.root, context.layer, materials, station, definition.platform, underground);
     } else {
       // Curved platforms follow the route in world space → untransformed root.
-      buildVvsSidePlatforms(scaffold.root, context.layer, materials, station, definition.platform, staggerM, underground);
+      buildVvsSidePlatforms(
+        scaffold.root,
+        context.layer,
+        materials,
+        station,
+        definition.platform,
+        staggerM,
+        underground,
+        warmTileInterchange ? materials.painted('#bd7656') : undefined
+      );
       // Mixed layouts add the narrow walkway that fits between two normal
       // tracks — not a platform: at 4.2 m centres there is no room for one.
       if (layout === 'mixed') {
