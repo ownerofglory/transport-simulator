@@ -985,17 +985,63 @@
       }
     },
     "Kirchtalstraße": {
-      "archetype": "landmark",
+      "archetype": "underground-island",
       "platform": {
-        "layout": "side",
+        "layout": "island",
         "lengthM": 80,
-        "widthM": 8,
+        "widthM": 9,
         "heightM": 0.8,
-        "curved": true
+        "curved": false
       },
       "architecture": {
-        "family": "open-ceiling-tunnel",
-        "roof": "hall"
+        "family": "kirchtalstrasse-blue-chevron",
+        "roof": "hall",
+        "hall": {
+          "widthM": 26,
+          "heightM": 5.9,
+          "ceiling": "flat-slab",
+          "ceilingColor": "#d9dcdd"
+        },
+        "walls": {
+          "finish": "concrete",
+          "plinthColor": "#3b3f40"
+        },
+        "columns": {
+          "style": "none"
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#f7fbff"
+        }
+      },
+      "access": [
+        {
+          "type": "stairs",
+          "side": "center",
+          "offsetM": 18,
+          "direction": "Kirchtalstraße"
+        },
+        {
+          "type": "lift",
+          "side": "center",
+          "offsetM": -16
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Kirchtalstraße"
+        ],
+        "platformNumber": "1",
+        "lines": [
+          "U15"
+        ]
+      },
+      "furniture": {
+        "dfiDisplays": 2,
+        "benches": 2,
+        "ticketMachines": 1,
+        "bins": 2,
+        "adVitrines": 1
       }
     },
     "Korntaler Straße": {

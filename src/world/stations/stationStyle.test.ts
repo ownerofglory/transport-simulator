@@ -171,6 +171,18 @@ describe('station catalog schema 2', () => {
     expect(resolved.furniture?.dfiDisplays).toBe(4);
   });
 
+  it('uses Kirchtalstraße’s blue-chevron island platform treatment for U15', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    const station: RouteStation = { name: 'Kirchtalstraße', distanceM: 400 };
+    const resolved = provider.resolve(station, { layer: {} as never, placement: placementAt(station, true) });
+
+    expect(resolved.archetype).toBe('underground-island');
+    expect(resolved.platform.layout).toBe('island');
+    expect(resolved.platform.widthM).toBe(9);
+    expect(resolved.architecture?.family).toBe('kirchtalstrasse-blue-chevron');
+    expect(resolved.signage?.lines).toEqual(['U15']);
+  });
+
   it('gives underground stops departure boards and ad cases, surface stops neither', () => {
     const provider = new VvsStadtbahnStationProvider();
     // Absent from the catalog, so both come from the archetype defaults.

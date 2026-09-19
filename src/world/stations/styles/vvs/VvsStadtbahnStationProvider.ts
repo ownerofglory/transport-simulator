@@ -52,6 +52,7 @@ import { buildRotebuehlplatzFittings } from './components/rotebuehlplatz';
 import { buildWarmTileInterchangeFittings } from './components/warmTileInterchange';
 import { buildNeckartorFittings } from './components/neckartor';
 import { buildSchlossplatzFittings } from './components/schlossplatz';
+import { buildKirchtalstrasseFittings } from './components/kirchtalstrasse';
 
 // Legacy single-item platform layout, used as the default so unlisted stops
 // keep close to the original look (seeded counts still allow 1–2 benches).
@@ -238,6 +239,9 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       }
       if (definition.architecture?.family === 'schlossplatz-curved-shell') {
         buildSchlossplatzFittings(scaffold.local, materials, { lengthM: hallLengthM, ceilingHeightM });
+      }
+      if (definition.architecture?.family === 'kirchtalstrasse-blue-chevron') {
+        buildKirchtalstrasseFittings(scaffold.local, materials, { lengthM: hallLengthM, ceilingHeightM });
       }
     }
 
