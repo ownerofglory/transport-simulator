@@ -50,6 +50,7 @@ import { buildMaybachstrasseFittings } from './components/maybachstrasse';
 import { buildBoersenplatzFittings } from './components/boersenplatz';
 import { buildRotebuehlplatzFittings } from './components/rotebuehlplatz';
 import { buildWarmTileInterchangeFittings } from './components/warmTileInterchange';
+import { buildNeckartorFittings } from './components/neckartor';
 
 // Legacy single-item platform layout, used as the default so unlisted stops
 // keep close to the original look (seeded counts still allow 1–2 benches).
@@ -230,6 +231,9 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
           ceilingHeightM,
           stationName: definition.displayName
         });
+      }
+      if (definition.architecture?.family === 'neckartor-glazed-gallery') {
+        buildNeckartorFittings(scaffold.local, materials, { lengthM: hallLengthM, ceilingHeightM });
       }
     }
 

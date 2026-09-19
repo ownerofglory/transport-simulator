@@ -150,6 +150,17 @@ describe('station catalog schema 2', () => {
     }
   });
 
+  it('uses Neckartor’s colorful glazed gallery treatment and full interchange service list', () => {
+    const provider = new VvsStadtbahnStationProvider();
+    const station: RouteStation = { name: 'Neckartor', distanceM: 400 };
+    const resolved = provider.resolve(station, { layer: {} as never, placement: placementAt(station, true) });
+
+    expect(resolved.architecture?.family).toBe('neckartor-glazed-gallery');
+    expect(resolved.platform.lengthM).toBe(120);
+    expect(resolved.signage?.lines).toEqual(['U1', 'U2', 'U4', 'U9', 'U11', 'U14']);
+    expect(resolved.access?.map((entry) => entry.type)).toEqual(['escalator', 'stairs', 'lift']);
+  });
+
   it('gives underground stops departure boards and ad cases, surface stops neither', () => {
     const provider = new VvsStadtbahnStationProvider();
     // Absent from the catalog, so both come from the archetype defaults.

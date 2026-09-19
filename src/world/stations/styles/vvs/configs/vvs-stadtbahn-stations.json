@@ -1422,6 +1422,79 @@
         "curved": true
       }
     },
+    "Neckartor": {
+      "archetype": "underground-interchange",
+      "platform": {
+        "layout": "side",
+        "lengthM": 120,
+        "widthM": 8,
+        "heightM": 0.8,
+        "curved": true
+      },
+      "architecture": {
+        "family": "neckartor-glazed-gallery",
+        "roof": "hall",
+        "hall": {
+          "widthM": 27,
+          "heightM": 6.1,
+          "ceiling": "ribbed-metal",
+          "ceilingColor": "#2b2d2f"
+        },
+        "walls": {
+          "finish": "enamel-panel",
+          "color": "#dedfd7",
+          "plinthColor": "#2b2c2c"
+        },
+        "columns": {
+          "style": "none"
+        },
+        "lighting": {
+          "style": "strip-continuous",
+          "color": "#fff4da"
+        }
+      },
+      "access": [
+        {
+          "type": "escalator",
+          "side": "left",
+          "offsetM": -18,
+          "direction": "Neckartor"
+        },
+        {
+          "type": "stairs",
+          "side": "right",
+          "offsetM": 16,
+          "direction": "Wagenburgstraße"
+        },
+        {
+          "type": "lift",
+          "side": "left",
+          "offsetM": 14
+        }
+      ],
+      "signage": {
+        "exits": [
+          "Wagenburgstraße",
+          "Neckartor"
+        ],
+        "nameBandRepeatM": 26,
+        "lines": [
+          "U1",
+          "U2",
+          "U4",
+          "U9",
+          "U11",
+          "U14"
+        ]
+      },
+      "furniture": {
+        "dfiDisplays": 4,
+        "benches": 3,
+        "ticketMachines": 2,
+        "bins": 2,
+        "adVitrines": 3
+      }
+    },
     "Neugereut": {
       "archetype": "terminus",
       "platform": {
