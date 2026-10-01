@@ -23,6 +23,8 @@ export type PedestrianRig = {
   hands: [THREE.Object3D, THREE.Object3D];
   /** Shoes, hung off the knees; rotated to keep the sole flat when seated. */
   feet: [THREE.Object3D, THREE.Object3D];
+  /** Optional weather prop, hidden while indoors or in dry weather. */
+  umbrella: THREE.Object3D | null;
   /** Height scale, so a crowd isn't all one size. */
   scale: number;
   /** Per-person gait offsets keep a crowd from walking in lockstep. */
@@ -83,6 +85,12 @@ const clothingTrimGeometry = merged([
   new THREE.BoxGeometry(0.064, 0.026, 0.012).rotateZ(0.48).translate(0.047, 1.342, 0.068),
   new THREE.BoxGeometry(0.064, 0.026, 0.012).rotateZ(-0.48).translate(-0.047, 1.342, 0.068)
 ], 'Clothing trim');
+const umbrellaCanopyGeometry = new THREE.SphereGeometry(0.43, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.5, 1);
+const umbrellaShaftGeometry = new THREE.CylinderGeometry(0.009, 0.009, 0.98, 6);
+const umbrellaCanopyMaterials = [0x293744, 0x9a3431, 0x336b68, 0xb8aa84].map(
+  color => new THREE.MeshStandardMaterial({ color, roughness: 0.52, side: THREE.DoubleSide })
+);
+const umbrellaShaftMaterial = new THREE.MeshStandardMaterial({ color: 0x60666a, metalness: 0.65, roughness: 0.28 });
 
 // Pelvis: bridges the gap between the torso and two free-hanging legs.
 const pelvisGeometry = new THREE.SphereGeometry(0.155, 14, 10).scale(1, 0.78, 0.8).translate(0, 0.93, 0);
@@ -468,6 +476,21 @@ export function buildPedestrian(): PedestrianRig {
     hands[0].add(phone);
   }
 
+  let umbrella: THREE.Object3D | null = null;
+  if (Math.random() < 0.38) {
+    umbrella = new THREE.Group();
+    umbrella.name = 'Umbrella';
+    umbrella.position.set(0.2, 0, 0.035);
+    const canopy = new THREE.Mesh(umbrellaCanopyGeometry, pick(umbrellaCanopyMaterials));
+    canopy.position.y = 1.84;
+    canopy.castShadow = true;
+    const shaft = new THREE.Mesh(umbrellaShaftGeometry, umbrellaShaftMaterial);
+    shaft.position.y = 1.37;
+    umbrella.add(canopy, shaft);
+    umbrella.visible = false;
+    body.add(umbrella);
+  }
+
   const scale = 0.9 + Math.random() * 0.18;
   root.scale.setScalar(scale);
   const rig: PedestrianRig = {
@@ -480,6 +503,7 @@ export function buildPedestrian(): PedestrianRig {
     elbows,
     hands,
     feet,
+    umbrella,
     scale,
     phaseOffset: Math.random() * Math.PI * 2,
     strideScale: 0.9 + Math.random() * 0.2,
@@ -488,6 +512,10 @@ export function buildPedestrian(): PedestrianRig {
   };
   poseStanding(rig);
   return rig;
+}
+
+export function setPedestrianUmbrella(rig: PedestrianRig, visible: boolean): void {
+  if (rig.umbrella) rig.umbrella.visible = visible;
 }
 
 // ---------------------------------------------------------------------------

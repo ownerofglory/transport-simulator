@@ -17,7 +17,8 @@ export function buildVvsStationSigns(
   underground: boolean,
   lateral = 0, // extra outward shift when the platform is wider than default
   zShift = 0, // along-route shift for staggered platforms
-  accentBg = '#174a73' // station-family accent color for the sign background
+  accentBg = '#174a73', // station-family accent color for the sign background
+  dbSurface = false
 ): void {
   const signTexture = makeLabelTexture(`${layer.route.line}  ${station.name}`, {
     width: 1024,
@@ -25,7 +26,7 @@ export function buildVvsStationSigns(
     bg: accentBg,
     fg: '#ffffff'
   });
-  for (const z of [-21, 21]) {
+  for (const z of dbSurface ? [-70, 0, 70] : [-21, 21]) {
     const sign = new THREE.Mesh(
       new THREE.PlaneGeometry(8.6, 1.5),
       new THREE.MeshBasicMaterial({ map: signTexture, side: THREE.FrontSide })

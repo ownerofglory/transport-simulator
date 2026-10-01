@@ -23,6 +23,8 @@ export function createDbSBahnStationProvider(): VvsStadtbahnStationProvider {
   return new VvsStadtbahnStationProvider(new VvsStationCatalog(dbSBahnStations as never), {
     id: 'db-sbahn',
     platformHeightM: 0.96,
+    surfaceFinish: 'db',
+    surfacePlatformLengthM: 210,
     ssbStreetFurniture: false,
     buildInterior: buildStammstreckeInterior
   });

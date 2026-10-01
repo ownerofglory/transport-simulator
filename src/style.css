@@ -23,11 +23,12 @@ canvas {
   position: fixed;
   left: 16px;
   top: 16px;
-  width: min(380px, calc(100vw - 32px));
-  padding: 14px 16px;
+  width: min(340px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  background: rgba(8, 12, 18, 0.46);
+  border-radius: 12px;
+  background: rgba(8, 12, 18, 0.55);
   backdrop-filter: blur(18px);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.34);
   user-select: none;
@@ -37,7 +38,7 @@ canvas {
 
 .hud-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
@@ -48,6 +49,18 @@ canvas {
   align-items: center;
   gap: 8px;
   user-select: none;
+}
+
+.hud-line {
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 500;
+}
+
+.hud-speed {
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .debug-badge {
@@ -79,17 +92,19 @@ canvas {
 .menu-toggle {
   display: grid;
   place-items: center;
-  width: 38px;
-  min-width: 38px;
-  padding: 7px;
-  font-size: 18px;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0;
+  font-size: 17px;
   line-height: 1;
 }
 
 .hud.collapsed {
   width: auto;
   max-width: calc(100vw - 32px);
-  background: rgba(8, 12, 18, 0.5);
+  padding: 8px 10px 8px 12px;
+  background: rgba(8, 12, 18, 0.48);
 }
 
 .hud.collapsed .hud-content,
@@ -98,34 +113,93 @@ canvas {
 }
 
 .hud.collapsed h1 {
-  margin: 7px 0 5px;
+  margin: 0;
   white-space: nowrap;
 }
 
 .hud h1 {
-  margin: 0 0 8px;
-  font-size: 18px;
+  margin: 0 0 4px;
+  font-size: 15px;
   letter-spacing: 0.01em;
+}
+
+.hud-content {
+  max-height: calc(100vh - 100px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.hud-content::-webkit-scrollbar {
+  display: none;
 }
 
 .hud .meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin: 10px 0 12px;
+  gap: 6px;
+  margin: 8px 0 10px;
+}
+
+.hud .card {
+  min-width: 0;
+  padding: 8px;
+}
+
+.hud .value {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.hud .next-station-card {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.next-station-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.doors-status {
+  flex: 0 0 auto;
+  min-width: 72px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: right;
+}
+
+.hud .controls {
+  gap: 6px;
+}
+
+.hud .controls button {
+  padding: 7px 9px;
+  font-size: 12px;
 }
 
 .toolbar {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  margin-top: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.hud select {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .transport-tabs {
   display: flex;
-  gap: 6px;
-  margin-top: 12px;
+  gap: 4px;
+  margin-top: 8px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -136,7 +210,7 @@ canvas {
 
 .transport-tabs button {
   flex: 0 0 auto;
-  padding: 7px 10px;
+  padding: 6px 8px;
   font-size: 12px;
 }
 
@@ -321,7 +395,7 @@ input:focus-visible {
   position: fixed;
   right: 16px;
   top: 16px;
-  width: min(420px, calc(100vw - 32px));
+  width: min(360px, calc(100vw - 32px));
   display: grid;
   gap: 10px;
   z-index: 3;
@@ -331,18 +405,48 @@ input:focus-visible {
   --route-color: #ffd900;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  background: rgba(8, 12, 18, 0.48);
-  backdrop-filter: blur(18px);
+  border-radius: 12px;
+  background: rgba(8, 12, 18, 0.34);
+  backdrop-filter: blur(12px);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+  transition: background 180ms ease;
 }
 
-.route-diagram-header {
-  padding: 11px 14px 9px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+.route-diagram:hover,
+.route-diagram:focus-within {
+  background: rgba(8, 12, 18, 0.6);
+}
+
+.route-diagram-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  text-align: left;
+}
+
+.route-diagram-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.route-diagram-heading {
+  min-width: 0;
+}
+
+.route-diagram-chevron {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 20px;
+  line-height: 1;
 }
 
 .route-diagram-title {
+  display: block;
   margin-top: 3px;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.92);
@@ -350,6 +454,16 @@ input:focus-visible {
   font-weight: 750;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.route-diagram-content[hidden] {
+  display: none;
+}
+
+.route-diagram.expanded .route-diagram-toggle {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 .route-diagram-scroll {
@@ -432,21 +546,21 @@ input:focus-visible {
 
 .notice {
   position: fixed;
-  right: 16px;
+  left: 16px;
   bottom: 16px;
-  width: min(420px, calc(100vw - 32px));
-  padding: 12px 14px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 9px 11px;
   border-radius: 8px;
   background: rgba(8, 12, 18, 0.66);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.76);
-  font-size: 13px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
 .minimap {
   position: fixed;
-  left: 16px;
+  right: 16px;
   bottom: 16px;
   width: 300px;
   height: 210px;
@@ -455,7 +569,16 @@ input:focus-visible {
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(8, 12, 18, 0.66);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.32);
+  opacity: 0.64;
+  transition: opacity 180ms ease, box-shadow 180ms ease;
   z-index: 2;
+}
+
+.minimap:hover,
+.minimap:focus-within,
+.minimap:focus-visible {
+  opacity: 1;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.42);
 }
 
 .minimap .leaflet-container {
@@ -567,15 +690,11 @@ body.photo-capture .photo-overlay {
   }
 
   .right-rail {
-    top: auto;
+    top: 72px;
     right: 8px;
-    bottom: 8px;
+    bottom: auto;
     width: calc(100vw - 16px);
     box-sizing: border-box;
-  }
-
-  .route-diagram {
-    display: none;
   }
 
   .notice {
@@ -583,8 +702,8 @@ body.photo-capture .photo-overlay {
   }
 
   .minimap {
-    left: 8px;
-    bottom: 112px;
+    right: 8px;
+    bottom: 8px;
     width: 176px;
     height: 132px;
   }

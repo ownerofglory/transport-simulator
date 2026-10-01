@@ -25,5 +25,5 @@ export function MiniMapPanel({ route, distanceM }: { route?: DemoRoute; distance
 
   useEffect(() => map.current?.update(distanceM), [distanceM]);
 
-  return <div ref={el} className="minimap" />;
+  return <div ref={el} className="minimap" tabIndex={0} aria-label="Route minimap" />;
 }

@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import {
   buildPathGeometry,
-  dampAngle,
   lerpAt,
   pickHeightAnchors,
   poseAtDistance,
@@ -10,9 +9,10 @@ import {
 } from './trafficPath';
 import { flatDistanceM, randomGeoPointNear, type LatLon } from './trafficGeo';
 import { fetchRoadRoute } from './roadRoutingClient';
-import { animateTrafficRig, pickWeightedKind, setTrafficLampsOn, type TrafficKind, type TrafficKindSpec, type TrafficRig } from './trafficVehicleKinds';
+import { animateTrafficRig, pickWeightedKind, setTrafficLampsOn, setTrafficWeather, type TrafficKind, type TrafficKindSpec, type TrafficRig } from './trafficVehicleKinds';
 import { trafficDensityScale } from './trafficDensity';
 import type { TrafficDensity } from '../../app/types';
+import type { WeatherKind } from '../weather';
 
 export type RoadTrafficContext = {
   /** Same projection TransitWorld builds every other layer against. */
@@ -42,6 +42,7 @@ const FOLLOWER_SPAWN_INTERVAL_S = 0.3;
 const FOLLOWER_GAP_MIN_M = 18;
 const FOLLOWER_GAP_MAX_M = 65;
 const ROUTE_REUSE_POOL = 14; // most recent routed trips kept for followers
+const TURN_RADIUS_M: Record<TrafficKind, number> = { car: 6, truck: 8, cyclist: 2.5 };
 
 /** A routed trip, kept after spawning so more vehicles can drive it later. */
 type RoutedTrip = {
@@ -98,7 +99,8 @@ export class RoadTrafficSystem {
     for (let i = this.active.length - 1; i >= 0; i--) {
       const vehicle = this.active[i];
       vehicle.distanceM += vehicle.speedMps * stepSec;
-      const pose = poseAtDistance(vehicle.trip.path, vehicle.distanceM);
+      const turnRadiusM = TURN_RADIUS_M[vehicle.spec.id];
+      const pose = poseAtDistance(vehicle.trip.path, vehicle.distanceM, turnRadiusM);
       const dx = pose.x - this.centerWorld.x;
       const dz = pose.z - this.centerWorld.y;
       const finishedTrip = vehicle.distanceM >= vehicle.trip.path.total;
@@ -112,17 +114,16 @@ export class RoadTrafficSystem {
       const visible = distanceSq <= RENDER_RADIUS_M * RENDER_RADIUS_M;
       vehicle.rig.root.visible = visible;
 
-      // Look a little ahead so a car eases into a bend instead of snapping at
-      // a polyline vertex. Sharp bends and the end of a route also trim speed.
+      // Preview the rounded path's heading to slow for a bend before reaching it.
       const lookAheadM = Math.min(6, Math.max(2, vehicle.speedMps * 0.45));
-      const targetHeading = poseAtDistance(vehicle.trip.path, vehicle.distanceM + lookAheadM).headingRad;
-      const turnRad = Math.abs(shortestAngleDelta(vehicle.headingRad, targetHeading));
+      const targetHeading = poseAtDistance(vehicle.trip.path, vehicle.distanceM + lookAheadM, turnRadiusM).headingRad;
+      const turnRad = Math.abs(shortestAngleDelta(pose.headingRad, targetHeading));
       const turnScale = 1 - Math.min(turnRad / (Math.PI / 2), 1) * 0.38;
       const remainingM = vehicle.trip.path.total - vehicle.distanceM;
       const arrivalScale = THREE.MathUtils.clamp(remainingM / 28, 0.28, 1);
       const targetSpeedMps = vehicle.cruiseSpeedMps * Math.min(turnScale, arrivalScale);
       vehicle.speedMps += (targetSpeedMps - vehicle.speedMps) * (1 - Math.exp(-2.4 * stepSec));
-      vehicle.headingRad = dampAngle(vehicle.headingRad, targetHeading, 7.5, stepSec);
+      vehicle.headingRad = pose.headingRad;
 
       const y = lerpAt(vehicle.trip.heightAnchorAtM, vehicle.trip.heightAnchorM, vehicle.distanceM);
       vehicle.rig.root.position.set(pose.x, y, pose.z);
@@ -186,6 +187,10 @@ export class RoadTrafficSystem {
   /** Head/tail lamps follow the world's daylight factor, like the player's vehicle. */
   setLampsOn(on: boolean): void {
     setTrafficLampsOn(on);
+  }
+
+  setWeather(kind: WeatherKind): void {
+    setTrafficWeather(kind);
   }
 
   dispose(): void {
@@ -256,7 +261,7 @@ export class RoadTrafficSystem {
       distanceM,
       speedMps: cruiseSpeedMps,
       cruiseSpeedMps,
-      headingRad: poseAtDistance(trip.path, distanceM).headingRad
+      headingRad: poseAtDistance(trip.path, distanceM, TURN_RADIUS_M[spec.id]).headingRad
     });
   }
 

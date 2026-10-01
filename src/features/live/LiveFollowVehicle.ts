@@ -3,6 +3,7 @@ import type { InteriorCameraProfile } from '../../domain/transport';
 import type { CameraMode } from '../../world/CameraController';
 import type { VehicleDefinition } from '../../vehicles/VehicleDefinition';
 import type { VehicleVisualController } from '../../vehicles/VehicleVisualController';
+import type { WeatherKind } from '../../world/weather';
 import { vehicleVisualFactory } from '../../vehicles/VehicleVisualFactory';
 
 // The fully-detailed model for the vehicle the user is following. It owns only
@@ -88,6 +89,10 @@ export class LiveFollowVehicle {
       daylightFactor: p.daylightFactor,
       deltaSeconds: p.dt
     });
+  }
+
+  setWeather(kind: WeatherKind): void {
+    this.visual.setWeather(kind);
   }
 
   dispose(): void {

@@ -106,6 +106,7 @@ export class LightingSystem implements EngineSystem {
    */
   updateUnderground(underground: boolean, vehiclePosition: THREE.Vector3, tangent: THREE.Vector3, deltaSeconds: number): void {
     this.weatherSky.advance(deltaSeconds, this.weather, vehiclePosition);
+    this.controller.setFocus(vehiclePosition);
     const target = underground ? 1 : 0;
     // ~0.6 s portal transition, frame-rate independent.
     const step = THREE.MathUtils.clamp(deltaSeconds / 0.6, 0, 1);
@@ -137,7 +138,7 @@ export class LightingSystem implements EngineSystem {
   dispose(): void {
     this.skyEnvironment.dispose();
     this.weatherSky.dispose();
-    this.scene.remove(this.hemisphere, this.sun, this.visibilityFill);
+    this.scene.remove(this.hemisphere, this.sun, this.sun.target, this.visibilityFill);
     for (const lamp of this.tunnelLamps) {
       this.scene.remove(lamp);
       lamp.dispose();

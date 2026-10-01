@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { WeatherKind } from '../../world/weather';
 import type { DemoRoute } from '../../route';
 import type { CityDefinition } from '../../cities';
 import { fallbackTransportModeDefinition, type TransportModeDefinition } from '../../domain/transport';
@@ -85,6 +86,10 @@ export class ActiveVehicleSystem implements EngineSystem {
   /** Head/tail lamps come on in low light (night, dawn, dusk). */
   updateExteriorLights(daylightFactor: number): void {
     this.visual.updateExteriorLights(daylightFactor);
+  }
+
+  setWeather(kind: WeatherKind): void {
+    this.visual.setWeather(kind);
   }
 
   updateInteriorDisplay(nextStation: string, doorsOpen: boolean): void {

@@ -1,6 +1,7 @@
 import type * as THREE from 'three';
 import type { StationConfig } from '../../simulator/simulator-types';
 import type { WorldLayerContext } from '../layers/WorldLayerContext';
+import type { WeatherKind } from '../weather';
 
 /**
  * Data-driven station kit types.
@@ -255,6 +256,7 @@ export type StationInstance = {
  */
 export interface StationStyleProvider {
   readonly id: string;
+  setWeather?(kind: WeatherKind): void;
   resolve(station: RouteStation, context: StationResolveContext): StationVisualDefinition;
   build(
     definition: StationVisualDefinition,

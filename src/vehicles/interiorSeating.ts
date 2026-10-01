@@ -10,6 +10,8 @@ export type InteriorSeatAnchor = {
   x: number;
   y: number;
   z: number;
+  /** Local floor beneath this seat when the car has stepped compartments. */
+  floorY?: number;
   /** Yaw in radians the occupant faces (car-local, +Z is car forward). */
   yaw: number;
 };

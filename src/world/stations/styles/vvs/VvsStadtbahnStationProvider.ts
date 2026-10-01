@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { WeatherKind } from '../../../weather';
 import { createStationScaffold, disposeStation } from '../../StationFactory';
 import type {
   RouteStation,
@@ -38,6 +39,7 @@ import {
   buildVvsWayfinding
 } from './components/signage';
 import {
+  buildDbSBahnMarker,
   buildVvsEdgeParapet,
   buildVvsInfoKiosk,
   buildVvsLampColumns,
@@ -74,6 +76,8 @@ const SSB_PLATFORM_HEIGHT_M = 0.8;
 export type VvsStationStyleOptions = {
   id: string;
   platformHeightM: number;
+  surfaceFinish?: 'ssb' | 'db';
+  surfacePlatformLengthM?: number;
   /** The blue U totem and the orange SSB kiosk are SSB kit; DB stops have neither. */
   ssbStreetFurniture: boolean;
   /** Optional authored interior; shared route-following platforms and access remain intact. */
@@ -84,6 +88,7 @@ export type VvsStationStyleOptions = {
 const SSB_STYLE: VvsStationStyleOptions = {
   id: 'vvs-stadtbahn',
   platformHeightM: SSB_PLATFORM_HEIGHT_M,
+  surfaceFinish: 'ssb',
   ssbStreetFurniture: true
 };
 
@@ -110,6 +115,10 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     return this.style.id;
   }
 
+  setWeather(kind: WeatherKind): void {
+    if (this.style.surfaceFinish) this.materials?.setSurfaceWeather(kind);
+  }
+
   resolve(station: RouteStation, context: StationResolveContext): StationVisualDefinition {
     const underground = context.placement.underground;
     const override = this.catalog.get(station.name);
@@ -118,9 +127,13 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
 
     const archetype = override?.archetype ?? (underground ? 'underground-side' : 'surface-side');
     const styled = context.layer?.stationStyleId === this.style.id;
+    const dbSurface = styled && !underground && this.style.surfaceFinish === 'db';
     const platform = {
       ...DEFAULT_SURFACE_PLATFORM,
-      ...(styled ? { heightM: this.style.platformHeightM } : {}),
+      ...(styled ? {
+        heightM: this.style.platformHeightM,
+        ...(!underground && this.style.surfacePlatformLengthM ? { lengthM: this.style.surfacePlatformLengthM } : {})
+      } : {}),
       ...override?.platform,
       // A stop can be marked as an island by either field; the layout is the one
       // switch the builders (and the world's track spread) read afterwards.
@@ -132,12 +145,12 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     // ad cases; a bare box with neither never occurs on the network.
     const furniture = {
       shelters: override?.furniture?.shelters ?? 1,
-      benches: override?.furniture?.benches ?? rng.int(1, 2),
+      benches: override?.furniture?.benches ?? (dbSurface ? 2 : rng.int(1, 2)),
       ticketMachines: override?.furniture?.ticketMachines ?? 1,
-      dfiDisplays: override?.furniture?.dfiDisplays ?? (underground ? 2 : 0),
+      dfiDisplays: override?.furniture?.dfiDisplays ?? (dbSurface ? 3 : underground ? 2 : 0),
       bins: override?.furniture?.bins ?? rng.int(1, 2),
       bicycleParking: override?.furniture?.bicycleParking,
-      adVitrines: override?.furniture?.adVitrines ?? (underground ? rng.int(2, 3) : 0)
+      adVitrines: override?.furniture?.adVitrines ?? (underground ? rng.int(2, 3) : dbSurface ? 1 : 0)
     };
 
     return {
@@ -164,7 +177,8 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     const rng = createSeededRandom(definition.seed ?? hashString(`vvs:${station.name}`));
     // Canopy length varies within a tight band so surface stops read as related
     // but not identical. Never affects platform length or track geometry.
-    const canopyLengthM = 22 + rng.next() * 5;
+    const canopyLengthM = this.style.surfaceFinish === 'db' && !underground
+      ? 38 + rng.next() * 6 : 22 + rng.next() * 5;
     const furniture = definition.furniture ?? {};
     const counts = {
       benches: furniture.benches ?? 1,
@@ -172,9 +186,12 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       bins: furniture.bins ?? 1
     };
     const accentColor = definition.architecture?.accentColor;
-    const accent = materials.accent(accentColor);
+    const accent = accentColor ? materials.accent(accentColor)
+      : this.style.surfaceFinish === 'db' ? materials.dbBlue : materials.ssbBlue;
     const layout = definition.platform?.layout;
     const warmTileInterchange = definition.architecture?.family === 'warm-tile-interchange';
+    const surfaceFinish = !underground && context.layer.stationStyleId === this.style.id
+      ? this.style.surfaceFinish : undefined;
 
     const scaffold = createStationScaffold(
       `${underground ? 'Underground' : 'Surface'} station ${station.name}`,
@@ -252,7 +269,10 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     if (island) {
       // One deck between the tracks. The world has already pulled the tracks
       // apart around this stop by the same width, so the deck lands in the gap.
-      buildVvsCenterPlatform(scaffold.root, context.layer, materials, station, definition.platform, underground);
+      buildVvsCenterPlatform(
+        scaffold.root, context.layer, materials, station, definition.platform, underground,
+        surfaceFinish
+      );
     } else {
       // Curved platforms follow the route in world space → untransformed root.
       buildVvsSidePlatforms(
@@ -263,7 +283,8 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
         definition.platform,
         staggerM,
         underground,
-        warmTileInterchange ? materials.painted('#bd7656') : undefined
+        warmTileInterchange ? materials.painted('#bd7656') : undefined,
+        surfaceFinish
       );
       // Mixed layouts add the narrow walkway that fits between two normal
       // tracks — not a platform: at 4.2 m centres there is no room for one.
@@ -306,7 +327,8 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
         hallLengthM,
         ceilingHeightM,
         platformLengthM,
-        dfiDisplays
+        dfiDisplays,
+        surfaceFinish
       });
     } else for (const side of [-1, 1]) {
       const zShift = side * (staggerM / 2);
@@ -342,10 +364,14 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
         accent,
         style: canopy?.style,
         postMaterial: canopy?.postColor ? materials.painted(canopy.postColor) : undefined,
-        nameOnFascia: canopy?.nameOnFascia ? definition.displayName : undefined
+        nameOnFascia: canopy?.nameOnFascia ? definition.displayName : undefined,
+        surfaceFinish
       });
-      buildVvsFurniture(deck, materials, side, underground, counts, lateral, zShift);
-      buildVvsStationSigns(deck, context.layer, side, station, underground, lateral, zShift, accentColor);
+      buildVvsFurniture(deck, materials, side, underground, counts, lateral, zShift, surfaceFinish === 'db');
+      buildVvsStationSigns(
+        deck, context.layer, side, station, underground, lateral, zShift,
+        accentColor ?? (surfaceFinish === 'db' ? '#183d70' : '#174a73'), surfaceFinish === 'db'
+      );
 
       // Hillside/cutting stops carry a retaining wall behind the platform.
       if (!underground && (retainingWall === 'both' || (retainingWall === 'left' && side === -1) ||
@@ -410,6 +436,7 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
       ceilingHeightM: number;
       platformLengthM: number;
       dfiDisplays: number;
+      surfaceFinish?: 'ssb' | 'db';
     }
   ): void {
     const { underground, hallLengthM, ceilingHeightM } = options;
@@ -486,7 +513,8 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
         bins: furniture.bins ?? 1
       },
       accent: options.accent,
-      displayName: definition.displayName
+      displayName: definition.displayName,
+      surfaceFinish: options.surfaceFinish
     });
 
     // A surface island is still marked from the street by its totem; the rest of
@@ -502,6 +530,9 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
         -18,
         halfWidthM - 1.1
       );
+    }
+    if (!underground && options.surfaceFinish === 'db') {
+      buildDbSBahnMarker(deck, materials, 1, station, 0, halfWidthM - 1.1);
     }
   }
 
@@ -525,12 +556,15 @@ export class VvsStadtbahnStationProvider implements StationStyleProvider {
     if (this.style.ssbStreetFurniture && signage?.totem !== false) {
       buildVvsTotem(deck, materials, side, { name: definition.displayName, distanceM: 0 }, lateral, signage?.lines);
     }
+    if (this.style.surfaceFinish === 'db' && context.layer.stationStyleId === this.style.id) {
+      buildDbSBahnMarker(deck, materials, side, { name: definition.displayName, distanceM: 0 }, lateral);
+    }
 
     const parapet = definition.environment?.edgeParapet;
     if (parapet === 'wall') buildVvsEdgeParapet(deck, materials, side, platformLengthM, lateral);
     else buildVvsPlatformRailing(deck, materials, side, platformLengthM, lateral);
 
-    buildVvsLampColumns(deck, materials, side, furniture.lampColumns ?? 2, platformLengthM, lateral);
+    buildVvsLampColumns(deck, materials, side, furniture.lampColumns ?? (this.style.surfaceFinish === 'db' ? 4 : 2), platformLengthM, lateral);
     buildVvsSurfaceVitrines(deck, materials, side, furniture.adVitrines ?? 0, platformLengthM, lateral);
     // One kiosk per stop, on the same side as the departure boards.
     if (this.style.ssbStreetFurniture && furniture.infoKiosk && side === 1) {

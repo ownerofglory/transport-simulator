@@ -3,6 +3,7 @@ import type { InteriorCameraProfile } from '../domain/transport';
 import type { CameraMode } from '../world/CameraController';
 import type { VehicleInstance } from './types';
 import type { VehicleInteriorDisplay } from './VehicleInteriorDisplay';
+import type { WeatherKind } from '../world/weather';
 
 // Everything that "presents" a built vehicle, independent of how it is placed:
 // animated doors, the next-stop interior display, per-view window transparency and
@@ -45,6 +46,11 @@ export class VehicleVisualController {
   private windowsLit = false;
   private litWindowMaterial: THREE.MeshStandardMaterial | null = null;
   private unlitBandMaterials: (THREE.Material | THREE.Material[])[] | null = null;
+  private readonly exteriorGlassColor: THREE.Color | null;
+  private readonly exteriorGlassOpacity: number;
+  private readonly exteriorGlassDepthWrite: boolean;
+  private readonly exteriorPaintFinish: Array<{ material: THREE.MeshStandardMaterial; roughness: number; clearcoat: number }>;
+  private readonly exteriorGlassRoughness: number;
 
   constructor(
     private readonly instance: VehicleInstance,
@@ -55,6 +61,15 @@ export class VehicleVisualController {
     this.cars = instance.cars;
     this.trainHalfLengthM = instance.trainHalfLengthM;
     this.cameraProfile = config.interiorCameraProfile;
+    this.exteriorGlassColor = instance.glassMaterial?.color.clone() ?? null;
+    this.exteriorGlassOpacity = instance.glassMaterial?.opacity ?? 1;
+    this.exteriorGlassDepthWrite = instance.glassMaterial?.depthWrite ?? true;
+    this.exteriorGlassRoughness = instance.glassMaterial?.roughness ?? 0;
+    this.exteriorPaintFinish = [...new Set(instance.exteriorPaintMaterials ?? [])].map((material) => ({
+      material,
+      roughness: material.roughness,
+      clearcoat: material instanceof THREE.MeshPhysicalMaterial ? material.clearcoat : 0
+    }));
   }
 
   /** Applies every presentation aspect for the frame. */
@@ -95,10 +110,9 @@ export class VehicleVisualController {
     const cabView = mode === 'cab';
     const glass = this.instance.glassMaterial;
     if (glass) {
-      glass.opacity = interiorView ? 0.1 : 0.58;
-      glass.depthWrite = !interiorView;
-      glass.color.setHex(interiorView ? 0xd9f2f8 : 0x91c7dd);
-      glass.needsUpdate = true;
+      glass.opacity = interiorView ? Math.min(0.1, this.exteriorGlassOpacity) : this.exteriorGlassOpacity;
+      glass.depthWrite = interiorView ? false : this.exteriorGlassDepthWrite;
+      if (this.exteriorGlassColor) glass.color.copy(this.exteriorGlassColor);
     }
     for (const band of this.instance.windowBands) band.visible = !interiorView;
     for (const shell of this.instance.cabShells) shell.visible = !cabView;
@@ -111,6 +125,19 @@ export class VehicleVisualController {
     const lightsOn = daylightFactor < 0.45;
     this.instance.setExteriorLightsOn?.(lightsOn);
     this.setWindowsLit(lightsOn);
+  }
+
+  /** Rain darkens reflections and sharpens the clearcoat without changing the paint color. */
+  setWeather(kind: WeatherKind): void {
+    const wetness = kind === 'rain' || kind === 'thunder' ? 1 : kind === 'fog' ? 0.25 : 0;
+    for (const finish of this.exteriorPaintFinish) {
+      finish.material.roughness = THREE.MathUtils.lerp(finish.roughness, 0.17, wetness);
+      if (finish.material instanceof THREE.MeshPhysicalMaterial) {
+        finish.material.clearcoat = THREE.MathUtils.lerp(finish.clearcoat, Math.max(0.72, finish.clearcoat), wetness);
+      }
+    }
+    const glass = this.instance.glassMaterial;
+    if (glass) glass.roughness = THREE.MathUtils.lerp(this.exteriorGlassRoughness, 0.13, wetness);
   }
 
   /**
@@ -130,10 +157,13 @@ export class VehicleVisualController {
     if (lit) {
       this.unlitBandMaterials ??= bands.map((band) => band.material);
       this.litWindowMaterial ??= new THREE.MeshStandardMaterial({
-        color: 0xffeacb,
+        color: 0xd9c7ab,
         emissive: 0xffdca6,
-        emissiveIntensity: 1.1,
-        roughness: 0.65
+        emissiveIntensity: 0.32,
+        roughness: 0.65,
+        transparent: true,
+        opacity: 0.3,
+        depthWrite: false
       });
       for (const band of bands) band.material = this.litWindowMaterial;
       return;

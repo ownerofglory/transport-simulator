@@ -30,22 +30,23 @@ export function buildVvsFurniture(
   underground: boolean,
   counts: VvsFurnitureCounts,
   lateral = 0, // extra outward shift when the platform is wider than default
-  zShift = 0 // along-route shift for staggered platforms
+  zShift = 0, // along-route shift for staggered platforms
+  dbSurface = false
 ): void {
   const benchShift = (underground ? 1 : 0) + zShift;
   for (const z of slots(BENCH_SLOTS, counts.benches)) {
-    const bench = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.48, 4.8), materials.bench);
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.48, 4.8), dbSurface ? materials.dbBench : materials.bench);
     bench.position.set(side * (8.8 + lateral), 0.78, z + benchShift);
     bench.castShadow = true;
     local.add(bench);
 
-    const backrest = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.15, 4.8), materials.bench);
+    const backrest = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.15, 4.8), dbSurface ? materials.dbBench : materials.bench);
     backrest.position.set(side * (9.32 + lateral), 1.25, z + benchShift);
     local.add(backrest);
   }
 
   for (const z of slots(MACHINE_SLOTS, counts.ticketMachines)) {
-    const ticketMachine = new THREE.Mesh(new THREE.BoxGeometry(0.72, 1.9, 1.05), materials.machine);
+    const ticketMachine = new THREE.Mesh(new THREE.BoxGeometry(0.72, 1.9, 1.05), dbSurface ? materials.dbMachine : materials.machine);
     ticketMachine.position.set(side * (9.25 + lateral), 1.18, z + zShift);
     ticketMachine.castShadow = true;
     local.add(ticketMachine);
@@ -59,7 +60,7 @@ export function buildVvsFurniture(
     local.add(ticketScreen);
   }
 
-  const timetableCase = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.85, 1.35), materials.ssbBlue);
+  const timetableCase = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.85, 1.35), dbSurface ? materials.dbBlue : materials.ssbBlue);
   timetableCase.position.set(side * (9.45 + lateral), 1.46, -13 + zShift);
   local.add(timetableCase);
 
@@ -72,7 +73,7 @@ export function buildVvsFurniture(
   local.add(timetable);
 
   for (const z of slots(BIN_SLOTS, counts.bins)) {
-    const bin = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 0.95, 12), materials.ssbBlue);
+    const bin = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 0.95, 12), dbSurface ? materials.dbCanopyFrame : materials.ssbBlue);
     bin.position.set(side * (9.35 + lateral), 0.7, z + zShift);
     local.add(bin);
   }

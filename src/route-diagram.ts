@@ -12,7 +12,6 @@ const TOP_PADDING = 26;
 export class TransitRouteDiagram {
   private route: DemoRoute | null = null;
   private stationTransfers = new Map<string, string[]>();
-  private readonly title: HTMLElement;
   private readonly scroll: HTMLElement;
   private readonly svg: SVGSVGElement;
   private readonly stationNodes: SVGCircleElement[] = [];
@@ -22,13 +21,8 @@ export class TransitRouteDiagram {
 
   constructor(private readonly root: HTMLElement) {
     this.root.innerHTML = `
-      <div class="route-diagram-header">
-        <div class="label">Transit route schematic</div>
-        <div class="route-diagram-title">-</div>
-      </div>
       <div class="route-diagram-scroll"><svg aria-label="Selected transit line schematic"></svg></div>
     `;
-    this.title = this.root.querySelector<HTMLElement>('.route-diagram-title')!;
     this.scroll = this.root.querySelector<HTMLElement>('.route-diagram-scroll')!;
     this.svg = this.root.querySelector<SVGSVGElement>('svg')!;
   }
@@ -44,7 +38,6 @@ export class TransitRouteDiagram {
     this.stationNodes.length = 0;
     this.stationXs.length = 0;
     this.svg.replaceChildren();
-    this.title.textContent = `${route.line}  ·  ${route.stations[0]?.name ?? ''} → ${route.destination}`;
     this.root.style.setProperty('--route-color', route.color ?? '#ffd900');
 
     const height = Math.max(130, TOP_PADDING * 2 + Math.max(1, route.stations.length - 1) * STATION_GAP);

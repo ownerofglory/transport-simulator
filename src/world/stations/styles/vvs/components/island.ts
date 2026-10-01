@@ -4,7 +4,7 @@ import type { WorldLayerContext } from '../../../../layers/WorldLayerContext';
 import type { RouteStation, StationCanopyStyle, StationPlatformDefinition } from '../../../types';
 import { platformSpanT } from '../../../placement';
 import { DEFAULT_ISLAND_WIDTH_M } from '../../../trackLayout';
-import { DEFAULT_DECK_TOP_M, makeFasciaGeometry } from './platform';
+import { DEFAULT_DECK_TOP_M, makeFasciaGeometry, tilePlatformStrip } from './platform';
 import type { VvsStationMaterials } from '../VvsStationMaterials';
 import type { VvsFurnitureCounts } from './furniture';
 
@@ -34,6 +34,7 @@ export type VvsIslandOptions = {
   counts?: VvsFurnitureCounts;
   accent?: THREE.Material;
   displayName?: string;
+  surfaceFinish?: 'ssb' | 'db';
 };
 
 /** Half the deck width, i.e. how far the platform edge stands off the centre line. */
@@ -52,7 +53,8 @@ export function buildVvsCenterPlatform(
   materials: VvsStationMaterials,
   station: RouteStation,
   platform: StationPlatformDefinition | undefined,
-  underground = false
+  underground = false,
+  surfaceFinish?: 'ssb' | 'db'
 ): void {
   const lengthM = platform?.lengthM ?? DEFAULT_LENGTH_M;
   const halfWidthM = islandHalfWidthM(platform);
@@ -61,8 +63,10 @@ export function buildVvsCenterPlatform(
   const { startT, endT } = platformSpanT(station.distanceM, lengthM, layer.route.routeLengthM);
 
   const deck = new THREE.Mesh(
-    layer.makeRouteStrip(0, halfWidthM * 2, startT, endT, 24, deckTopM),
-    finish.platform
+    surfaceFinish
+      ? tilePlatformStrip(layer.makeRouteStrip(0, halfWidthM * 2, startT, endT, 48, deckTopM), halfWidthM * 2, lengthM, 1.6)
+      : layer.makeRouteStrip(0, halfWidthM * 2, startT, endT, 24, deckTopM),
+    surfaceFinish === 'db' ? materials.dbPavers : surfaceFinish === 'ssb' ? materials.surfacePavers : finish.platform
   );
   deck.receiveShadow = true;
   deck.name = `Island platform ${station.name}`;
@@ -76,11 +80,21 @@ export function buildVvsCenterPlatform(
     root.add(edge);
 
     const tactile = new THREE.Mesh(
-      layer.makeRouteStrip(side * (halfWidthM - TACTILE_INSET_M), 0.5, startT, endT, 28, deckTopM + 0.025),
-      finish.tactile
+      surfaceFinish
+        ? tilePlatformStrip(layer.makeRouteStrip(side * (halfWidthM - TACTILE_INSET_M), 0.5, startT, endT, 48, deckTopM + 0.025), 0.5, lengthM, 0.64)
+        : layer.makeRouteStrip(side * (halfWidthM - TACTILE_INSET_M), 0.5, startT, endT, 28, deckTopM + 0.025),
+      surfaceFinish === 'db' ? materials.dbTactile : surfaceFinish === 'ssb' ? materials.surfaceTactile : finish.tactile
     );
     tactile.name = `Island tactile edge ${station.name}`;
     root.add(tactile);
+
+    if (surfaceFinish) {
+      const safetyLine = new THREE.Mesh(
+        layer.makeRouteStrip(side * (halfWidthM - 1.02), 0.1, startT, endT, 48, deckTopM + 0.028),
+        surfaceFinish === 'db' ? materials.dbSafetyLine : materials.surfaceSafetyLine
+      );
+      root.add(safetyLine);
+    }
 
     // A high deck built from horizontal strips alone floats above the track.
     const fascia = new THREE.Mesh(makeFasciaGeometry(layer, side * halfWidthM, startT, endT, deckTopM), finish.edge);
@@ -105,30 +119,31 @@ export function buildVvsIslandFittings(
   const halfWidthM = islandHalfWidthM({ widthM: options.widthM });
   const counts = options.counts ?? { benches: 1, ticketMachines: 1, bins: 1 };
   const accent = options.accent ?? materials.ssbBlue;
+  const dbSurface = options.surfaceFinish === 'db';
 
   if (!options.underground) {
-    buildIslandCanopy(deck, materials, halfWidthM, options.canopyLengthM ?? 25, options.canopyStyle, accent);
+    buildIslandCanopy(deck, materials, halfWidthM, options.canopyLengthM ?? 25, options.canopyStyle, accent, options.surfaceFinish);
   }
 
   // Back-to-back benches down the centre line, clear of both platform edges.
   for (const z of BENCH_SLOTS.slice(0, Math.max(1, Math.min(counts.benches, BENCH_SLOTS.length)))) {
-    const bench = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.48, 3.6), materials.bench);
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.48, 3.6), dbSurface ? materials.dbBench : materials.bench);
     bench.position.set(0, 0.46, z);
     bench.castShadow = true;
     deck.add(bench);
-    const backrest = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.0, 3.6), materials.bench);
+    const backrest = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.0, 3.6), dbSurface ? materials.dbBench : materials.bench);
     backrest.position.set(0, 0.88, z);
     deck.add(backrest);
   }
 
   for (const z of BIN_SLOTS.slice(0, Math.max(1, Math.min(counts.bins, BIN_SLOTS.length)))) {
-    const bin = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 0.95, 12), materials.ssbBlue);
+    const bin = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 0.95, 12), dbSurface ? materials.dbCanopyFrame : materials.ssbBlue);
     bin.position.set(0.9, 0.48, z);
     deck.add(bin);
   }
 
   for (let i = 0; i < Math.max(1, Math.min(counts.ticketMachines, 2)); i += 1) {
-    const machine = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.9, 0.72), materials.machine);
+    const machine = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.9, 0.72), dbSurface ? materials.dbMachine : materials.machine);
     machine.position.set(i === 0 ? -0.9 : 0.9, 0.96, i === 0 ? -13 : 13);
     machine.castShadow = true;
     deck.add(machine);
@@ -178,7 +193,8 @@ function buildIslandCanopy(
   halfWidthM: number,
   lengthM: number,
   style: StationCanopyStyle | undefined,
-  accent: THREE.Material
+  accent: THREE.Material,
+  surfaceFinish?: 'ssb' | 'db'
 ): void {
   if (lengthM <= 0) return;
   const widthM = Math.max(3.2, halfWidthM * 2 - 1.2);
@@ -197,10 +213,30 @@ function buildIslandCanopy(
     deck.add(shell);
   }
 
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(widthM, 0.24, lengthM), materials.canopy);
+  const roof = new THREE.Mesh(
+    new THREE.BoxGeometry(widthM, surfaceFinish ? 0.07 : 0.24, lengthM),
+    surfaceFinish ? materials.canopyGlass : materials.canopy
+  );
   roof.position.set(0, roofY, center);
-  roof.castShadow = true;
+  roof.castShadow = !surfaceFinish;
   deck.add(roof);
+
+  if (surfaceFinish) {
+    const bays = Math.max(3, Math.ceil(lengthM / 3.2));
+    const rafters = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(widthM + 0.1, 0.14, 0.1),
+      surfaceFinish === 'db' ? materials.dbCanopyFrame : materials.canopyFrame, bays + 1
+    );
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i <= bays; i += 1) {
+      dummy.position.set(0, roofY, -half + lengthM * i / bays);
+      dummy.updateMatrix();
+      rafters.setMatrixAt(i, dummy.matrix);
+    }
+    rafters.instanceMatrix.needsUpdate = true;
+    rafters.castShadow = true;
+    deck.add(rafters);
+  }
 
   // Butterfly roofs fall away from the spine to both edges; the flat slab keeps
   // its two fasciae level.

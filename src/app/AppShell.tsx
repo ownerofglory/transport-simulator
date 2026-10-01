@@ -11,6 +11,7 @@ import { DriverControls } from '../features/simulation/DriverControls';
 import { DebugPanel } from '../features/simulation/DebugPanel';
 import { MiniMapPanel } from '../features/minimap/MiniMapPanel';
 import { RouteDiagramPanel } from '../features/route-diagram/RouteDiagramPanel';
+import { useCompactPanel } from './useCompactPanel';
 import { PhotoModeOverlay } from '../features/photo/PhotoModeOverlay';
 import { LiveEntryButton } from '../features/live/LiveEntryButton';
 import { CityWeatherForecast } from '../features/weather/CityWeatherForecast';
@@ -55,19 +56,12 @@ export function AppShell() {
   const snapshot = useSimulatorSnapshot(store);
   const [runtime, setRuntime] = useState<SimulatorRuntime | null>(null);
   const [activeRealtimeRoute, setActiveRealtimeRoute] = useState<DemoRoute | null>(null);
-  const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 760px)').matches);
+  const { collapsed, setCollapsed } = useCompactPanel();
   const [photoLabel, setPhotoLabel] = useState('Platform fly-by');
   // Photo activation is owned by the runtime; the shell only mirrors it for the overlay.
   const [photoActive, setPhotoActive] = useState(false);
   const selectedCameraModeRef = useRef(state.selectedCameraMode);
   selectedCameraModeRef.current = state.selectedCameraMode;
-
-  useEffect(() => {
-    const media = window.matchMedia('(max-width: 760px)');
-    const onChange = (event: MediaQueryListEvent) => setCollapsed(event.matches);
-    media.addEventListener('change', onChange);
-    return () => media.removeEventListener('change', onChange);
-  }, []);
 
   const onRuntime = useCallback((next: SimulatorRuntime | null) => setRuntime(next), []);
 
@@ -183,18 +177,20 @@ export function AppShell() {
         <div className="hud-header">
           <div>
             <h1 className="hud-title" onClick={onTitleTap}>
-              {catalog.currentCity?.menuTitle ?? 'Transit Simulator'}
+              {catalog.currentCity?.shortLabel ?? 'Transit Simulator'}
+              {route && <span className="hud-line">· {route.line}</span>}
               {state.debugMode && <span className="debug-badge">debug</span>}
             </h1>
             <div className="label">{catalog.currentCity?.freeRideNotice ?? 'Free, non-commercial simulator'}</div>
           </div>
+          {collapsed && route && <span className="hud-speed">{snapshot.speedKph} km/h</span>}
           <button
             className="menu-toggle"
             aria-expanded={!collapsed}
             aria-label={collapsed ? 'Expand menu' : 'Collapse menu'}
             onClick={() => setCollapsed((value) => !value)}
           >
-            {collapsed ? '+' : '−'}
+            {collapsed ? '⌄' : '⌃'}
           </button>
         </div>
         {/*<div className="hud-tabs">*/}

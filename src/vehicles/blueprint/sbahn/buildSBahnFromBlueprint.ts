@@ -14,6 +14,7 @@ import {
   type ExteriorLightRig
 } from '../../parts';
 import { makeStandardMaterial } from '../standardMaterial';
+import { withSideWindowCutouts } from '../../windowCutouts';
 import { registerSeatAnchors, yawForFacing } from '../../interiorSeating';
 import type { SBahnBlueprintConfig, SBahnMaterialRole } from './SBahnBlueprintConfig';
 
@@ -44,6 +45,10 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
   const rig: ExteriorLightRig = makeExteriorLightRig();
 
   const m = makeSBahnMaterials(config.materials);
+  if (config.exteriorDetailStyle === 'br430') m.glass.depthWrite = false;
+  const exteriorPaintMaterials: THREE.MeshStandardMaterial[] = config.exteriorDetailStyle === 'br430'
+    ? [m.shell, m.nose, m.belt, m.door]
+    : [];
   const exteriorLabels = config.exteriorDetailStyle === 'br430'
     ? makeBR430ExteriorLabels(context.definition.line, context.definition.destination)
     : null;
@@ -73,7 +78,9 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
       car.userData.passengerCameraLocal = [0.2, 2.3, -4.4];
       car.userData.passengerLookAtLocal = [0.05, 2.25, 7.5];
     }
-    const body = new THREE.Mesh(makeSBahn430Body(16.15), m.shell);
+    const sideWindows = windowZs.map((z) => ({ y: 2.43, height: 0.88, z, width: 1.08 }));
+    const body = new THREE.Mesh(makeSBahn430Body(16.15), exteriorLabels ? withSideWindowCutouts(m.shell, sideWindows) : m.shell);
+    if (exteriorLabels) exteriorPaintMaterials.push(body.material);
     body.castShadow = true;
     car.add(body);
     passengerShells.push(body);
@@ -102,7 +109,9 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
     car.add(belt);
     passengerShells.push(belt);
     for (const side of [-1, 1]) {
-      const band = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.08, 14.5), m.dark);
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.08, 14.5), exteriorLabels
+        ? new THREE.MeshStandardMaterial({ color: 0x252b2e, transparent: true, opacity: 0.32, roughness: 0.31, depthWrite: false })
+        : m.dark);
       band.position.set(side * 1.535, 2.43, 0);
       car.add(band);
       windowBands.push(band);
@@ -302,6 +311,7 @@ export function buildSBahnVehicle(config: SBahnBlueprintConfig, context: Resolve
     passengerShells,
     cabDisplays,
     glassMaterial: m.glass,
+    exteriorPaintMaterials,
     trainHalfLengthM,
     setExteriorLightsOn: makeSetExteriorLightsOn(rig),
     dispose: () => {

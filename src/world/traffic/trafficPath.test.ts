@@ -48,6 +48,31 @@ describe('poseAtDistance', () => {
     expect(poseAtDistance(path, -5)).toMatchObject({ x: 0, z: 0 });
     expect(poseAtDistance(path, 999)).toMatchObject({ x: 10, z: 10 });
   });
+
+  it('rounds a routed corner so position and heading turn continuously', () => {
+    const before = poseAtDistance(path, 9.5, 3);
+    const corner = poseAtDistance(path, 10, 3);
+    const after = poseAtDistance(path, 10.5, 3);
+    expect(before.headingRad).toBeGreaterThan(0);
+    expect(before.headingRad).toBeLessThan(corner.headingRad);
+    expect(corner.headingRad).toBeLessThan(after.headingRad);
+    expect(after.headingRad).toBeLessThan(Math.PI / 2);
+    expect(corner.x).toBeGreaterThan(0);
+    expect(corner.z).toBeLessThan(10);
+  });
+
+  it('keeps the same turning radius when a router adds short points near a junction', () => {
+    const detailedPath = buildPathGeometry([
+      { x: 0, z: 0 },
+      { x: 0, z: 9 },
+      { x: 0, z: 10 },
+      { x: 1, z: 10 },
+      { x: 10, z: 10 }
+    ]);
+    const approaching = poseAtDistance(detailedPath, 9, 3);
+    expect(approaching.headingRad).toBeGreaterThan(0.15);
+    expect(approaching.headingRad).toBeLessThan(Math.PI / 4);
+  });
 });
 
 describe('angle smoothing', () => {

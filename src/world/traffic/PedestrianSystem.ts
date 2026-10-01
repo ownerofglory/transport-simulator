@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { buildPathGeometry, dampAngle, lerpAt, pickHeightAnchors, poseAtDistance, type PathGeometry } from './trafficPath';
+import { buildPathGeometry, lerpAt, pickHeightAnchors, poseAtDistance, type PathGeometry } from './trafficPath';
 import { flatDistanceM, randomGeoPointNear, type LatLon } from './trafficGeo';
 import { fetchWalkingRoute } from './pedestrianRoutingClient';
-import { animatePedestrian, buildPedestrian, type PedestrianRig } from './pedestrianMesh';
+import { animatePedestrian, buildPedestrian, setPedestrianUmbrella, type PedestrianRig } from './pedestrianMesh';
 import { trafficDensityScale } from './trafficDensity';
 import type { TrafficDensity } from '../../app/types';
+import type { WeatherKind } from '../weather';
 
 export type PedestrianContext = {
   /** Same projection TransitWorld builds every other layer against. */
@@ -38,6 +39,7 @@ const FAR_ANIMATION_INTERVAL = 3;
 const WALK_MIN_MPS = 1.05;
 const WALK_MAX_MPS = 1.65;
 const LATERAL_JITTER_M = 0.6; // sidewalk-width spread perpendicular to the route
+const WALK_TURN_RADIUS_M = 1.2;
 const SPAWN_STAGGER_MAX_S = 15; // initial batch arrives staggered, not all at once
 const CACHE_RELEASE_GRACE_S = 20; // idle time after a station empties out before its routes are dropped
 const HEIGHT_SAMPLE_SPACING_M = 60;
@@ -91,10 +93,16 @@ export class PedestrianSystem {
   private simClockS = 0;
   private frameIndex = 0;
   private densityScale = 1;
+  private wetWeather = false;
   private readonly centerWorld = new THREE.Vector2(0, 0);
 
   constructor(private readonly ctx: PedestrianContext) {
     this.root.name = 'Pedestrians';
+  }
+
+  setWeather(kind: WeatherKind): void {
+    this.wetWeather = kind === 'rain' || kind === 'thunder';
+    for (const pedestrian of this.active) setPedestrianUmbrella(pedestrian.rig, this.wetWeather);
   }
 
   /** Advances every pedestrian and manages which stations are being tracked. */
@@ -123,7 +131,7 @@ export class PedestrianSystem {
         continue;
       }
       ped.distanceM += ped.speedMps * stepSec;
-      const pose = poseAtDistance(ped.route.path, ped.distanceM);
+      const pose = poseAtDistance(ped.route.path, ped.distanceM, WALK_TURN_RADIUS_M);
       const dx = pose.x - this.centerWorld.x;
       const dz = pose.z - this.centerWorld.y;
       const finished = ped.distanceM >= ped.route.path.total;
@@ -135,7 +143,7 @@ export class PedestrianSystem {
       const distanceSq = dx * dx + dz * dz;
       const visible = distanceSq <= RENDER_RADIUS_M * RENDER_RADIUS_M;
       ped.rig.root.visible = visible;
-      ped.headingRad = dampAngle(ped.headingRad, pose.headingRad, 9, stepSec);
+      ped.headingRad = pose.headingRad;
       this.placePedestrian(
         ped,
         pose,
@@ -264,6 +272,7 @@ export class PedestrianSystem {
 
     const spawnDelayS = staggered ? Math.random() * SPAWN_STAGGER_MAX_S : 0;
     const rig = this.acquireRig();
+    setPedestrianUmbrella(rig, this.wetWeather);
     this.root.add(rig.root);
 
     const distanceM = Math.random() * route.path.total * 0.6;
@@ -276,7 +285,7 @@ export class PedestrianSystem {
       speedMps: THREE.MathUtils.lerp(WALK_MIN_MPS, WALK_MAX_MPS, Math.random()),
       lateralOffsetM: (Math.random() - 0.5) * LATERAL_JITTER_M,
       spawnDelayS,
-      headingRad: poseAtDistance(route.path, distanceM).headingRad,
+      headingRad: poseAtDistance(route.path, distanceM, WALK_TURN_RADIUS_M).headingRad,
       rig
     };
     // Placed immediately so a pooled mesh never renders one frame at its old
@@ -287,7 +296,7 @@ export class PedestrianSystem {
     state.activeCount++;
   }
 
-  private placePedestrian(ped: Pedestrian, pose = poseAtDistance(ped.route.path, ped.distanceM), animate = true): void {
+  private placePedestrian(ped: Pedestrian, pose = poseAtDistance(ped.route.path, ped.distanceM, WALK_TURN_RADIUS_M), animate = true): void {
     const forwardX = Math.sin(pose.headingRad);
     const forwardZ = Math.cos(pose.headingRad);
     const rightX = forwardZ;

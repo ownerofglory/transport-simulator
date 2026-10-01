@@ -14,6 +14,7 @@ import {
   type ExteriorLightRig
 } from '../../parts';
 import { makeStandardMaterial } from '../standardMaterial';
+import { withSideWindowCutouts } from '../../windowCutouts';
 import { registerSeatAnchors, yawForFacing } from '../../interiorSeating';
 import type { BusBlueprintConfig, BusMaterialRole, BusSectionConfig } from './BusBlueprintConfig';
 
@@ -37,6 +38,7 @@ type BusBuildState = {
   cabDisplays: THREE.Mesh[];
   rig: ExteriorLightRig;
   seatGeometry?: BusSeatGeometry;
+  exteriorPaintMaterials: THREE.MeshStandardMaterial[];
 };
 
 export function buildBusVehicle(config: BusBlueprintConfig, context: ResolvedVehicleBuildContext): VehicleInstance {
@@ -48,9 +50,12 @@ export function buildBusVehicle(config: BusBlueprintConfig, context: ResolvedVeh
     cabShells: [],
     passengerShells: [],
     cabDisplays: [],
-    rig: makeExteriorLightRig()
+    rig: makeExteriorLightRig(),
+    exteriorPaintMaterials: []
   };
   const materials = makeBusMaterials(config.materials);
+  if (config.detailStyle === 'ssb-citaro') materials.glass.depthWrite = false;
+  if (config.detailStyle === 'ssb-citaro') state.exteriorPaintMaterials.push(materials.body);
   if (config.detailStyle === 'ssb-citaro') {
     materials.seat.map = makeSsbSurfaceTexture('fabric');
     materials.seat.color.setHex(0xffffff);
@@ -84,6 +89,7 @@ export function buildBusVehicle(config: BusBlueprintConfig, context: ResolvedVeh
     passengerShells: state.passengerShells,
     cabDisplays: state.cabDisplays,
     glassMaterial: materials.glass,
+    exteriorPaintMaterials: state.exteriorPaintMaterials,
     trainHalfLengthM,
     setExteriorLightsOn: makeSetExteriorLightsOn(state.rig)
   };
@@ -132,7 +138,15 @@ function addBusSection(
   car.userData.centerOffsetM = section.centerOffsetM;
 
   const detailed = config.detailStyle === 'ssb-citaro';
-  const body = new THREE.Mesh(detailed ? new RoundedBoxGeometry(2.55, 2.62, L, 2, 0.1) : new THREE.BoxGeometry(2.55, 2.62, L), m.body);
+  const bandStart = -half + 0.55;
+  const bandEnd = section.cab === 'front' ? half - 2.1 : half - 0.55;
+  const sideWindows = [];
+  for (let z = bandStart + 0.62; z < bandEnd - 0.4; z += 1.24) {
+    sideWindows.push({ y: 0.6, height: 0.9, z, width: 1.02 });
+  }
+  const body = new THREE.Mesh(detailed ? new RoundedBoxGeometry(2.55, 2.62, L, 2, 0.1) : new THREE.BoxGeometry(2.55, 2.62, L),
+    detailed ? withSideWindowCutouts(m.body, sideWindows) : m.body);
+  if (detailed) state.exteriorPaintMaterials.push(body.material);
   body.name = 'Citaro body shell';
   body.position.y = 1.82;
   body.castShadow = true;
@@ -148,7 +162,7 @@ function addBusSection(
   car.add(roofCap);
   state.passengerShells.push(skirt, roofCap);
 
-  addBusSideWindows(state, car, m, half, section.doorZs, section.cab === 'front');
+  addBusSideWindows(state, car, m, half, section.doorZs, section.cab === 'front', detailed);
   for (const z of section.doorZs) {
     addSlidingVehicleDoor(state.doors, car, -1.315, z, m.body, m.glass, m.black, 1.62, 1.95);
   }
@@ -195,12 +209,15 @@ function addBusSideWindows(
   m: BusMaterials,
   half: number,
   doorZs: number[],
-  cabFront: boolean
+  cabFront: boolean,
+  detailed: boolean
 ): void {
   const bandStart = -half + 0.55;
   const bandEnd = cabFront ? half - 2.1 : half - 0.55; // leave the cab bay clear at the front.
   for (const side of [-1, 1] as const) {
-    const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.14, bandEnd - bandStart), m.black);
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.14, bandEnd - bandStart), detailed
+      ? new THREE.MeshStandardMaterial({ color: 0x14181c, transparent: true, opacity: 0.3, roughness: 0.36, depthWrite: false })
+      : m.black);
     band.position.set(side * 1.3, 2.42, (bandStart + bandEnd) / 2);
     car.add(band);
     state.windowBands.push(band);

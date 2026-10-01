@@ -5,6 +5,7 @@ import { BuilderRegistry } from '../../engine/builders/BuilderRegistry';
 import { createStationStyleRegistry, orientAlongRoute, resolveStationPlacement } from '../stations';
 import type { StationStyleProvider } from '../stations';
 import type { WorldLayerContext } from './WorldLayerContext';
+import type { WeatherKind } from '../weather';
 
 /** Builds platforms, canopies, signage, and stops for every guideway type. */
 export class StationLayer {
@@ -13,6 +14,7 @@ export class StationLayer {
   // Data-driven station styles selected by the active mode's stationStyleId.
   // Modes without a registered style fall back to the per-guideway builders.
   private readonly styleRegistry = createStationStyleRegistry();
+  private activeStyle: StationStyleProvider | undefined;
   // Per-guideway station builders; unmapped kinds fall back to rail stations.
   private readonly builders = new BuilderRegistry<GuidewayKind, () => void>()
     .register('bus', () => this.buildBusStops())
@@ -27,10 +29,15 @@ export class StationLayer {
   build(): void {
     const style = this.resolveStationStyle();
     if (style) {
+      this.activeStyle = style;
       this.buildStyledStations(style);
       return;
     }
     this.builders.resolve(this.ctx.guidewayKind)();
+  }
+
+  setWeather(kind: WeatherKind): void {
+    this.activeStyle?.setWeather?.(kind);
   }
 
   // Prefer the mode's explicit stationStyleId; otherwise every stadtbahn-guideway

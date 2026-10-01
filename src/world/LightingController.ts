@@ -4,6 +4,8 @@ import { daylightForHour, DEFAULT_WEATHER, effectiveCloudCover, solarPositionFor
 
 /** Controls sun, sky, fog, and fill lighting based on season and local time. */
 export class LightingController {
+  private readonly sunDirection = new THREE.Vector3(-220, 380, -120).normalize();
+  private readonly focus = new THREE.Vector3();
   private currentSeason: Season = 'summer';
 
   // Default to noon before the app applies real/local time.
@@ -35,17 +37,30 @@ export class LightingController {
 
     this.sun.color.setHex(0xffffff); // neutral sun color before time-of-day tint.
     this.sun.intensity = 2.2; // bright directional key light.
-    this.sun.position.set(-220, 380, -120); // initial elevated southwest-style sun position.
+    this.sun.position.copy(this.sunDirection).multiplyScalar(520);
     this.sun.castShadow = true;
 
-    // Large shadow box covers trains, stations, and nearby scenery.
-    this.sun.shadow.camera.left = -400;
-    this.sun.shadow.camera.right = 400;
-    this.sun.shadow.camera.top = 400;
-    this.sun.shadow.camera.bottom = -400;
+    // Keep shadow texels around the vehicle; a city-wide frustum makes wheels,
+    // doors and platform edges lose their contact shadows.
+    this.sun.shadow.camera.left = -120;
+    this.sun.shadow.camera.right = 120;
+    this.sun.shadow.camera.top = 120;
+    this.sun.shadow.camera.bottom = -120;
+    this.sun.shadow.camera.far = 1_100;
+    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.normalBias = 0.035;
 
     this.scene.add(this.sun);
+    this.scene.add(this.sun.target);
     this.apply();
+  }
+
+  /** Tracks the local vehicle area while preserving the time-of-day sun angle. */
+  setFocus(position: THREE.Vector3): void {
+    this.focus.copy(position);
+    this.sun.target.position.copy(this.focus);
+    this.sun.position.copy(this.sunDirection).multiplyScalar(520).add(this.focus);
+    this.sun.target.updateMatrixWorld();
   }
 
   /** Changes seasonal sky/fog tint while preserving the current time of day. */
@@ -89,11 +104,12 @@ export class LightingController {
     // Open-Meteo supplies the city-local daylight window; seasonal elevation
     // keeps the directional shadows low in winter and high in summer.
     const horizontal = Math.cos(solar.elevationRad);
-    this.sun.position.set(
-      Math.sin(solar.azimuthRad) * horizontal * 520,
-      Math.sin(solar.elevationRad) * 520,
-      Math.cos(solar.azimuthRad) * horizontal * 520
+    this.sunDirection.set(
+      Math.sin(solar.azimuthRad) * horizontal,
+      Math.sin(solar.elevationRad),
+      Math.cos(solar.azimuthRad) * horizontal
     );
+    this.sun.position.copy(this.sunDirection).multiplyScalar(520).add(this.focus);
 
     // Underground, daylight must not reach the bore: the sun is cut almost to
     // nothing and the sky ambient is replaced by a dim warm tunnel fill, so the
@@ -102,6 +118,7 @@ export class LightingController {
 
     const cloudiness = effectiveCloudCover(this.weather);
     this.sun.intensity = (0.025 + daylight * 2.28 + dawnDusk * 0.28) * (1 - cloudiness * 0.72) * (1 - below * 0.97); // cloud cover softens direct light while tunnels still suppress it.
+    this.sun.castShadow = daylight > 0.08 && below < 0.8;
     this.sun.color.set(dawnDusk > 0.2 ? 0xffbd7a : daylight > 0.2 ? 0xfff7e8 : 0x9bb9e6); // warm dusk, pale day, blue night.
 
     this.hemisphere.intensity = THREE.MathUtils.lerp(0.72 + daylight * 0.58 + dawnDusk * 0.12 + cloudiness * 0.22, 0.05, below); // overcast skies trade direct sun for diffuse ambient light.

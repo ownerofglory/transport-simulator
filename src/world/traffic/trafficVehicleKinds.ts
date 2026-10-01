@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { axleCylinder, extrudeProfile, pick } from './trafficMeshUtils';
+import type { WeatherKind } from '../weather';
 
 export type TrafficKind = 'car' | 'truck' | 'cyclist';
 
@@ -46,6 +47,20 @@ const taillampMaterial = new THREE.MeshStandardMaterial({ color: 0x8e1c1c, emiss
 export function setTrafficLampsOn(on: boolean): void {
   headlampMaterial.emissiveIntensity = on ? 1.4 : 0;
   taillampMaterial.emissiveIntensity = on ? 0.9 : 0;
+}
+
+/** Shared finishes respond to rain without touching every pooled vehicle. */
+export function setTrafficWeather(kind: WeatherKind): void {
+  const wet = kind === 'rain' || kind === 'thunder';
+  for (const material of carBodyMaterials) {
+    material.roughness = wet ? 0.16 : 0.3;
+    material.clearcoat = wet ? 1 : 0.65;
+    material.clearcoatRoughness = wet ? 0.1 : 0.23;
+  }
+  for (const material of truckCabMaterials) material.roughness = wet ? 0.22 : 0.45;
+  for (const material of truckBoxMaterials) material.roughness = wet ? 0.43 : 0.72;
+  for (const material of bikeFrameMaterials) material.roughness = wet ? 0.18 : 0.35;
+  glassMaterial.roughness = wet ? 0.07 : 0.12;
 }
 
 // Deep enough to straddle the body surface: the extrude bevel pushes the shell
@@ -415,6 +430,28 @@ const truckBoxGeometry = new THREE.BoxGeometry(2.36, 2.1, 5.1);
 const truckChassisGeometry = new THREE.BoxGeometry(2.1, 0.26, 7.2);
 const truckTyreGeometry = axleCylinder(TRUCK_WHEEL_RADIUS_M, 0.3, 14);
 const truckRimGeometry = axleCylinder(0.24, 0.315, 10);
+function truckDetailGeometry(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  const box = (size: [number, number, number], at: [number, number, number]) =>
+    parts.push(new THREE.BoxGeometry(...size).translate(...at));
+  // Cargo side stiffeners and rear double doors keep the box legible from a distance.
+  for (const side of [-1, 1]) {
+    for (const z of [-3.4, -2.45, -1.5, -0.55, 0.4, 1.2])
+      box([0.025, 1.98, 0.035], [side * 1.2, 1.85, z]);
+    box([0.035, 0.045, 5.05], [side * 1.2, 0.86, -1.15]);
+    box([0.035, 0.045, 5.05], [side * 1.2, 2.84, -1.15]);
+    box([0.025, 1.85, 0.03], [side * 0.59, 1.85, -3.72]);
+    box([0.025, 0.1, 0.17], [side * 1.19, 2.05, 2.86]); // mirrors
+  }
+  box([2.3, 0.035, 0.035], [0, 2.85, -3.72]);
+  box([2.3, 0.035, 0.035], [0, 0.83, -3.72]);
+  box([0.025, 1.9, 0.035], [0, 1.85, -3.72]);
+  for (let i = 0; i < 5; i++) box([0.88, 0.018, 0.025], [0, 1.05 + i * 0.075, 3.69]);
+  const result = mergeGeometries(parts, false)!;
+  parts.forEach(part => part.dispose());
+  return result;
+}
+const truckDetailsGeometry = truckDetailGeometry();
 const truckCabMaterials = [0xd0d3d6, 0x2b3a4a, 0xb0783c, 0x8f2222, 0x336655].map(
   (color) => new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.3 })
 );
@@ -447,6 +484,7 @@ function buildTruck(): TrafficRig {
   const chassis = new THREE.Mesh(truckChassisGeometry, trimMaterial);
   chassis.position.y = 0.7;
   root.add(cab, glass, box, chassis);
+  root.add(new THREE.Mesh(truckDetailsGeometry, rimMaterial));
 
   for (const x of [0.62, -0.62]) {
     const lamp = new THREE.Mesh(lampGeometry, headlampMaterial);
@@ -475,11 +513,21 @@ function buildTruck(): TrafficRig {
 const CYCLIST_LEG_REST_RAD = 0.24; // legs hang down and a little forward, toward the pedals
 const BIKE_WHEEL_RADIUS_M = 0.34;
 const BIKE_WHEEL_BASE_M = 0.53; // wheel centres fore/aft of the model origin
-// A thin torus reads as a spoked wheel at street distance for a fraction of the
-// triangles real spokes would cost.
 const bikeWheelGeometry = new THREE.TorusGeometry(BIKE_WHEEL_RADIUS_M, 0.028, 6, 16);
 bikeWheelGeometry.rotateY(Math.PI / 2); // torus lies in its own XY plane; face it along the bike
+const bikeSpokeGeometry = (() => {
+  const parts: THREE.BufferGeometry[] = [];
+  for (let index = 0; index < 12; index++) {
+    parts.push(new THREE.BoxGeometry(0.006, BIKE_WHEEL_RADIUS_M * 0.85, 0.006)
+      .translate(0, BIKE_WHEEL_RADIUS_M * 0.46, 0)
+      .rotateX(index * Math.PI / 6));
+  }
+  const result = mergeGeometries(parts, false)!;
+  parts.forEach(part => part.dispose());
+  return result;
+})();
 const bikeHubGeometry = axleCylinder(0.035, 0.08, 6);
+const bikeHelmetGeometry = new THREE.SphereGeometry(0.127, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.57);
 const bikeBarGeometry = axleCylinder(0.022, 0.42, 6);
 // Unit-height tubes, stretched with scale.y to span two points.
 const bikeTubeGeometry = new THREE.CylinderGeometry(0.026, 0.026, 1, 6);
@@ -555,6 +603,10 @@ function buildCyclist(): TrafficRig {
   const head = new THREE.Mesh(riderHeadGeometry, skinMaterial);
   head.position.set(0, SHOULDER[1] + 0.11, SHOULDER[0] + 0.09);
   root.add(torso, head);
+  const helmet = new THREE.Mesh(bikeHelmetGeometry, frameMaterial);
+  helmet.position.set(0, head.position.y + 0.015, head.position.z);
+  helmet.castShadow = true;
+  root.add(helmet);
   for (const x of [0.13, -0.13]) {
     root.add(spanTube(riderArmGeometry, riderMaterial, SHOULDER, [BAR_TOP[0] - 0.02, BAR_TOP[1] + 0.03], x));
   }
@@ -577,7 +629,7 @@ function buildCyclist(): TrafficRig {
   const wheels: THREE.Object3D[] = [];
   for (const z of [BIKE_WHEEL_BASE_M, -BIKE_WHEEL_BASE_M]) {
     const wheel = new THREE.Group();
-    wheel.add(new THREE.Mesh(bikeWheelGeometry, tyreMaterial), new THREE.Mesh(bikeHubGeometry, rimMaterial));
+    wheel.add(new THREE.Mesh(bikeWheelGeometry, tyreMaterial), new THREE.Mesh(bikeSpokeGeometry, rimMaterial), new THREE.Mesh(bikeHubGeometry, rimMaterial));
     wheel.position.set(0, BIKE_WHEEL_RADIUS_M, z);
     root.add(wheel);
     wheels.push(wheel);

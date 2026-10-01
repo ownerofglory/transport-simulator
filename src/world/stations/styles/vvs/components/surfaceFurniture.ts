@@ -55,6 +55,44 @@ export function buildVvsTotem(
   local.add(plate);
 }
 
+/** Green S roundel on a platform-end mast, with a DB-blue station nameplate. */
+export function buildDbSBahnMarker(
+  local: THREE.Group,
+  materials: VvsStationMaterials,
+  side: number,
+  station: RouteStation,
+  lateral: number,
+  xM?: number
+): void {
+  const x = xM ?? side * (10.4 + lateral);
+  const z = -22;
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 4.15, 8), materials.dbCanopyFrame);
+  mast.position.set(x, 2.075, z);
+  mast.castShadow = true;
+  local.add(mast);
+
+  const roundel = new THREE.Mesh(
+    new THREE.CircleGeometry(0.7, 32),
+    new THREE.MeshBasicMaterial({
+      map: makeLabelTexture('S', { width: 256, height: 256, bg: '#078653', fg: '#ffffff' }),
+      side: THREE.DoubleSide
+    })
+  );
+  roundel.position.set(x, 3.6, z);
+  local.add(roundel);
+
+  const name = new THREE.Mesh(
+    new THREE.PlaneGeometry(3.5, 0.55),
+    new THREE.MeshBasicMaterial({
+      map: makeLabelTexture(station.name, { width: 768, height: 128, bg: '#183d70', fg: '#ffffff' }),
+      side: THREE.DoubleSide
+    })
+  );
+  name.position.set(x, 2.75, z);
+  name.rotation.y = side * Math.PI / 2;
+  local.add(name);
+}
+
 /** Tubular safety railing along the back edge of a surface platform. */
 export function buildVvsPlatformRailing(
   local: THREE.Group,

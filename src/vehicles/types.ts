@@ -35,6 +35,7 @@ export type VehicleInstance = {
   passengerShells: THREE.Mesh[];
   cabDisplays: THREE.Mesh[];
   glassMaterial?: THREE.MeshStandardMaterial;
+  exteriorPaintMaterials?: THREE.MeshStandardMaterial[];
   trainHalfLengthM: number;
   /** Brightens head/tail lamps at night and dawn; dims them in daylight. */
   setExteriorLightsOn?: (on: boolean) => void;

@@ -1,15 +1,72 @@
 import * as THREE from 'three';
+import type { WeatherKind } from '../../../weather';
 
-/**
- * SSB/VVS Stadtbahn material palette, created once per route and reused across
- * every stop so stations share GPU resources. Values are lifted verbatim from
- * the legacy StationLayer.buildRailStations so the modular components render an
- * identical result.
- */
+function surfacePattern(tactile: boolean): THREE.DataTexture {
+  const size = 128;
+  const pixels = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const index = (y * size + x) * 4;
+      const noise = ((x * 17 + y * 29 + (x * y) % 19) % 11) - 5;
+      let shade: number;
+      if (tactile) {
+        const dx = (x % 16) - 8;
+        const dy = (y % 16) - 8;
+        const radius = Math.hypot(dx, dy);
+        shade = radius < 4.5 ? 232 + (dx + dy) * 1.2 : 215 + noise;
+      } else {
+        const joint = x % 64 < 2 || y % 64 < 2;
+        const slab = ((Math.floor(x / 64) + Math.floor(y / 64) * 3) % 3) * 3;
+        shade = joint ? 133 : 188 + slab + noise;
+      }
+      pixels[index] = shade;
+      pixels[index + 1] = tactile ? shade - 2 : shade - 1;
+      pixels[index + 2] = tactile ? shade - 10 : shade - 4;
+      pixels[index + 3] = 255;
+    }
+  }
+  const texture = new THREE.DataTexture(pixels, size, size, THREE.RGBAFormat);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = 4;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/** SSB/VVS station palette, created once per route and reused across stops. */
 export class VvsStationMaterials {
+  private readonly pavingPattern = surfacePattern(false);
+  private readonly tactilePattern = surfacePattern(true);
   readonly platform = new THREE.MeshStandardMaterial({ color: 0xb9b7b0, roughness: 0.9 });
   readonly platformEdge = new THREE.MeshStandardMaterial({ color: 0x696b6c, roughness: 0.82 });
   readonly tactile = new THREE.MeshStandardMaterial({ color: 0xeee7cf, roughness: 0.92 });
+  readonly surfacePavers = new THREE.MeshStandardMaterial({
+    map: this.pavingPattern, bumpMap: this.pavingPattern, bumpScale: 0.012, roughness: 0.84
+  });
+  readonly surfaceTactile = new THREE.MeshStandardMaterial({
+    map: this.tactilePattern, bumpMap: this.tactilePattern, bumpScale: 0.008, roughness: 0.87
+  });
+  readonly surfaceSafetyLine = new THREE.MeshStandardMaterial({ color: 0xd9bd54, roughness: 0.72 });
+  readonly dbPavers = new THREE.MeshStandardMaterial({
+    color: 0xe3e8ec, map: this.pavingPattern, bumpMap: this.pavingPattern,
+    bumpScale: 0.01, roughness: 0.82
+  });
+  readonly dbTactile = new THREE.MeshStandardMaterial({
+    map: this.tactilePattern, bumpMap: this.tactilePattern, bumpScale: 0.009, roughness: 0.86
+  });
+  readonly dbSafetyLine = new THREE.MeshStandardMaterial({ color: 0xe4e7e7, roughness: 0.68 });
+  readonly dbBlue = new THREE.MeshStandardMaterial({ color: 0x183d70, roughness: 0.44, metalness: 0.24 });
+  readonly dbCanopyFrame = new THREE.MeshStandardMaterial({ color: 0x5a6571, roughness: 0.38, metalness: 0.45 });
+  readonly dbBench = new THREE.MeshStandardMaterial({ color: 0x737e87, roughness: 0.52, metalness: 0.22 });
+  readonly dbMachine = new THREE.MeshStandardMaterial({ color: 0xc7252d, roughness: 0.46 });
+  readonly canopyGlass = new THREE.MeshStandardMaterial({
+    color: 0xc9e0e5, roughness: 0.16, metalness: 0.04,
+    transparent: true, opacity: 0.58, depthWrite: false, side: THREE.DoubleSide
+  });
+  readonly canopyFrame = new THREE.MeshStandardMaterial({ color: 0x7b8489, roughness: 0.36, metalness: 0.55 });
   // Underground twins of the deck surfaces; see the note on `undergroundWall`
   // for why the finishes below ground are slightly self-lit.
   readonly platformUnderground = new THREE.MeshStandardMaterial({
@@ -117,6 +174,18 @@ export class VvsStationMaterials {
     this.platform,
     this.platformEdge,
     this.tactile,
+    this.surfacePavers,
+    this.surfaceTactile,
+    this.surfaceSafetyLine,
+    this.dbPavers,
+    this.dbTactile,
+    this.dbSafetyLine,
+    this.dbBlue,
+    this.dbCanopyFrame,
+    this.dbBench,
+    this.dbMachine,
+    this.canopyGlass,
+    this.canopyFrame,
     this.platformUnderground,
     this.platformEdgeUnderground,
     this.tactileUnderground,
@@ -206,7 +275,20 @@ export class VvsStationMaterials {
     return this.tinted('lamp', color, { emissive: new THREE.Color(color), emissiveIntensity: 2.1 });
   }
 
+  setSurfaceWeather(kind: WeatherKind): void {
+    const wet = kind === 'rain' || kind === 'thunder';
+    this.surfacePavers.color.setHex(wet ? 0xc6cbcb : kind === 'snow' ? 0xf2f2ed : 0xffffff);
+    this.surfacePavers.roughness = wet ? 0.36 : kind === 'snow' ? 0.94 : 0.84;
+    this.surfaceSafetyLine.roughness = wet ? 0.42 : 0.72;
+    this.dbPavers.color.setHex(wet ? 0xb9c2c9 : kind === 'snow' ? 0xf3f5f6 : 0xe3e8ec);
+    this.dbPavers.roughness = wet ? 0.34 : kind === 'snow' ? 0.94 : 0.82;
+    this.dbSafetyLine.roughness = wet ? 0.38 : 0.68;
+    this.canopyGlass.roughness = wet ? 0.1 : 0.16;
+  }
+
   dispose(): void {
     for (const material of this.shared) material.dispose();
+    this.pavingPattern.dispose();
+    this.tactilePattern.dispose();
   }
 }

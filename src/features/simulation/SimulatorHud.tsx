@@ -12,13 +12,15 @@ export function SimulatorHud({ snapshot }: { snapshot: SimulatorUiSnapshot }) {
         <div className="label">Speed</div>
         <div className="value">{snapshot.line ? `${snapshot.speedKph} km/h` : '-'}</div>
       </div>
-      <div className="card">
-        <div className="label">Next station</div>
-        <div className="value">{snapshot.tripComplete ? 'Trip complete' : snapshot.nextStation || '-'}</div>
-      </div>
-      <div className="card">
-        <div className="label">Doors</div>
-        <div className="value">{snapshot.doorsOpen ? `Open ${snapshot.dwellRemainingS.toFixed(0)}s` : 'Closed'}</div>
+      <div className="card next-station-card">
+        <div className="next-station-main">
+          <div className="label">Next station</div>
+          <div className="value">{snapshot.tripComplete ? 'Trip complete' : snapshot.nextStation || '-'}</div>
+        </div>
+        <div className="doors-status">
+          <div className="label">Doors</div>
+          <div className="value">{snapshot.doorsOpen ? `Open ${snapshot.dwellRemainingS.toFixed(0)}s` : 'Closed'}</div>
+        </div>
       </div>
       <div className="card driver-stat">
         <div className="label">Score</div>

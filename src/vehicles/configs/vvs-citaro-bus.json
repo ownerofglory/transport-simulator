@@ -4,11 +4,11 @@
   "displayName": "Mercedes-Benz Citaro (SSB/VVS)",
   "detailStyle": "ssb-citaro",
   "materials": {
-    "body": { "color": "#ffdd00", "roughness": 0.34, "metalness": 0.06, "clearcoat": 0.4, "clearcoatRoughness": 0.26 },
+    "body": { "color": "#ffdd00", "roughness": 0.34, "metalness": 0.06, "clearcoat": 0.46, "clearcoatRoughness": 0.2, "envMapIntensity": 1.08 },
     "black": { "color": "#14181c", "roughness": 0.36 },
     "skirt": { "color": "#1c2024", "roughness": 0.62, "metalness": 0.1 },
     "roof": { "color": "#caccc8", "roughness": 0.66, "metalness": 0.14 },
-    "glass": { "color": "#9bd2e1", "transparent": true, "opacity": 0.4, "roughness": 0.08 },
+    "glass": { "color": "#82969c", "transparent": true, "opacity": 0.4, "roughness": 0.06, "clearcoat": 0.55, "envMapIntensity": 1.35, "doubleSided": true },
     "interior": { "color": "#d8d4c8", "roughness": 0.88 },
     "metal": { "color": "#8b9293", "roughness": 0.38, "metalness": 0.65 },
     "tyre": { "color": "#0d0f12", "roughness": 0.9 },

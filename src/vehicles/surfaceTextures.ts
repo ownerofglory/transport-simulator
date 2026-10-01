@@ -30,3 +30,32 @@ export function makeSsbSurfaceTexture(kind: 'fabric' | 'floor'): THREE.DataTextu
   texture.needsUpdate = true;
   return texture;
 }
+
+/** Small deterministic grain shared by the Stuttgart funicular's teak panels. */
+export function makeTeakSurfaceTexture(): THREE.DataTexture {
+  const width = 128;
+  const height = 64;
+  const pixels = new Uint8Array(width * height * 4);
+  let seed = 1929;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      const grain = Math.sin(y * 0.53 + Math.sin(x * 0.07) * 1.7) * 10;
+      const variation = grain + ((seed >>> 28) - 8) * 0.55;
+      const index = (y * width + x) * 4;
+      pixels[index] = 132 + variation;
+      pixels[index + 1] = 85 + variation * 0.72;
+      pixels[index + 2] = 47 + variation * 0.48;
+      pixels[index + 3] = 255;
+    }
+  }
+  const texture = new THREE.DataTexture(pixels, width, height);
+  texture.name = 'Stuttgart funicular teak grain';
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.needsUpdate = true;
+  return texture;
+}

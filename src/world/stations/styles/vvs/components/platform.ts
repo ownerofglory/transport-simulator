@@ -20,6 +20,16 @@ export const DEFAULT_DECK_TOP_M = 0.22;
 // platform is a raised structure and needs a face, or it floats over the track.
 const FASCIA_THRESHOLD_M = 0.35;
 
+/** Route strips start with 0–1 UVs; scale them to physical tile size per stop. */
+export function tilePlatformStrip(geometry: THREE.BufferGeometry, widthM: number, lengthM: number, tileM: number): THREE.BufferGeometry {
+  const uv = geometry.getAttribute('uv') as THREE.BufferAttribute;
+  for (let i = 0; i < uv.count; i += 1) {
+    uv.setXY(i, uv.getX(i) * widthM / tileM, uv.getY(i) * lengthM / tileM);
+  }
+  uv.needsUpdate = true;
+  return geometry;
+}
+
 /** Lateral center offset of a side platform of the given width. widthM=8 → 7.4 (legacy). */
 export function sidePlatformOffset(widthM = DEFAULT_WIDTH_M): number {
   return INNER_EDGE_M + widthM / 2;
@@ -77,7 +87,8 @@ export function buildVvsSidePlatforms(
   platform?: StationPlatformDefinition,
   staggerM = 0,
   underground = false,
-  platformMaterial?: THREE.Material
+  platformMaterial?: THREE.Material,
+  surfaceFinish?: 'ssb' | 'db'
 ): void {
   const lengthM = platform?.lengthM ?? DEFAULT_LENGTH_M;
   const widthM = platform?.widthM ?? DEFAULT_WIDTH_M;
@@ -102,19 +113,32 @@ export function buildVvsSidePlatforms(
     root.add(platformEdge);
 
     const deck = new THREE.Mesh(
-      layer.makeRouteStrip(side * offset, widthM, startT, endT, 24, deckTopM),
-      platformMaterial ?? finish.platform
+      surfaceFinish
+        ? tilePlatformStrip(layer.makeRouteStrip(side * offset, widthM, startT, endT, 48, deckTopM), widthM, lengthM, 1.6)
+        : layer.makeRouteStrip(side * offset, widthM, startT, endT, 24, deckTopM),
+      platformMaterial ?? (surfaceFinish === 'db' ? materials.dbPavers : surfaceFinish === 'ssb' ? materials.surfacePavers : finish.platform)
     );
     deck.receiveShadow = true;
     deck.name = `Curved platform ${station.name}`;
     root.add(deck);
 
     const tactile = new THREE.Mesh(
-      layer.makeRouteStrip(side * TACTILE_OFFSET_M, 0.72, startT, endT, 28, deckTopM + 0.025),
-      finish.tactile
+      surfaceFinish
+        ? tilePlatformStrip(layer.makeRouteStrip(side * TACTILE_OFFSET_M, 0.72, startT, endT, 48, deckTopM + 0.025), 0.72, lengthM, 0.64)
+        : layer.makeRouteStrip(side * TACTILE_OFFSET_M, 0.72, startT, endT, 28, deckTopM + 0.025),
+      surfaceFinish === 'db' ? materials.dbTactile : surfaceFinish === 'ssb' ? materials.surfaceTactile : finish.tactile
     );
     tactile.name = `Tactile platform edge ${station.name}`;
     root.add(tactile);
+
+    if (surfaceFinish) {
+      const safetyLine = new THREE.Mesh(
+        layer.makeRouteStrip(side * 4.18, 0.1, startT, endT, 48, deckTopM + 0.028),
+        surfaceFinish === 'db' ? materials.dbSafetyLine : materials.surfaceSafetyLine
+      );
+      safetyLine.name = `Safety line ${station.name}`;
+      root.add(safetyLine);
+    }
 
     if (deckTopM > FASCIA_THRESHOLD_M) {
       // Track face and outer face, so the deck reads as a solid structure.

@@ -345,6 +345,20 @@ describe('Karlsruhe Kombilösung', () => {
 
 describe('S-Bahn Stammstrecke islands', () => {
   const style = 'db-sbahn';
+
+  it('uses long, equipped platforms at outdoor DB stops without changing the generic fallback', () => {
+    const station: RouteStation = { name: 'Ötlingen', distanceM: 1000 };
+    const provider = createStationStyleRegistry().resolveOptional(style)!;
+    const context = { placement: placementAt(station, false) };
+    const db = provider.resolve(station, { ...context, layer: { stationStyleId: style } as never });
+    const fallback = provider.resolve(station, { ...context, layer: {} as never });
+
+    expect(db.platform.lengthM).toBe(210);
+    expect(db.platform.heightM).toBe(0.96);
+    expect(db.furniture?.dfiDisplays).toBe(3);
+    expect(db.furniture?.adVitrines).toBe(1);
+    expect(fallback.platform.lengthM).toBe(76);
+  });
   const hbf: RouteStation = { name: 'Stuttgart Hauptbahnhof (tief)', distanceM: 4000 };
 
   it('gives the Stammstrecke stops an island platform at S-Bahn boarding height', () => {

@@ -8,12 +8,15 @@ import {
   poseSeated,
   poseStanding,
   poseStandingHold,
+  setPedestrianUmbrella,
   type PedestrianRig
 } from './pedestrianMesh';
 import { readInteriorFloorY, readSeatAnchors } from '../../vehicles/interiorSeating';
+import { dampAngle } from './trafficPath';
 import { trafficDensityScale } from './trafficDensity';
 import type { TrafficDensity } from '../../app/types';
 import { fetchTransitItineraries, type TransitItinerary } from './transitPassengerRoutingClient';
+import type { WeatherKind } from '../weather';
 
 export type TransitPassengerContext = {
   line: string;
@@ -68,9 +71,17 @@ export class TransitPassengerSystem {
   private disposed = false;
   private clockS = 0;
   private densityScale = 1;
+  private wetWeather = false;
 
   constructor(private readonly ctx: TransitPassengerContext) {
     this.root.name = 'Transit passengers';
+  }
+
+  setWeather(kind: WeatherKind): void {
+    this.wetWeather = kind === 'rain' || kind === 'thunder';
+    for (const passenger of this.passengers) {
+      setPedestrianUmbrella(passenger.rig, this.wetWeather && passenger.phase === 'waiting');
+    }
   }
 
   update(vehicleDistanceM: number, stations: StationConfig[], doorsOpen: boolean, underground: boolean, dtSec: number): void {
@@ -100,6 +111,16 @@ export class TransitPassengerSystem {
       const progress = THREE.MathUtils.clamp(passenger.progressS / passenger.transitionS, 0, 1);
       if (passenger.phase === 'boarding' || passenger.phase === 'alighting') {
         passenger.rig.root.position.lerpVectors(passenger.from, passenger.to, progress);
+        const walkX = passenger.to.x - passenger.from.x;
+        const walkZ = passenger.to.z - passenger.from.z;
+        if (walkX * walkX + walkZ * walkZ > 0.01) {
+          passenger.rig.root.rotation.y = dampAngle(
+            passenger.rig.root.rotation.y,
+            Math.atan2(walkX, walkZ),
+            8,
+            dtSec
+          );
+        }
         animatePedestrian(passenger.rig, passenger.progressS * 1.25);
       }
       if (progress < 1) continue;
@@ -166,6 +187,7 @@ export class TransitPassengerSystem {
     const lateral = new THREE.Vector3(tangent.z, 0, -tangent.x).normalize();
     for (let index = 0; index < count; index++) {
       const rig = buildPedestrian();
+      setPedestrianUmbrella(rig, this.wetWeather);
       // Wrapped into rows of four: a denser cohort waits further along the
       // platform instead of trailing off sideways into the track bed.
       const row = index % 4;
@@ -198,6 +220,7 @@ export class TransitPassengerSystem {
       if (passenger.phase !== 'waiting' || passenger.originIndex !== stationIndex) continue;
       const target = this.boardingTarget(vehicleDistanceM, stations, passenger.originIndex);
       passenger.phase = 'boarding';
+      setPedestrianUmbrella(passenger.rig, false);
       passenger.from.copy(passenger.rig.root.position);
       passenger.to.copy(target);
       passenger.transitionS = BOARDING_DURATION_S + Math.random() * 0.45;
@@ -215,6 +238,7 @@ export class TransitPassengerSystem {
       this.root.attach(passenger.rig.root);
       passenger.rig.root.position.copy(passenger.from);
       passenger.phase = 'alighting';
+      setPedestrianUmbrella(passenger.rig, this.wetWeather);
       passenger.to.copy(target);
       passenger.transitionS = ALIGHTING_DURATION_S + Math.random() * 0.4;
       passenger.progressS = 0;
@@ -252,7 +276,8 @@ export class TransitPassengerSystem {
       passenger.rig.root.rotation.set(0, seat.yaw, 0);
       // How high this cushion sits above this car's floor decides how far the
       // knees come up, so the feet land on the floor in every vehicle.
-      poseSeated(passenger.rig, interiorFloorY === undefined ? undefined : seat.y - interiorFloorY);
+      const seatFloorY = seat.floorY ?? interiorFloorY;
+      poseSeated(passenger.rig, seatFloorY === undefined ? undefined : seat.y - seatFloorY);
       return;
     }
 

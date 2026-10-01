@@ -5,7 +5,8 @@ import type { VehicleInstance } from './types';
 
 function makeInstance() {
   const doorLeaf = { group: new THREE.Group(), closedZ: 0, direction: 1 as const };
-  const glass = new THREE.MeshStandardMaterial({ transparent: true });
+  const glass = new THREE.MeshStandardMaterial({ color: 0x82969c, transparent: true, opacity: 0.42, roughness: 0.06, depthWrite: false });
+  const paint = new THREE.MeshPhysicalMaterial({ color: 0xffdd00, roughness: 0.34, clearcoat: 0.4 });
   const band = new THREE.Mesh();
   const cabShell = new THREE.Mesh();
   const passengerShell = new THREE.Mesh();
@@ -20,10 +21,11 @@ function makeInstance() {
     passengerShells: [passengerShell],
     cabDisplays: [cabDisplay],
     glassMaterial: glass,
+    exteriorPaintMaterials: [paint],
     trainHalfLengthM: 20.15,
     setExteriorLightsOn: (on) => lights.push(on)
   };
-  return { instance, doorLeaf, glass, band, cabShell, passengerShell, cabDisplay, lights };
+  return { instance, doorLeaf, glass, paint, band, cabShell, passengerShell, cabDisplay, lights };
 }
 
 function make() {
@@ -60,7 +62,9 @@ describe('VehicleVisualController.setPresentation', () => {
     controller.setPresentation('chase', false);
     expect(passengerShell.visible).toBe(true);
     expect(cabShell.visible).toBe(true);
-    expect(glass.opacity).toBeCloseTo(0.58, 5);
+    expect(glass.opacity).toBeCloseTo(0.42, 5);
+    expect(glass.color.getHex()).toBe(0x82969c);
+    expect(glass.depthWrite).toBe(false);
   });
 
   it('keeps the exterior solid while a cinematic (photo) is active', () => {
@@ -86,5 +90,19 @@ describe('VehicleVisualController.updateExteriorLights', () => {
     controller.updateExteriorLights(0.2);
     controller.updateExteriorLights(0.9);
     expect(lights).toEqual([true, false]);
+  });
+});
+
+describe('VehicleVisualController.setWeather', () => {
+  it('sharpens wet paint reflections and restores the dry finish', () => {
+    const { controller, paint, glass } = make();
+    controller.setWeather('rain');
+    expect(paint.roughness).toBeCloseTo(0.17);
+    expect(paint.clearcoat).toBeGreaterThan(0.4);
+    expect(glass.roughness).toBeCloseTo(0.13);
+    controller.setWeather('clear');
+    expect(paint.roughness).toBeCloseTo(0.34);
+    expect(paint.clearcoat).toBeCloseTo(0.4);
+    expect(glass.roughness).toBeCloseTo(0.06);
   });
 });

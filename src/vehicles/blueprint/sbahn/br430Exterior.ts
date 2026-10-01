@@ -73,13 +73,13 @@ export function addBR430ExteriorDetails(
     car.add(board);
     passengerShells.push(board);
     const accessiblePanel = new THREE.Mesh(new THREE.PlaneGeometry(1.55, 0.72), materials.accessible);
-    accessiblePanel.name = 'BR430 blue accessibility panel';
+    accessiblePanel.name = 'BR430 blue multipurpose area';
     accessiblePanel.position.set(side * 1.604, 1.42, 0);
     accessiblePanel.rotation.y = side * Math.PI / 2;
     car.add(accessiblePanel);
     passengerShells.push(accessiblePanel);
     const brand = new THREE.Mesh(new THREE.PlaneGeometry(0.88, 0.24), materials.brand);
-    brand.name = 'BR430 side bwegt branding';
+    brand.name = 'BR430 S-Bahn Stuttgart branding';
     brand.position.set(side * 1.604, 1.05, -5.4);
     brand.rotation.y = side * Math.PI / 2;
     car.add(brand);
@@ -92,7 +92,7 @@ export function addBR430ExteriorDetails(
       car.add(firstClass);
       passengerShells.push(firstClass);
       const sideLogo = new THREE.Mesh(new THREE.CircleGeometry(0.28, 28), materials.sideLogo);
-      sideLogo.name = 'BR430 side S-Bahn emblem';
+      sideLogo.name = 'BR430 green S-Bahn emblem';
       sideLogo.position.set(side * 1.608, 2.04, cabEnd * 6.52);
       sideLogo.rotation.y = side * Math.PI / 2;
       car.add(sideLogo);
@@ -195,7 +195,7 @@ export function makeBR430ExteriorLabels(line: string, destination: string): {
       toneMapped: false
     }),
     brand: new THREE.MeshBasicMaterial({
-      map: makeLabelTexture('bwegt', { width: 352, height: 96, bg: '#e6e8e7', fg: '#4b6651' })
+      map: makeLabelTexture('S-Bahn Stuttgart', { width: 512, height: 96, bg: '#dfe2e0', fg: '#343c40' })
     }),
     accessible: new THREE.MeshBasicMaterial({
       map: makeLabelTexture('♿', { width: 320, height: 160, bg: '#159bd3', fg: '#eaf7fc' })
@@ -204,7 +204,7 @@ export function makeBR430ExteriorLabels(line: string, destination: string): {
       map: makeLabelTexture('1', { width: 320, height: 160, bg: '#e8b900', fg: '#fff8dc' })
     }),
     sideLogo: new THREE.MeshBasicMaterial({
-      map: makeLabelTexture('S', { width: 192, height: 192, bg: '#e6e8e7', fg: '#252b2e' })
+      map: makeLabelTexture('S', { width: 192, height: 192, bg: '#438b43', fg: '#ffffff' })
     })
   };
 }

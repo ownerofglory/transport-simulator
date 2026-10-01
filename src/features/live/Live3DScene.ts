@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { SkyEnvironment } from '../../world/SkyEnvironment';
 import { WeatherEffects } from '../../world/WeatherEffects';
 import { WeatherSky } from '../../world/WeatherSky';
-import { DEFAULT_WEATHER, fetchCurrentWeather, type VisualWeather } from '../../world/weather';
+import { DEFAULT_WEATHER, effectiveCloudCover, fetchCurrentWeather, type VisualWeather } from '../../world/weather';
 import { OsmSceneStreamer } from '../../osm-scene';
 import { makeProjection, type LatLon, type Projection } from './liveProjection';
 import type { LiveVehicleStore, TrackedVehicle } from './LiveVehicleStore';
@@ -112,6 +112,7 @@ export class Live3DScene {
   private readonly ground: THREE.Mesh;
   // Lighting follows real local time (concept §2.5).
   private readonly sun = new THREE.DirectionalLight(0xffffff, 1.6);
+  private readonly sunDirection = new THREE.Vector3(0, 1, 0);
   private readonly hemi = new THREE.HemisphereLight(0xddecff, 0x586a70, 1.0);
   // A small constant ambient fill lifts shadowed faces, matching Explore's rig.
   private readonly fill = new THREE.AmbientLight(0x9bb0c8, 0.16);
@@ -194,7 +195,15 @@ export class Live3DScene {
     // real local time of day (updated periodically in the frame loop).
     this.scene.add(this.hemi);
     this.scene.add(this.sun);
+    this.scene.add(this.sun.target);
     this.scene.add(this.fill);
+    this.sun.shadow.camera.left = -110;
+    this.sun.shadow.camera.right = 110;
+    this.sun.shadow.camera.top = 110;
+    this.sun.shadow.camera.bottom = -110;
+    this.sun.shadow.camera.far = 1_100;
+    this.sun.shadow.mapSize.set(1024, 1024);
+    this.sun.shadow.normalBias = 0.035;
     this.applyDaylight();
     void this.loadCurrentWeather();
 
@@ -203,6 +212,7 @@ export class Live3DScene {
     // placed in the scene.
     this.terrain = new LiveTerrain(this.projection);
     this.ground = this.terrain.mesh;
+    this.ground.receiveShadow = true;
     this.scene.add(this.ground);
 
     // Reused OSM scenery streamer, placed on the terrain via the shared sampler.
@@ -280,6 +290,7 @@ export class Live3DScene {
       if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
       else mat?.dispose?.();
     });
+    this.sun.shadow.map?.dispose();
     this.renderer.domElement.remove();
     this.renderer.dispose();
   }
@@ -307,15 +318,22 @@ export class Live3DScene {
     this.weatherSky.update('summer', now.getHours() + now.getMinutes() / 60, this.weather, this.underground);
     this.applyEnvironment();
     this.sun.color.setHex(d.sunColor);
-    this.sun.intensity = d.sunIntensity;
-    this.hemi.intensity = d.hemiIntensity;
+    const cloudiness = effectiveCloudCover(this.weather);
+    this.sun.intensity = d.sunIntensity * (1 - cloudiness * 0.7);
+    this.hemi.intensity = d.hemiIntensity + cloudiness * 0.18;
     const el = d.elevationDeg * DEG;
-    const R = 4000;
-    this.sun.position.set(
-      Math.cos(el) * Math.sin(d.azimuthRad) * R,
-      Math.max(Math.sin(el), 0.02) * R + 100,
-      Math.cos(el) * Math.cos(d.azimuthRad) * R
-    );
+    this.sunDirection.set(
+      Math.cos(el) * Math.sin(d.azimuthRad),
+      Math.max(Math.sin(el), 0.04),
+      Math.cos(el) * Math.cos(d.azimuthRad)
+    ).normalize();
+    this.updateSunFocus();
+  }
+
+  private updateSunFocus(): void {
+    this.sun.target.position.copy(this.target);
+    this.sun.position.copy(this.sunDirection).multiplyScalar(520).add(this.target);
+    this.sun.target.updateMatrixWorld();
   }
 
   /**
@@ -399,6 +417,8 @@ export class Live3DScene {
     );
     // Follow after models are placed so interior cameras read fresh car matrices.
     this.updateFollow(dt);
+    this.sun.castShadow = this.followVehicle !== null && !this.underground && this.daylightFactor > 0.08;
+    if (this.sun.castShadow) this.updateSunFocus();
     this.advanceStationFlight(dt);
     this.weatherEffects.update(this.camera.position, dt, this.underground);
     this.stationMarker.update((x, z) => this.terrain.heightAt(x, z));
@@ -421,6 +441,7 @@ export class Live3DScene {
       if (this.weatherAbort.signal.aborted) return;
       this.weather = weather;
       this.weatherEffects.setWeather(weather);
+      this.followVehicle?.setWeather(weather.kind);
       this.applyDaylight();
     } catch (error) {
       if (!this.weatherAbort.signal.aborted) console.warn('Could not load current live weather; using the clear-weather presentation.', error);
@@ -706,6 +727,7 @@ export class Live3DScene {
     if (this.followVehicle) return this.followVehicle;
     const definition = resolveLiveVehicleDefinition(vehicle.data, this.opts.city);
     this.followVehicle = new LiveFollowVehicle(this.scene, definition);
+    this.followVehicle.setWeather(this.weather.kind);
     return this.followVehicle;
   }
 

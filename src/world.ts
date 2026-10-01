@@ -38,6 +38,7 @@ export class TransitWorld {
   readonly renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   readonly curve: THREE.CatmullRomCurve3;
   private readonly stationMarkers: THREE.Object3D[] = [];
+  private stationLayer!: StationLayer;
   private readonly seasonalObjects = new THREE.Group();
   // Oncoming services rendered on the opposite track lane.
   private opposingLayer: OpposingTrafficLayer | null = null;
@@ -147,9 +148,9 @@ export class TransitWorld {
     const ground = routeLayer.build();
     const guidewayLayer = new GuidewayLayer(layerContext);
     guidewayLayer.build();
-    const stationLayer = new StationLayer(layerContext);
-    stationLayer.build();
-    this.scene.add(routeLayer.root, guidewayLayer.root, stationLayer.root);
+    this.stationLayer = new StationLayer(layerContext);
+    this.stationLayer.build();
+    this.scene.add(routeLayer.root, guidewayLayer.root, this.stationLayer.root);
     this.activeVehicle = new ActiveVehicleSystem({
       scene: this.scene,
       route: this.route,
@@ -181,6 +182,7 @@ export class TransitWorld {
       // after one that was) has to be told the current state once up front —
       // updateVehicleLighting only pushes on a change.
       this.roadTraffic.setLampsOn(this.vehicleLightsOn ?? false);
+      this.roadTraffic.setWeather(this.weatherOverride ?? this.liveWeather?.kind ?? 'clear');
       this.pedestrians = new PedestrianSystem({
         projectGeo: (lat, lon) => this.projectGeo(lat, lon),
         terrainHeightAt: (lat, lon) => this.environment.terrainHeightAt(lat, lon),
@@ -191,6 +193,7 @@ export class TransitWorld {
       });
       this.scene.add(this.pedestrians.root);
       this.pedestrians.setDensity(this.trafficDensity);
+      this.pedestrians.setWeather(this.weatherOverride ?? this.liveWeather?.kind ?? 'clear');
       if (this.city?.passengerTransit?.network === 'vvs' && this.route.stations.length >= 2) {
         this.transitPassengers = new TransitPassengerSystem({
           line: this.route.line,
@@ -207,6 +210,7 @@ export class TransitWorld {
         });
         this.scene.add(this.transitPassengers.root);
         this.transitPassengers.setDensity(this.trafficDensity);
+        this.transitPassengers.setWeather(this.weatherOverride ?? this.liveWeather?.kind ?? 'clear');
       }
     }
 
@@ -392,6 +396,11 @@ export class TransitWorld {
     if (!weather) return;
     this.lightingSystem.setWeather(weather);
     this.weatherEffects.setWeather(weather);
+    this.stationLayer.setWeather(weather.kind);
+    this.activeVehicle.setWeather(weather.kind);
+    this.roadTraffic?.setWeather(weather.kind);
+    this.pedestrians?.setWeather(weather.kind);
+    this.transitPassengers?.setWeather(weather.kind);
     this.updateVehicleLighting();
   }
 
