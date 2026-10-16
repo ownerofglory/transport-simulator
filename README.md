@@ -186,3 +186,12 @@ The WASM build script writes Go's build cache to `.cache/go-build`, keeping buil
 Real-world scenery uses OpenFreeMap's public OpenMapTiles-compatible vector tiles. Attribution: OpenFreeMap, © OpenMapTiles, data from © OpenStreetMap contributors.
 
 Relief uses the open Mapzen Terrain Tiles dataset hosted through AWS Open Data. Route packages store a pre-generated smoothed terrain/rail profile; the visible ground remains untextured geometry rather than a photographic raster surface. Tunnel classification comes from the OpenMapTiles `transportation` layer's `brunnel=tunnel` geometry near each rail GTFS shape.
+
+## License
+
+Original project source code is licensed under the [MIT License](LICENSE).
+Copyright (c) 2026 ownerofglory.
+
+Third-party software, OpenStreetMap/OpenFreeMap data, Mapzen terrain data, and GTFS datasets retain their respective licences and attribution requirements; they are not relicensed under MIT. Preserve their notices and credits when reusing or distributing them.
+
+The non-commercial description refers to this prototype. The MIT licence permits commercial reuse of the original project code.
