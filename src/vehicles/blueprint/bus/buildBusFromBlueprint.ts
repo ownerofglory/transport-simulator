@@ -404,25 +404,6 @@ function addBusFrontEnd(
   bumper.position.set(0, 0.78, frontZ + 0.02);
   car.add(bumper);
   state.cabShells.push(bumper);
-  if (detailed) {
-    const badge = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.012, 6, 24), m.hub);
-    badge.name = 'Citaro front badge ring';
-    badge.position.set(0, 1.45, frontZ + 0.13);
-    car.add(badge);
-    state.cabShells.push(badge);
-    const star = new THREE.InstancedMesh(new THREE.BoxGeometry(0.013, 0.16, 0.014), m.hub, 3);
-    star.name = 'Citaro three-point badge';
-    const matrix = new THREE.Matrix4();
-    for (let index = 0; index < 3; index++) {
-      const angle = index * Math.PI * 2 / 3;
-      matrix.compose(new THREE.Vector3(Math.sin(angle) * 0.075, 1.45 + Math.cos(angle) * 0.075, frontZ + 0.13),
-        new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -angle), new THREE.Vector3(1, 1, 1));
-      star.setMatrixAt(index, matrix);
-    }
-    star.instanceMatrix.needsUpdate = true;
-    car.add(star);
-    state.cabShells.push(star);
-  }
   for (const side of [-1, 1] as const) {
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.24, 0.08), m.headlight);
     head.position.set(side * 0.92, 1.02, frontZ + 0.1);
