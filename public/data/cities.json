@@ -3,55 +3,71 @@
   "cities": [
     {
       "id": "stuttgart",
-      "name": "Stuttgart",
+      "name": "Stuttgart, Germany \uD83C\uDDE9\uD83C\uDDEA",
       "title": "Stuttgart Transit Simulator",
       "description": "Free, non-commercial simulator for Stuttgart public transport.",
       "manifestFile": "/data/route-manifest.json",
       "defaultTransportMode": "stadtbahn"
     },
     {
+      "id": "karlsruhe",
+      "name": "Karlsruhe, Germany \uD83C\uDDE9\uD83C\uDDEA",
+      "title": "Karlsruhe Transit Simulator",
+      "description": "Free, non-commercial simulator for KVV public transport (VBK trams, AVG Stadtbahn tram-trains, VBK buses) in Karlsruhe and its surroundings.",
+      "manifestFile": "/data/karlsruhe/route-manifest.json",
+      "defaultTransportMode": "stadtbahn"
+    },
+    {
       "id": "ulm",
-      "name": "Ulm",
+      "name": "Ulm, Germany \uD83C\uDDE9\uD83C\uDDEA",
       "title": "Ulm Transit Simulator",
       "description": "Free, non-commercial simulator for SWU public transport in Ulm/Neu-Ulm.",
       "manifestFile": "/data/ulm/route-manifest.json",
       "defaultTransportMode": "tram"
     },
     {
-      "id": "odessa",
-      "name": "Odessa",
-      "title": "Odessa Transit Simulator",
-      "description": "Free, non-commercial simulator for Odesa urban transport.",
-      "manifestFile": "/data/odessa/route-manifest.json",
-      "defaultTransportMode": "tram"
-    },
-    {
-      "id": "zurich",
-      "name": "Zurich",
-      "title": "Zurich Transit Simulator",
-      "description": "Free, non-commercial simulator for VBZ and Zürich-area public transport.",
-      "manifestFile": "/data/zurich/route-manifest.json",
-      "defaultTransportMode": "tram"
-    },
-    {
       "id": "freiburg",
-      "name": "Freiburg",
+      "name": "Freiburg, Germany \uD83C\uDDE9\uD83C\uDDEA",
       "title": "Freiburg Transit Simulator",
       "description": "Free, non-commercial simulator for Freiburg and the RVF urban network.",
       "manifestFile": "/data/freiburg/route-manifest.json",
       "defaultTransportMode": "tram"
     },
     {
+      "id": "wuppertal",
+      "name": "Wuppertal, Germany \uD83C\uDDE9\uD83C\uDDEA",
+      "title": "Wuppertal Schwebebahn Simulator",
+      "description": "Free, non-commercial simulator for the Wuppertaler Schwebebahn suspended railway.",
+      "manifestFile": "/data/wuppertal/route-manifest.json",
+      "defaultTransportMode": "schwebebahn"
+    },
+    {
+      "id": "odessa",
+      "name": "Odessa, Ukraine \uD83C\uDDFA\uD83C\uDDE6",
+      "title": "Odessa Transit Simulator",
+      "description": "Free, non-commercial simulator for Odesa urban transport.",
+      "manifestFile": "/data/odessa/route-manifest.json",
+      "defaultTransportMode": "tram"
+    },
+    {
       "id": "lviv",
-      "name": "Lviv",
+      "name": "Lviv, Ukraine \uD83C\uDDFA\uD83C\uDDE6",
       "title": "Lviv Transit Simulator",
       "description": "Free, non-commercial simulator for Lviv public transport.",
       "manifestFile": "/data/lviv/route-manifest.json",
       "defaultTransportMode": "tram"
     },
     {
+      "id": "zurich",
+      "name": "Zurich, Switzerland \uD83C\uDDE8\uD83C\uDDED",
+      "title": "Zurich Transit Simulator",
+      "description": "Free, non-commercial simulator for VBZ and Zürich-area public transport.",
+      "manifestFile": "/data/zurich/route-manifest.json",
+      "defaultTransportMode": "tram"
+    },
+    {
       "id": "mexico-city",
-      "name": "Mexico City",
+      "name": "Mexico City, Mexico \uD83C\uDDF2\uD83C\uDDFD",
       "title": "Mexico City Transit Simulator",
       "description": "Free, non-commercial simulator for Mexico City public transport.",
       "manifestFile": "/data/mexico-city/route-manifest.json",
@@ -59,35 +75,19 @@
     },
     {
       "id": "baden-wuerttemberg-rail",
-      "name": "Baden-Württemberg Rail",
+      "name": "Baden-Württemberg Rail, Germany \uD83C\uDDE9\uD83C\uDDEA",
       "title": "Baden-Württemberg Rail Simulator",
       "description": "Free, non-commercial simulator for regional and inter-regional train routes across Baden-Württemberg.",
       "manifestFile": "/data/baden-wuerttemberg-rail/route-manifest.json",
       "defaultTransportMode": "rail"
     },
     {
-      "id": "wuppertal",
-      "name": "Wuppertal",
-      "title": "Wuppertal Schwebebahn Simulator",
-      "description": "Free, non-commercial simulator for the Wuppertaler Schwebebahn suspended railway.",
-      "manifestFile": "/data/wuppertal/route-manifest.json",
-      "defaultTransportMode": "schwebebahn"
-    },
-    {
       "id": "vancouver",
-      "name": "Vancouver",
+      "name": "Vancouver, Canada \uD83C\uDDE8\uD83C\uDDE6",
       "title": "Vancouver SkyTrain Simulator",
       "description": "Free, non-commercial simulator for the TransLink SkyTrain network.",
       "manifestFile": "/data/vancouver/route-manifest.json",
       "defaultTransportMode": "skytrain"
-    },
-    {
-      "id": "karlsruhe",
-      "name": "Karlsruhe",
-      "title": "Karlsruhe Transit Simulator",
-      "description": "Free, non-commercial simulator for KVV public transport (VBK trams, AVG Stadtbahn tram-trains, VBK buses) in Karlsruhe and its surroundings.",
-      "manifestFile": "/data/karlsruhe/route-manifest.json",
-      "defaultTransportMode": "stadtbahn"
     }
   ]
 }

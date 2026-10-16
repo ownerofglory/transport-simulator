@@ -15,6 +15,7 @@ import type { CityCatalog, CityCatalogEntry, CityDefinition } from './types';
 // Built-in city definitions keyed by stable city id.
 const registry = new Map<string, CityDefinition>([
   [stuttgartCity.id, stuttgartCity],
+  [karlsruheCity.id, karlsruheCity],
   [ulmCity.id, ulmCity],
   [odessaCity.id, odessaCity],
   [zurichCity.id, zurichCity],
@@ -25,7 +26,6 @@ const registry = new Map<string, CityDefinition>([
   [badenWuerttembergRailCity.id, badenWuerttembergRailCity],
   [wuppertalCity.id, wuppertalCity],
   [vancouverCity.id, vancouverCity],
-  [karlsruheCity.id, karlsruheCity]
 ]);
 
 // Fallback catalog used when public/data/cities.json cannot be loaded.

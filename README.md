@@ -2,7 +2,14 @@
 
 Free, non-commercial browser prototype for public transport simulation, covering eleven city/network modules.
 
-The app started as a Stuttgart-only prototype and is now structured as a multi-city platform: Stuttgart was the first city module rather than a hard-coded one-off. New cities are added through a city catalog entry, a city definition, and city-specific route manifests while reusing the shared renderer, simulator, HUD, minimap, and route diagram. Transport modes and vehicle families are defined per city, so each city can expose a different set of modes and map those modes onto different vehicle and guideway behaviors.
+The app started as a Stuttgart-only prototype and is now structured as a multi-city platform: 
+Stuttgart was the first city module rather than a hard-coded one-off. 
+
+New cities are added through a city catalog entry, a city definition, and city-specific route manifests while reusing the shared renderer, simulator, HUD, minimap, and route diagram. 
+Transport modes and vehicle families are defined per city, so each city can expose a different set of modes and map those 
+modes onto different vehicle and guideway behaviors.
+
+![demo](./docs/assets/demo.gif)
 
 The repository currently includes eleven city modules:
 
@@ -34,53 +41,6 @@ The app uses:
 | ![Simulator S-Bahn](docs/assets/05_simulator_s-bahn.png) S-Bahn service | ![Live mode 3D map](docs/assets/06_live_mode_3d_map.png) Live mode, 3D map |
 | ![Live mode 2D top view](docs/assets/07_live_mode_2d_map_top_view.png) Live mode, 2D top-down map | ![Live mode follow view](docs/assets/08_live_mode_follow_view.png) Live mode, follow view |
 | ![Karlsruhe underground station](docs/assets/09_underground_station_karlsruhe.png) Karlsruhe Kombilösung underground Stadtbahn station | ![Stuttgart underground S-Bahn station](docs/assets/10_underground_sbahn_station_stuttgart.png) Stuttgart Stammstrecke underground S-Bahn station |
-
-## What is included
-
-The list below describes the Stuttgart module, the most detailed and the origin of the shared simulator engine. The other ten cities reuse the same renderer, simulator, HUD, minimap and route diagram with their own GTFS-derived route packages and vehicle models, at varying levels of scenery and vehicle detail.
-
-- 50 generated directional VVS GTFS route packages: 36 Stadtbahn services, central bus lines 40/42/43/44, S1 Herrenberg–Kirchheim (Teck), Zacke line 10, and Seilbahn line 20
-- Active transport tabs and a mode-neutral route domain for Stadtbahn, bus, S-Bahn, Zacke and Seilbahn
-- Passenger ride mode with automatic driving
-- Driver training mode with manual throttle/brake, station stop scoring and timetable delta
-- Completely free ride access with no ticket, credit, membership or payment state
-- Foldable, semi-transparent mobile control menu
-- Leaflet minimap showing route geometry, vehicle position and direction
-- Live SSB-style stop schematic with auto-scrolling vehicle position and pulsing approaching-station marker
-- Clean untextured terrain relief without streamed photographic/raster map tiles
-- Streamed OpenFreeMap/OpenMapTiles buildings using source footprints, heights and colours without generated façade or roof decoration
-- Streamed OSM lakes, river surfaces, canals, streams and drainage waterways
-- Streamed terrain-following OSM roads, bridges, railway corridors, platforms, footways, cycleways and steps
-- Rich OSM land cover and land use including vineyards, orchards, allotments, wetlands, institutional grounds and sports areas
-- Instanced trees and shrubs plus streamed transit signs, parking signs, bicycle racks, bins, bollards, fountains and local POI markers
-- Route-proximity landmark silhouettes for Neues Schloss, Altes Schloss, Stiftskirche, Johanneskirche, Bonatzbau, Weißenhofsiedlung, Fernsehturm and Grabkapelle
-- Stuttgart terrain relief from Terrarium DEM tiles, applied to ground, track, buildings and surface objects
-- OSM-classified Stadtbahn tunnel sections with eased underground profiles, portals, lining and tunnel lighting
-- Double-track Stadtbahn corridor: one track per direction, with the active vehicle offset onto its running track
-- Dimensionally matched Stadler Tango / SSB DT8-inspired articulated vehicle whose cars independently follow the rail centerline
-- Mercedes-Benz-inspired SSB city buses with passenger seating, handrails, driver area, next-stop display and animated doors
-- Redesigned DB class 423-inspired four-car S-Bahn with Stuttgart exterior treatment, 2+2 seating, passenger-information monitors and animated doors
-- SSB S-ZT 4.2-inspired Zacke vehicle with a visible centre rack on line 10
-- Restored-1929-inspired teak Seilbahn cars, metre-gauge track and haul cable on line 20
-- 80 m coupled double formations on U1, U6, U7, U11, U12 and U19
-- Automatic terminal turnaround into the matching opposite-direction service
-- Rails, sleepers and curve-following platforms with tactile safety edges
-- Route-aware SSB-inspired stations: glass-and-blue-steel surface canopies plus enclosed underground halls with columns, lighting and wayfinding
-- Stuttgart-style bus stops with green/yellow H markers, electronic departure boards and yellow-accented glass shelters
-- Dedicated DB/S-Bahn platforms with long curved boarding edges, tactile strips, blue station boards, green S symbols, clocks, canopies and departure displays
-- Station furniture including benches, ticket machines, timetable cases, bins and repeated platform name signs
-- Shared-corridor overlays for adjacent Stadtbahn lines and simulated opposing services
-- Route-length-aware rail tessellation and instanced sleepers so long Stadtbahn and S-Bahn curves remain aligned with articulated vehicles
-- Elevated chase camera as the default, plus passenger and cab views
-- Opaque passenger-compartment wall shells for buses, S-Bahn and Zacke, with translucency restricted to glazing
-- Selectable GTFS start station for every route
-- Spring, summer, autumn and winter visual modes
-- Automatic Stuttgart local-time lighting plus selectable dawn, day, evening and night previews
-- Go/WASM simulation bridge exposed as `window.ssim`
-
-## Live mode
-
-Live mode shows real-time vehicle positions on a 3D or 2D map, sourced from the VVS network's realtime data (see [Realtime API types](#realtime-api-types)). It is currently available for **Stuttgart only**; the other ten city modules offer the offline simulator (passenger ride and driver training) without a live-traffic layer. A city opts into live mode by declaring a `liveTraffic` network in its city definition (`src/cities/stuttgart.ts`), so adding live support for another city means wiring up a realtime data source for that network first.
 
 ## Requirements
 
@@ -173,33 +133,6 @@ docker run -d \
   stuttgart-transit-simulator
 ```
 
-## Deploy to Kubernetes with Helm
-
-The chart includes a Deployment, ClusterIP Service, optional Ingress, health probes, resources, and a ConfigMap for non-sensitive container variables. First push the Docker image to a registry, then install the chart:
-
-```bash
-helm upgrade --install stuttgart-transit \
-  deploy/helm/stuttgart-transit-simulator \
-  --namespace stuttgart-transit \
-  --create-namespace \
-  --set image.repository=ghcr.io/your-account/stuttgart-transit-simulator \
-  --set image.tag=latest
-```
-
-Enable the Ingress and set its host with a values file or command-line values:
-
-```bash
-helm upgrade --install stuttgart-transit \
-  deploy/helm/stuttgart-transit-simulator \
-  --namespace stuttgart-transit \
-  --set image.repository=ghcr.io/your-account/stuttgart-transit-simulator \
-  --set image.tag=latest \
-  --set ingress.enabled=true \
-  --set 'ingress.hosts[0].host=simulator.example.com'
-```
-
-Edit `deploy/helm/stuttgart-transit-simulator/values.yaml` to configure replicas, resources, Service type, Ingress TLS, image pull secrets, scheduling, or ConfigMap variables. Sensitive values should be supplied through a Kubernetes Secret rather than the chart ConfigMap.
-
 ## Refresh VVS GTFS route packages
 
 The app reads compact generated route packages from `public/data/vvs-stadtbahn-routes.json`.
@@ -243,14 +176,6 @@ The raw ZIP is intentionally ignored because it is large. The generated JSON inc
     ├── usecase/simulator.go  # ride/driver use cases
     └── main.go               # thin browser/WASM adapter
 ```
-
-## Next development milestones
-
-1. Add Zacke and Seilbahn route/vehicle adapters, followed by more bus and S-Bahn lines.
-2. Add live delay support from TRIAS/EFA where available.
-3. Add Baden-Württemberg LoD2 roof forms and higher-resolution local terrain data.
-4. Add vehicle interior and audio/announcement system.
-5. Expand driver training with signals, door release, platform stopping rules and route exams.
 
 ## Design note
 

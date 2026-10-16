@@ -83,12 +83,12 @@ export const odessaCity: CityDefinition = {
 
   // Preferred exact default route id for tram mode.
   defaultRouteIdByMode: {
-    tram: '1661588'
+    tram: '1655954'
   },
 
   // Preferred initial line per transport mode.
   defaultLineByMode: {
-    tram: '28',
+    tram: '5',
     trolleybus: '7',
     bus: '104'
   }
