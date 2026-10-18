@@ -11,6 +11,8 @@ modes onto different vehicle and guideway behaviors.
 
 ![demo](./docs/assets/demo.gif)
 
+There is also a [native desktop rewrite of this simulator (written in QtQuick/QML, QtQuick 3D and Rust)](https://github.com/ownerofglory/transport-simulator-native) (currenly only available on MacOS and only with Stuttgart data, work-in-progress).
+
 The repository currently includes eleven city modules:
 
 - **Stuttgart** — Stadtbahn, bus, S-Bahn, Zacke and Seilbahn; also the only city with [live mode](#live-mode) (real-time VVS traffic)
